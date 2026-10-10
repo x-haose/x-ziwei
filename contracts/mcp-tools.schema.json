@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "x-ziwei MCP tools (phase 1 freeze)",
+  "description": "Frozen tools: chart + to_text only. lookup deferred. Contract gate diffs stable names/types and *_key / extension_keys; display names are not gated.",
+  "tools": [
+    {
+      "name": "chart",
+      "description": "Natal chart DTO from x-iztro (optional horoscope). Contract keys are language-independent *_key fields only.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["calendar", "date", "timeIndex", "gender"],
+        "properties": {
+          "calendar": {
+            "type": "string",
+            "enum": ["solar", "lunar"]
+          },
+          "date": {
+            "type": "string",
+            "description": "YYYY-M-D (zero-padding optional). Solar: 1583–9999. Lunar: lunar calendar date."
+          },
+          "timeIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 12,
+            "description": "0=early Zi, 12=late Zi."
+          },
+          "gender": {
+            "type": "string",
+            "enum": ["male", "female"]
+          },
+          "language": {
+            "type": "string",
+            "enum": ["zh-CN", "zh-TW", "en-US", "ja-JP", "ko-KR", "vi-VN"],
+            "default": "zh-CN"
+          },
+          "fixLeap": {
+            "type": "boolean",
+            "default": true,
+            "description": "Solar only. Ignored when calendar=lunar."
+          },
+          "leap": {
+            "type": "string",
+            "enum": ["notLeap", "leap", "leapFixed"],
+            "description": "Lunar only; required when calendar=lunar. Aligns LeapMonth."
+          },
+          "config": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Optional thin Config six switches. Omit = engine defaults. No custom mutagen/brightness tables in phase 1.",
+            "properties": {
+              "yearDivide": { "type": "string" },
+              "horoscopeDivide": { "type": "string" },
+              "ageDivide": { "type": "string" },
+              "dayDivide": { "type": "string" },
+              "algorithm": { "type": "string" },
+              "astroType": { "type": "string" }
+            }
+          },
+          "targetDate": {
+            "type": "string",
+            "description": "Optional solar target date for horoscope DTO."
+          },
+          "targetTimeIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 12,
+            "description": "Required with targetDate when horoscope is requested."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["astrolabe"],
+        "properties": {
+          "astrolabe": {
+            "type": "object",
+            "description": "x-iztro to_dto() JSON. Gate: *_key + extension_keys whitelist only."
+          },
+          "horoscope": {
+            "type": "object",
+            "description": "Present when targetDate/targetTimeIndex provided. Gate: *_key only."
+          }
+        }
+      }
+    },
+    {
+      "name": "to_text",
+      "description": "Markdown projection via astrolabe_to_text / horoscope_to_text (+ _with TextOptions). Single text field; not astrolabe_to_prompt.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["calendar", "date", "timeIndex", "gender"],
+        "properties": {
+          "calendar": {
+            "type": "string",
+            "enum": ["solar", "lunar"]
+          },
+          "date": {
+            "type": "string"
+          },
+          "timeIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 12
+          },
+          "gender": {
+            "type": "string",
+            "enum": ["male", "female"]
+          },
+          "language": {
+            "type": "string",
+            "enum": ["zh-CN", "zh-TW", "en-US", "ja-JP", "ko-KR", "vi-VN"],
+            "default": "zh-CN"
+          },
+          "fixLeap": {
+            "type": "boolean",
+            "default": true
+          },
+          "leap": {
+            "type": "string",
+            "enum": ["notLeap", "leap", "leapFixed"]
+          },
+          "config": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "yearDivide": { "type": "string" },
+              "horoscopeDivide": { "type": "string" },
+              "ageDivide": { "type": "string" },
+              "dayDivide": { "type": "string" },
+              "algorithm": { "type": "string" },
+              "astroType": { "type": "string" }
+            }
+          },
+          "includeHoroscope": {
+            "type": "boolean",
+            "default": false,
+            "description": "When true, targetDate and targetTimeIndex are required; text concatenates natal + horoscope Markdown."
+          },
+          "targetDate": {
+            "type": "string"
+          },
+          "targetTimeIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 12
+          },
+          "knowledge": {
+            "type": "boolean",
+            "default": true,
+            "description": "true = builtin KnowledgePack via TextOptions::knowledge; false = facts only."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Markdown. If includeHoroscope, natal then horoscope concatenated."
+          }
+        }
+      }
+    }
+  ],
+  "phase1Excluded": [
+    "lookup",
+    "config.mutagens",
+    "config.brightness",
+    "patternConfig",
+    "palace/surrounded/flanking/decadal_list split tools"
+  ]
+}

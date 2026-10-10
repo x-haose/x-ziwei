@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "x-ziwei ErrorCode",
+  "description": "Phase-1 stable error codes. Engine codes mirror x-iztro IztroError::code(); service codes are MCP-face only and must not reuse engine codes.",
+  "type": "object",
+  "required": ["code", "message"],
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "type": "string",
+      "enum": [
+        "invalid_date",
+        "invalid_time_index",
+        "invalid_argument",
+        "internal",
+        "rate_limited",
+        "bad_request"
+      ]
+    },
+    "message": {
+      "type": "string",
+      "description": "Human-readable detail; never a stack trace or internal path."
+    }
+  },
+  "x-ziwei": {
+    "engineCodes": [
+      "invalid_date",
+      "invalid_time_index",
+      "invalid_argument",
+      "internal"
+    ],
+    "serviceCodes": [
+      "rate_limited",
+      "bad_request"
+    ]
+  }
+}
