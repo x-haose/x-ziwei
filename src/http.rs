@@ -1,4 +1,5 @@
-//! HTTP surface: `/` landing page, `GET /healthz`, Streamable HTTP `POST /mcp`.
+//! HTTP surface: `GET /install` landing page, `GET /healthz`, Streamable HTTP `POST /mcp`.
+//! `GET /` is intentionally unrouted so a reverse proxy can keep the docs homepage.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -39,7 +40,7 @@ impl AppState {
 
 pub fn router(state: AppState) -> Router {
     Router::new()
-        .route("/", get(index))
+        .route("/install", get(index))
         .route("/healthz", get(healthz))
         .route(
             "/mcp",

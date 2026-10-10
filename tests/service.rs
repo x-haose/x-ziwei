@@ -88,7 +88,7 @@ async fn healthz_and_landing_page() {
         assert_eq!(body, "ok\n");
     }
 
-    let (status, html, _) = call(shared.clone(), "GET", "/", None, false).await;
+    let (status, html, _) = call(shared.clone(), "GET", "/install", None, false).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(html.matches("<li>").count(), 3);
     assert!(html.contains("https://ziwei.x-haose.com/mcp"));
@@ -96,6 +96,12 @@ async fn healthz_and_landing_page() {
         html.contains(r#"{"calendar":"solar","date":"2000-8-16","timeIndex":2,"gender":"female"}"#)
     );
     assert!(html.contains("href=\"/healthz\""));
+
+    // Docs homepage stays off this process. A host-level proxy must not
+    // receive the install page from GET /.
+    let (status, body, _) = call(shared.clone(), "GET", "/", None, false).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(!body.contains("<h1>"));
 
     // Landing and health checks do not spend the MCP rate-limit token.
     let (status, _, _) = call(
