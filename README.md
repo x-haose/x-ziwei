@@ -20,7 +20,7 @@ https://ziwei.x-haose.com/mcp
 }
 ```
 
-健康检查：同域 [`/healthz`](https://ziwei.x-haose.com/healthz)。落地页在同域 `/`。
+健康检查：同域 [`/healthz`](https://ziwei.x-haose.com/healthz)。落地页在服务内 `GET /install`（不是 `GET /`）。
 
 ## 本地
 
@@ -30,7 +30,7 @@ https://ziwei.x-haose.com/mcp
 cargo run
 ```
 
-默认监听 `0.0.0.0:8080`。`PORT` 或 `BIND` 可改地址。`POST /mcp` 为 Streamable HTTP；`GET /healthz` 返回 `ok`。
+默认监听 `0.0.0.0:8080`。`PORT` 或 `BIND` 可改地址。`POST /mcp` 为 Streamable HTTP；`GET /healthz` 返回 `ok`；`GET /install` 是落地页。
 
 限流按客户端 IP（优先 `X-Forwarded-For` 首段）计 `POST /mcp`。默认每 60 秒 60 次，超出 HTTP 429，正文 `{"code":"rate_limited","message":"rate limit exceeded"}`。`X_ZIWEI_RATE_LIMIT=0` 关闭限流。窗口用 `X_ZIWEI_RATE_WINDOW_SECS`。
 
@@ -55,9 +55,21 @@ cargo run
 
 ## 公网
 
-- MCP：`https://ziwei.x-haose.com/mcp`
+- MCP：`https://ziwei.x-haose.com/mcp`（上游把该 URL 改写到本服务的 `/mcp`）
 - 健康检查：同域 `/healthz`
-- 落地页：同域单页（why + 一行配置 + solar 最短示例）
+- 落地页：服务内 `GET /install`（why + 一行配置 + solar 最短示例）。不占用 `GET /`，避免反代盖住文档站首页。
+
+## 部署（Dokploy）
+
+Dokploy 选择仓库根目录 `Dockerfile` 构建。官方 `rust` 与 `debian:bookworm-slim` 都带 `linux/amd64` 和 `linux/arm64`，Oracle aarch64 上按本机架构编译即可。容器暴露 `8080`，进程默认听 `0.0.0.0:8080`。健康检查用 `GET /healthz`。
+
+Traefik 以后按 Host 接入。在那之前公网 MCP 仍是 `https://ziwei.x-haose.com/mcp`，由上游改写到容器内 `/mcp`。
+
+本地冒烟：
+
+```bash
+docker compose up --build
+```
 
 ## 不做（一期）
 
