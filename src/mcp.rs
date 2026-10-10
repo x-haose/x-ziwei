@@ -135,7 +135,7 @@ pub fn handle(headers: &HeaderMap, bytes: &[u8]) -> Outcome {
         Err(error) => {
             let code = if error.code == "internal" {
                 -32603
-            } else if error.code == "bad_request" {
+            } else if error.message.starts_with("method not found") {
                 -32601
             } else {
                 -32602
@@ -184,23 +184,21 @@ fn initialize(params: &Value) -> Value {
 
 fn call_tool(params: &Value) -> Result<Value, ApiError> {
     let Some(obj) = params.as_object() else {
-        return Err(ApiError::invalid_argument(
-            "tools/call params must be an object",
-        ));
+        return Err(ApiError::bad_request("tools/call params must be an object"));
     };
     let name = obj
         .get("name")
         .and_then(Value::as_str)
-        .ok_or_else(|| ApiError::invalid_argument("tool name is required"))?;
+        .ok_or_else(|| ApiError::bad_request("tool name is required"))?;
     let arguments = match obj.get("arguments") {
         None | Some(Value::Null) => Value::Object(Default::default()),
         Some(value) if value.is_object() => value.clone(),
         Some(_) => {
-            return Err(ApiError::invalid_argument("arguments must be an object"));
+            return Err(ApiError::bad_request("arguments must be an object"));
         }
     };
     if name != "chart" && name != "to_text" {
-        return Err(ApiError::invalid_argument(format!("unknown tool '{name}'")));
+        return Err(ApiError::bad_request(format!("unknown tool '{name}'")));
     }
 
     let executed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match name {

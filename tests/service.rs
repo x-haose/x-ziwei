@@ -246,13 +246,13 @@ async fn config_six_switches_only() {
     assert_eq!(response["result"]["isError"], true);
     let err: Value =
         serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
-    assert_eq!(err["code"], "invalid_argument");
+    assert_eq!(err["code"], "bad_request");
     assert!(err.get("message").is_some());
     assert_eq!(err.as_object().unwrap().len(), 2);
 }
 
 #[tokio::test]
-async fn engine_and_argument_errors() {
+async fn face_checks_are_bad_request_engine_codes_pass_through() {
     let mut bad_date = solar();
     bad_date["date"] = json!("2000-13-40");
     let response = tool("chart", bad_date).await;
@@ -265,31 +265,38 @@ async fn engine_and_argument_errors() {
     let response = tool("chart", bad_time).await;
     let err: Value =
         serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
-    assert_eq!(err["code"], "invalid_time_index");
+    assert_eq!(err["code"], "bad_request");
 
     let mut lunar = solar();
     lunar["calendar"] = json!("lunar");
     let response = tool("chart", lunar).await;
     let err: Value =
         serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
-    assert_eq!(err["code"], "invalid_argument");
+    assert_eq!(err["code"], "bad_request");
+
+    let mut solar_leap = solar();
+    solar_leap["leap"] = json!("notLeap");
+    let response = tool("chart", solar_leap).await;
+    let err: Value =
+        serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(err["code"], "bad_request");
 
     let mut partial = solar();
     partial["targetDate"] = json!("2024-1-1");
     let response = tool("chart", partial).await;
     let err: Value =
         serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
-    assert_eq!(err["code"], "invalid_argument");
+    assert_eq!(err["code"], "bad_request");
 
     let mut text = solar();
     text["includeHoroscope"] = json!(true);
     let response = tool("to_text", text).await;
     let err: Value =
         serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
-    assert_eq!(err["code"], "invalid_argument");
+    assert_eq!(err["code"], "bad_request");
 
     let response = tool("lookup", solar()).await;
-    assert_eq!(response["error"]["data"]["code"], "invalid_argument");
+    assert_eq!(response["error"]["data"]["code"], "bad_request");
 }
 
 #[tokio::test]

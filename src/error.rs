@@ -16,14 +16,6 @@ impl ApiError {
         }
     }
 
-    pub fn invalid_time_index(message: impl Into<String>) -> Self {
-        Self::new("invalid_time_index", message)
-    }
-
-    pub fn invalid_argument(message: impl Into<String>) -> Self {
-        Self::new("invalid_argument", message)
-    }
-
     pub fn internal(message: impl Into<String>) -> Self {
         Self::new("internal", message)
     }
@@ -36,7 +28,8 @@ impl ApiError {
         Self::new("bad_request", message)
     }
 
-    /// Mirror `IztroError::code()`. Internal detail stays off the wire.
+    /// Engine codes only. Face checks before `x-iztro` use [`Self::bad_request`].
+    /// Internal detail stays off the wire.
     pub fn from_iztro(err: x_iztro::IztroError) -> Self {
         let code = err.code();
         let message = if code == "internal" {

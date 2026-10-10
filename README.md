@@ -51,7 +51,7 @@ cargo run
 
 `chart` 返回 `to_dto()` JSON。带 `targetDate` 与 `targetTimeIndex` 时附运限 DTO。`to_text` 只回一个 `text` 字段：`astrolabe_to_text`，`includeHoroscope` 时再接 `horoscope_to_text`。`knowledge` 默认 true，走 `TextOptions::knowledge` 的内置知识包。
 
-错误正文只有 `code` 与 `message`。工具失败放在 MCP `isError` 结果里；协议信封不合法时用 `bad_request`。
+错误正文只有 `code` 与 `message`。进 `x-iztro` 之前的入参与信封校验用 `bad_request`。`invalid_date`、`invalid_time_index`、`invalid_argument`、`internal` 只转发 `IztroError::code()`。
 
 ## 公网
 

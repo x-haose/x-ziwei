@@ -1,7 +1,8 @@
 //! `chart` and `to_text` against the frozen input shapes.
 //!
-//! Custom mutagen / brightness tables and `patternConfig` are rejected here.
-//! They are not part of the phase-1 six-switch config.
+//! Checks before `x-iztro` return `bad_request`. Engine codes are only those
+//! `IztroError::code()` actually returns. Custom mutagen / brightness tables
+//! and `patternConfig` are rejected here; they are not part of the six switches.
 
 use serde_json::{Map, Value};
 use x_iztro::{
@@ -106,7 +107,7 @@ pub fn to_text(args: &Value) -> Result<String, ApiError> {
         return Ok(natal);
     }
     let (Some(date), Some(index)) = (query.target_date.as_deref(), query.target_time_index) else {
-        return Err(ApiError::invalid_argument(
+        return Err(ApiError::bad_request(
             "targetDate and targetTimeIndex are required when includeHoroscope is true",
         ));
     };
@@ -160,7 +161,7 @@ fn cast(birth: &Birth) -> Result<x_iztro::Astrolabe, ApiError> {
     match birth.calendar {
         Calendar::Solar => {
             if birth.leap.is_some() {
-                return Err(ApiError::invalid_argument(
+                return Err(ApiError::bad_request(
                     "leap is only valid when calendar is lunar",
                 ));
             }
@@ -175,9 +176,9 @@ fn cast(birth: &Birth) -> Result<x_iztro::Astrolabe, ApiError> {
             .map_err(ApiError::from_iztro)
         }
         Calendar::Lunar => {
-            let leap = birth.leap.ok_or_else(|| {
-                ApiError::invalid_argument("leap is required when calendar is lunar")
-            })?;
+            let leap = birth
+                .leap
+                .ok_or_else(|| ApiError::bad_request("leap is required when calendar is lunar"))?;
             by_lunar(
                 &birth.date,
                 birth.time_index,
@@ -203,12 +204,12 @@ fn parse_chart(args: &Value) -> Result<ChartQuery, ApiError> {
     match (&target_date, target_time_index) {
         (None, None) | (Some(_), Some(_)) => {}
         (Some(_), None) => {
-            return Err(ApiError::invalid_argument(
+            return Err(ApiError::bad_request(
                 "targetTimeIndex is required with targetDate",
             ));
         }
         (None, Some(_)) => {
-            return Err(ApiError::invalid_argument(
+            return Err(ApiError::bad_request(
                 "targetDate is required with targetTimeIndex",
             ));
         }
@@ -232,7 +233,7 @@ fn parse_text(args: &Value) -> Result<TextQuery, ApiError> {
         Some(value) => Some(time_index(value, "targetTimeIndex")?),
     };
     if include_horoscope && (target_date.is_none() || target_time_index.is_none()) {
-        return Err(ApiError::invalid_argument(
+        return Err(ApiError::bad_request(
             "targetDate and targetTimeIndex are required when includeHoroscope is true",
         ));
     }
@@ -250,15 +251,13 @@ fn parse_birth(obj: &Map<String, Value>) -> Result<Birth, ApiError> {
         "solar" => Calendar::Solar,
         "lunar" => Calendar::Lunar,
         other => {
-            return Err(ApiError::invalid_argument(format!(
-                "invalid calendar '{other}'"
-            )));
+            return Err(ApiError::bad_request(format!("invalid calendar '{other}'")));
         }
     };
     let date = req_string(obj, "date")?;
     let time_index = match obj.get("timeIndex") {
         None | Some(Value::Null) => {
-            return Err(ApiError::invalid_argument("timeIndex is required"));
+            return Err(ApiError::bad_request("timeIndex is required"));
         }
         Some(value) => time_index(value, "timeIndex")?,
     };
@@ -266,9 +265,7 @@ fn parse_birth(obj: &Map<String, Value>) -> Result<Birth, ApiError> {
         "male" => Gender::Male,
         "female" => Gender::Female,
         other => {
-            return Err(ApiError::invalid_argument(format!(
-                "invalid gender '{other}'"
-            )));
+            return Err(ApiError::bad_request(format!("invalid gender '{other}'")));
         }
     };
     let language = parse_language(obj)?;
@@ -277,9 +274,9 @@ fn parse_birth(obj: &Map<String, Value>) -> Result<Birth, ApiError> {
         None | Some(Value::Null) => None,
         Some(Value::String(value)) => Some(
             LeapMonth::from_key(value)
-                .ok_or_else(|| ApiError::invalid_argument(format!("invalid leap '{value}'")))?,
+                .ok_or_else(|| ApiError::bad_request(format!("invalid leap '{value}'")))?,
         ),
-        Some(_) => return Err(ApiError::invalid_argument("leap must be a string")),
+        Some(_) => return Err(ApiError::bad_request("leap must be a string")),
     };
     let config = parse_config(obj.get("config"))?;
     Ok(Birth {
@@ -304,11 +301,9 @@ fn parse_language(obj: &Map<String, Value>) -> Result<Language, ApiError> {
             "ja-JP" => Ok(Language::JaJP),
             "ko-KR" => Ok(Language::KoKR),
             "vi-VN" => Ok(Language::ViVN),
-            other => Err(ApiError::invalid_argument(format!(
-                "invalid language '{other}'"
-            ))),
+            other => Err(ApiError::bad_request(format!("invalid language '{other}'"))),
         },
-        Some(_) => Err(ApiError::invalid_argument("language must be a string")),
+        Some(_) => Err(ApiError::bad_request("language must be a string")),
     }
 }
 
@@ -392,9 +387,9 @@ fn apply_switch<T>(
     }
     let text = value
         .as_str()
-        .ok_or_else(|| ApiError::invalid_argument(format!("{field} must be a string")))?;
+        .ok_or_else(|| ApiError::bad_request(format!("{field} must be a string")))?;
     *slot = parse(text).ok_or_else(|| {
-        ApiError::invalid_argument(format!("invalid {field} '{text}': expected {expected}"))
+        ApiError::bad_request(format!("invalid {field} '{text}': expected {expected}"))
     })?;
     Ok(())
 }
@@ -402,13 +397,13 @@ fn apply_switch<T>(
 fn object<'a>(value: &'a Value, what: &str) -> Result<&'a Map<String, Value>, ApiError> {
     value
         .as_object()
-        .ok_or_else(|| ApiError::invalid_argument(format!("{what} must be an object")))
+        .ok_or_else(|| ApiError::bad_request(format!("{what} must be an object")))
 }
 
 fn reject_unknown(obj: &Map<String, Value>, allowed: &[&str]) -> Result<(), ApiError> {
     for key in obj.keys() {
         if !allowed.contains(&key.as_str()) {
-            return Err(ApiError::invalid_argument(format!("unknown field '{key}'")));
+            return Err(ApiError::bad_request(format!("unknown field '{key}'")));
         }
     }
     Ok(())
@@ -416,11 +411,9 @@ fn reject_unknown(obj: &Map<String, Value>, allowed: &[&str]) -> Result<(), ApiE
 
 fn req_string(obj: &Map<String, Value>, key: &str) -> Result<String, ApiError> {
     match obj.get(key) {
-        None | Some(Value::Null) => Err(ApiError::invalid_argument(format!("{key} is required"))),
+        None | Some(Value::Null) => Err(ApiError::bad_request(format!("{key} is required"))),
         Some(Value::String(value)) => Ok(value.clone()),
-        Some(_) => Err(ApiError::invalid_argument(format!(
-            "{key} must be a string"
-        ))),
+        Some(_) => Err(ApiError::bad_request(format!("{key} must be a string"))),
     }
 }
 
@@ -428,9 +421,7 @@ fn opt_string(obj: &Map<String, Value>, key: &str) -> Result<Option<String>, Api
     match obj.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(value)) => Ok(Some(value.clone())),
-        Some(_) => Err(ApiError::invalid_argument(format!(
-            "{key} must be a string"
-        ))),
+        Some(_) => Err(ApiError::bad_request(format!("{key} must be a string"))),
     }
 }
 
@@ -438,21 +429,17 @@ fn bool_field(obj: &Map<String, Value>, key: &str, default: bool) -> Result<bool
     match obj.get(key) {
         None | Some(Value::Null) => Ok(default),
         Some(Value::Bool(value)) => Ok(*value),
-        Some(_) => Err(ApiError::invalid_argument(format!(
-            "{key} must be a boolean"
-        ))),
+        Some(_) => Err(ApiError::bad_request(format!("{key} must be a boolean"))),
     }
 }
 
 fn time_index(value: &Value, field: &str) -> Result<u8, ApiError> {
     let Some(number) = value.as_i64() else {
-        return Err(ApiError::invalid_argument(format!(
-            "{field} must be an integer"
-        )));
+        return Err(ApiError::bad_request(format!("{field} must be an integer")));
     };
     if !(0..=12).contains(&number) {
-        return Err(ApiError::invalid_time_index(format!(
-            "time_index must be 0-12, got {number}"
+        return Err(ApiError::bad_request(format!(
+            "timeIndex must be an integer 0-12, got {number}"
         )));
     }
     Ok(number as u8)
