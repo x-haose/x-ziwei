@@ -1,0 +1,27 @@
+[package]
+name = "x-ziwei"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+license = "MIT"
+authors = ["昊色居士 <xhrtxh@gmail.com>"]
+repository = "https://github.com/x-haose/x-ziwei"
+homepage = "https://ziwei.x-haose.com"
+description = "紫微斗数 MCP / HTTP 服务，排盘由 x-iztro 完成"
+readme = "README.md"
+publish = false
+
+[[bin]]
+name = "x-ziwei"
+path = "src/main.rs"
+
+[dependencies]
+# Exact pin. Phase 1 speaks this crate's chart / to_text surface only.
+x-iztro = "=0.6.1"
+axum = "0.7"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
