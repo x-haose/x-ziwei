@@ -91,10 +91,32 @@ async fn healthz_and_landing_page() {
     let (status, html, _) = call(shared.clone(), "GET", "/install", None, false).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(html.matches("<li>").count(), 3);
+    assert!(html.contains("与 iztro v2.6.1 逐字段对齐（71 万+ 金标）"));
+    assert!(html.contains("契约可钉（chart / to_text 已冻）"));
+    assert!(html.contains("一行 URL 即用"));
+    assert!(!html.contains("v2.5.8"));
     assert!(html.contains("https://ziwei.x-haose.com/mcp"));
-    assert!(
-        html.contains(r#"{"calendar":"solar","date":"2000-8-16","timeIndex":2,"gender":"female"}"#)
-    );
+    assert!(html.contains(
+        r#"{
+  "mcpServers": {
+    "ziwei": {
+      "url": "https://ziwei.x-haose.com/mcp"
+    }
+  }
+}"#
+    ));
+    assert!(html.contains(
+        r#"{
+  "mcpServers": {
+    "ziwei": {
+      "type": "http",
+      "url": "https://ziwei.x-haose.com/mcp"
+    }
+  }
+}"#
+    ));
+    assert!(html.contains("「帮我排个盘：公历 2000-8-16，寅时，女」→ chart"));
+    assert!(html.contains("「用白话讲讲这张盘」→ to_text"));
     assert!(html.contains("href=\"/healthz\""));
 
     // Docs homepage stays off this process. A host-level proxy must not
