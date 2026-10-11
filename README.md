@@ -2,7 +2,7 @@
 
 紫微斗数 MCP / HTTP 服务。排盘由 [x-iztro](https://github.com/x-haose/x-iztro) 完成。
 
-**一期目标**：公网一行 URL 可装；工具只暴露 `chart` / `to_text`；契约可钉；盘与 iztro v2.5.8 金标对齐。
+**一期目标**：公网一行 URL 可装；工具只暴露 `chart` / `to_text`；契约可钉；盘与 iztro v2.6.1 金标对齐。
 
 ## 安装
 
@@ -57,7 +57,7 @@ cargo run
 
 - MCP：`https://ziwei.x-haose.com/mcp`（上游把该 URL 改写到本服务的 `/mcp`）
 - 健康检查：同域 `/healthz`
-- 落地页：服务内 `GET /install`（why + 一行配置 + solar 最短示例）。不占用 `GET /`，避免反代盖住文档站首页。
+- 落地页：服务内 `GET /install`（why 三行 + Cursor / Claude 最短 JSON + 用户口吻示例）。不占用 `GET /`，避免反代盖住文档站首页。
 
 ## 部署（Dokploy）
 
