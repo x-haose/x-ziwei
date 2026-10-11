@@ -1,5 +1,6 @@
-//! HTTP surface: `GET /install` landing page, `GET /healthz`, Streamable HTTP `POST /mcp`.
-//! `GET /` is intentionally unrouted so a reverse proxy can keep the docs homepage.
+//! HTTP surface: `GET /install` redirects to the docs MCP page, `GET /healthz`,
+//! Streamable HTTP `POST /mcp`. `GET /` is intentionally unrouted so a reverse
+//! proxy can keep the docs homepage.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -18,6 +19,9 @@ use crate::error::ApiError;
 use crate::mcp::{self, Outcome};
 
 const MAX_BODY: usize = 64 * 1024;
+
+/// Agreed docs-site page for MCP install. The Fumadocs page is landing at this path.
+const INSTALL_DOCS: &str = "https://ziwei.x-haose.com/zh/docs/guide/mcp";
 
 #[derive(Clone)]
 pub struct AppState {
@@ -96,10 +100,10 @@ fn env_u32(name: &str, default: u32) -> u32 {
 
 async fn index() -> Response {
     Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
-        .body(Body::from(include_str!("../static/index.html")))
-        .expect("index response")
+        .status(StatusCode::MOVED_PERMANENTLY)
+        .header(header::LOCATION, INSTALL_DOCS)
+        .body(Body::empty())
+        .expect("install redirect")
 }
 
 async fn healthz() -> Response {

@@ -14,7 +14,6 @@ RUN mkdir src \
 
 COPY src ./src
 COPY contracts ./contracts
-COPY static ./static
 RUN touch src/lib.rs src/main.rs \
     && cargo build --release --locked --bin x-ziwei
 

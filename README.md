@@ -20,7 +20,7 @@ https://ziwei.x-haose.com/mcp
 }
 ```
 
-健康检查：同域 [`/healthz`](https://ziwei.x-haose.com/healthz)。落地页在服务内 `GET /install`（不是 `GET /`）。
+健康检查：同域 [`/healthz`](https://ziwei.x-haose.com/healthz)。`GET /install` 301 到[文档站 MCP 页](https://ziwei.x-haose.com/zh/docs/guide/mcp)（不是 `GET /`）。
 
 ## 本地
 
@@ -30,7 +30,7 @@ https://ziwei.x-haose.com/mcp
 cargo run
 ```
 
-默认监听 `0.0.0.0:8080`。`PORT` 或 `BIND` 可改地址。`POST /mcp` 为 Streamable HTTP；`GET /healthz` 返回 `ok`；`GET /install` 是落地页。
+默认监听 `0.0.0.0:8080`。`PORT` 或 `BIND` 可改地址。`POST /mcp` 为 Streamable HTTP；`GET /healthz` 返回 `ok`；`GET /install` 301 到文档站 MCP 页。
 
 限流按客户端 IP（优先 `X-Forwarded-For` 首段）计 `POST /mcp`。默认每 60 秒 60 次，超出 HTTP 429，正文 `{"code":"rate_limited","message":"rate limit exceeded"}`。`X_ZIWEI_RATE_LIMIT=0` 关闭限流。窗口用 `X_ZIWEI_RATE_WINDOW_SECS`。
 
@@ -57,7 +57,7 @@ cargo run
 
 - MCP：`https://ziwei.x-haose.com/mcp`（上游把该 URL 改写到本服务的 `/mcp`）
 - 健康检查：同域 `/healthz`
-- 落地页：服务内 `GET /install`（why 三行 + Cursor / Claude 最短 JSON + 用户口吻示例）。不占用 `GET /`，避免反代盖住文档站首页。
+- `GET /install`：301 到 `https://ziwei.x-haose.com/zh/docs/guide/mcp`。不占用 `GET /`，避免反代盖住文档站首页。
 
 ## 部署（Dokploy）
 
