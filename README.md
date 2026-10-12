@@ -21,7 +21,9 @@ https://ziwei.x-haose.com/mcp
 | Cursor | [`plugin/cursor`](plugin/cursor/README.md) |
 | Claude Code | [`plugin/claude`](plugin/claude/README.md) |
 
-Cursor 本地冒烟：把 `plugin/cursor` 拷到 `~/.cursor/plugins/local/ziwei`，重载窗口，用自然语言问一次排盘，确认调用了 `chart` 或 `to_text`。Claude Code 用 `claude --plugin-dir ./plugin/claude`，或 `claude plugin marketplace add x-haose/x-ziwei` 后再安装 `ziwei@x-ziwei`。两处都还没提交官方市场。
+Cursor 的产品安装是官方 Marketplace，或把本 GitHub 仓库做 Team Marketplace 的 Import from Repo（`https://github.com/x-haose/x-ziwei`）。官方 Marketplace 未提交、未上架。仓库根 [`.cursor-plugin/marketplace.json`](.cursor-plugin/marketplace.json) 列出插件 `ziwei`，`source` 为 `plugin/cursor`，供这次导入和以后提交官方市场使用。本地 `cp` 到 `~/.cursor/plugins/local` 只写在「开发者自测」里。
+
+Claude Code 不拷贝目录：`claude plugin install ziwei --marketplace x-haose/x-ziwei`。官方目录未提交；本仓库自托管市场已可用。状态见 [`docs/clients/publish-status.md`](docs/clients/publish-status.md)。
 
 ### 连接器
 
