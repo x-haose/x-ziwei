@@ -1,0 +1,15 @@
+{
+  "name": "x-ziwei",
+  "interface": {
+    "displayName": "紫微斗数"
+  },
+  "plugins": [
+    {
+      "name": "ziwei",
+      "source": {
+        "source": "local",
+        "path": "./plugin/claude"
+      }
+    }
+  ]
+}

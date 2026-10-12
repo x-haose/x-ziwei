@@ -14,7 +14,7 @@ claude --plugin-dir ./plugin/claude
 
 ## 从本仓库安装
 
-仓库根的 [`.claude-plugin/marketplace.json`](../../.claude-plugin/marketplace.json) 是本仓库的插件目录，用来让下面两条命令找到 `plugin/claude`。它不是 Claude 官方插件市场，本期也不提交官方目录。
+仓库根的 [`.claude-plugin/marketplace.json`](../../.claude-plugin/marketplace.json) 是 Claude 兼容清单，用来让下面两条命令找到 `plugin/claude`。它不是 Claude 官方插件市场，本期也不提交官方目录。ChatGPT / Codex 另读 [`.agents/plugins/marketplace.json`](../../.agents/plugins/marketplace.json)，条目同样指向本目录。
 
 ```bash
 claude plugin marketplace add x-haose/x-ziwei
