@@ -1,0 +1,16 @@
+{
+  "name": "x-ziwei",
+  "owner": {
+    "name": "昊色居士 / x-haose"
+  },
+  "metadata": {
+    "description": "Skill+MCP for Zi Wei Dou Shu. Public URL: https://ziwei.x-haose.com/mcp"
+  },
+  "plugins": [
+    {
+      "name": "ziwei",
+      "source": "plugin/cursor",
+      "description": "Skill+MCP for Zi Wei Dou Shu. Public URL: https://ziwei.x-haose.com/mcp"
+    }
+  ]
+}

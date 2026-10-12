@@ -21,6 +21,8 @@ claude plugin marketplace add x-haose/x-ziwei
 claude plugin install ziwei@x-ziwei
 ```
 
+不经过目录拷贝时，也可以一条命令：`claude plugin install ziwei --marketplace x-haose/x-ziwei`。
+
 会话里对应 `/plugin marketplace add x-haose/x-ziwei`，再安装 `ziwei@x-ziwei`。
 
 装好后用自然语言问一次排盘。回答前必须先调用 `chart` 或 `to_text`。

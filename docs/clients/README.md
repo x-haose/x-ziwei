@@ -6,7 +6,7 @@ https://ziwei.x-haose.com/mcp
 
 Streamable HTTP，无鉴权。工具只有 `chart`、`to_text`。这些客户端不带本仓库的 Skill，把 [`instructions.md`](instructions.md) 贴进系统提示或自定义说明。
 
-下面只写当前文档里能核对的入口。没有官方插件壳的产品，不要当成已经上架。
+下面只写当前文档里能核对的入口。没有官方插件壳的产品，不要当成已经上架。Cursor 与 Claude 的市场上架状态见 [publish-status.md](publish-status.md)。
 
 ## ChatGPT
 
