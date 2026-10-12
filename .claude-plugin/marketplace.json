@@ -1,0 +1,15 @@
+{
+  "name": "x-ziwei",
+  "description": "本仓库的紫微斗数插件目录，供 claude plugin marketplace add 安装 plugin/claude。",
+  "owner": {
+    "name": "昊色居士",
+    "url": "https://github.com/x-haose"
+  },
+  "plugins": [
+    {
+      "name": "ziwei",
+      "source": "./plugin/claude",
+      "description": "紫微斗数排盘。自然语言提问前必须调用公网 chart 或 to_text。"
+    }
+  ]
+}

@@ -6,9 +6,32 @@
 
 ## 安装
 
-MCP（Streamable HTTP）：
+公网只有一个 MCP（Streamable HTTP，无鉴权）：
 
 https://ziwei.x-haose.com/mcp
+
+工具只有 `chart` / `to_text`。装好之后用自然语言问紫微排盘或论命；回答前必须先调这两个工具。
+
+### 插件（推荐）
+
+插件把 Skill 和上面的 URL 绑在一起。Skill 要求先排盘再解释，禁止凭记忆编盘。总览见 [`plugin/README.md`](plugin/README.md)。
+
+| 客户端 | 目录 |
+|---|---|
+| Cursor | [`plugin/cursor`](plugin/cursor/README.md) |
+| Claude Code | [`plugin/claude`](plugin/claude/README.md) |
+
+Cursor 本地冒烟：把 `plugin/cursor` 拷到 `~/.cursor/plugins/local/ziwei`，重载窗口，用自然语言问一次排盘，确认调用了 `chart` 或 `to_text`。Claude Code 用 `claude --plugin-dir ./plugin/claude`，或 `claude plugin marketplace add x-haose/x-ziwei` 后再安装 `ziwei@x-ziwei`。两处都还没提交官方市场。
+
+### 连接器
+
+没有插件壳的客户端，用同一 URL。步骤见 [`docs/clients/README.md`](docs/clients/README.md)：ChatGPT、Grok、Codex。
+
+### URL 与自定义说明
+
+没有 Skill 通道时，自己填上面的 URL，并把 [`docs/clients/instructions.md`](docs/clients/instructions.md) 贴进系统提示或自定义说明。中英短模板规则与 Skill 相同。
+
+### 兼容：只填 URL
 
 ```json
 {
@@ -19,6 +42,8 @@ https://ziwei.x-haose.com/mcp
   }
 }
 ```
+
+只填 URL 时没有 Skill。能贴自定义说明就贴上一段。
 
 健康检查：同域 [`/healthz`](https://ziwei.x-haose.com/healthz)。`GET /install` 301 到[文档站 MCP 页](https://ziwei.x-haose.com/zh/docs/guide/mcp)（不是 `GET /`）。
 
