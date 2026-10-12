@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ziwei": {
+      "type": "http",
+      "url": "https://ziwei.x-haose.com/mcp"
+    }
+  }
+}

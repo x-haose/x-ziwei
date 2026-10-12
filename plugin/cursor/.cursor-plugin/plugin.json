@@ -1,0 +1,14 @@
+{
+  "name": "ziwei",
+  "displayName": "紫微斗数",
+  "version": "0.1.0",
+  "description": "紫微斗数排盘。安装后用自然语言提问；必须先调用公网 MCP 的 chart 或 to_text。",
+  "author": {
+    "name": "昊色居士"
+  },
+  "publisher": "x-haose",
+  "homepage": "https://ziwei.x-haose.com/zh/docs/guide/mcp",
+  "repository": "https://github.com/x-haose/x-ziwei",
+  "license": "MIT",
+  "keywords": ["ziwei", "紫微斗数", "紫微排盘", "mcp"]
+}
