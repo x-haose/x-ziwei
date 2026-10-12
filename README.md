@@ -23,9 +23,9 @@ https://ziwei.x-haose.com/mcp
 
 Cursor 本地冒烟：把 `plugin/cursor` 拷到 `~/.cursor/plugins/local/ziwei`，重载窗口，用自然语言问一次排盘，确认调用了 `chart` 或 `to_text`。Claude Code 用 `claude --plugin-dir ./plugin/claude`，或 `claude plugin marketplace add x-haose/x-ziwei` 后再安装 `ziwei@x-ziwei`。两处都还没提交官方市场。
 
-### 连接器
+### 连接器（B 档）
 
-没有插件壳的客户端，用同一 URL。步骤见 [`docs/clients/README.md`](docs/clients/README.md)：ChatGPT、Grok、Codex。
+ChatGPT、Grok、Codex 绑同一条 URL。ChatGPT 有插件页，尚未进公开目录。能导入市场时走 **添加 → 添加插件市场**，Source 填 `https://github.com/x-haose/x-ziwei`，再安装 `ziwei`。自定义 MCP 是备用。步骤见 [`docs/clients/README.md`](docs/clients/README.md)。
 
 ### URL 与自定义说明
 
