@@ -139,7 +139,7 @@ impl PackStore {
         if let Some(hit) = self.cached(&key) {
             return Ok(hit);
         }
-        let response =
+        let mut response =
             self.http.get(url).send().await.map_err(|e| {
                 Error::pack_unavailable(format!("failed to fetch pack `{url}`: {e}"))
             })?;
@@ -157,14 +157,18 @@ impl PackStore {
                 "pack `{url}` is larger than {MAX_PACK_BYTES} bytes"
             )));
         }
-        let bytes = response
-            .bytes()
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
             .await
-            .map_err(|e| Error::pack_unavailable(format!("failed to read pack `{url}`: {e}")))?;
-        if bytes.len() > MAX_PACK_BYTES {
-            return Err(Error::invalid_argument(format!(
-                "pack `{url}` is larger than {MAX_PACK_BYTES} bytes"
-            )));
+            .map_err(|e| Error::pack_unavailable(format!("failed to read pack `{url}`: {e}")))?
+        {
+            if chunk.len() > MAX_PACK_BYTES - bytes.len() {
+                return Err(Error::invalid_argument(format!(
+                    "pack `{url}` is larger than {MAX_PACK_BYTES} bytes"
+                )));
+            }
+            bytes.extend_from_slice(&chunk);
         }
         let json = std::str::from_utf8(&bytes)
             .map_err(|_| Error::invalid_argument(format!("pack `{url}` is not UTF-8 JSON")))?;

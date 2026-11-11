@@ -40,7 +40,7 @@ x-ziwei：紫微斗数的托管服务层。排盘、运限、格局判定由 [x-
 | 是什么 | 排盘内核 crate | MCP / HTTP 服务 + Skill |
 | 质量契约 | 与 x-iztro 锁定的 iztro 版本金标零容忍；绑定能力同步 | 服务与工具面，发版节奏独立 |
 | 知识包 | 协议、合并、默认包、按标识查询 | 读包、按问题取材、把结果交给模型 |
-| 依赖 | 无本仓库 | 依赖 x-iztro crate；开发期可用 path |
+| 依赖 | 无本仓库 | 依赖固定 Git 提交的 x-iztro crate |
 
 主题下选择哪些关系、材料和解盘步骤属于知识方法与应用编排，不因其能写成纯函数就下放到 x-iztro；缺少的通用计算能力才在 x-iztro 补。MCP 的 `call_tool` 里不准出现安星、格局规则或农历换算。
 
@@ -51,7 +51,7 @@ x-ziwei：紫微斗数的托管服务层。排盘、运限、格局判定由 [x-
 - 传输：Streamable HTTP（公网主路径）与 stdio（本机）；工具实现一份
 - 分发：一个二进制；对外安装故事是 Agent Plugin（`plugin/`：Claude `.claude-plugin/` + Codex `.codex-plugin/` + `.mcp.json` + `skills/ziwei/SKILL.md`）。Skill 与 MCP 一起安装，不手抄 SKILL.md。MCP 指向公网 URL
 - 知识包：进程读默认包或本地/白名单 URL 的 JSON；不接任意 URL（SSRF）
-- 仓库独立 git；发版跟 crates.io 上的 `x-iztro` 版本，开发期 path 依赖本机 x-iztro 仓库
+- 仓库独立 git；`Cargo.toml` 的完整 `rev` 与 `Cargo.lock` 固定 x-iztro 源码，部署不依赖本机目录布局
 
 公网 API 不要求 API Key 或登录；限流只用于控制调用频率。
 

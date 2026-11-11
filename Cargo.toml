@@ -34,7 +34,7 @@ tower = "0.5"
 tower-http = { version = "0.6", features = ["trace", "cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-x-iztro = { version = "0.6.1", path = "../../x-iztro" }
+x-iztro = { version = "0.6.1", git = "https://github.com/x-haose/x-iztro", rev = "1b73cbcc01e550cb2c2e9dc90f45baaa7a421c04" }
 
 [dev-dependencies]
 http-body-util = "0.1"

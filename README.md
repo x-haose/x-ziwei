@@ -16,7 +16,7 @@
 
 ## 运行
 
-开发期需要本机 [x-iztro](https://github.com/x-haose/x-iztro) 仓库（`Cargo.toml` 里 path 依赖）。
+需要 Rust 1.88 以上和 Git。内核由 Cargo 从 x-iztro 仓库获取，`Cargo.toml` 固定完整提交号；无需本机另放一份 x-iztro。使用仓库中的 `Cargo.lock` 构建。
 
 ```bash
 make check
