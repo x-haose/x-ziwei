@@ -1,0 +1,22 @@
+{
+  "name": "ziwei",
+  "version": "0.1.0",
+  "description": "Zi Wei Dou Shu charting and question-scoped readings. Charts from x-iztro; quotes from the knowledge pack only.",
+  "author": {
+    "name": "x-haose",
+    "url": "https://github.com/x-haose"
+  },
+  "homepage": "https://ziwei.x-haose.com",
+  "repository": "https://github.com/x-haose/x-ziwei",
+  "license": "MIT",
+  "keywords": ["ziwei", "iztro", "astrology", "mcp"],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Ziwei",
+    "shortDescription": "紫微斗数排盘与按问题取材",
+    "developerName": "x-haose",
+    "category": "Productivity",
+    "websiteURL": "https://ziwei.x-haose.com"
+  }
+}

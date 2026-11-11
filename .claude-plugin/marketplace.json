@@ -1,15 +1,18 @@
 {
   "name": "x-ziwei",
-  "description": "本仓库的紫微斗数插件目录，供 claude plugin marketplace add 安装 plugin/claude。",
   "owner": {
-    "name": "昊色居士",
+    "name": "x-haose",
     "url": "https://github.com/x-haose"
+  },
+  "metadata": {
+    "description": "紫微斗数 MCP 与论法 Skill"
   },
   "plugins": [
     {
       "name": "ziwei",
-      "source": "./plugin/claude",
-      "description": "紫微斗数排盘。自然语言提问前必须调用公网 chart 或 to_text。"
+      "source": "./plugin",
+      "description": "紫微斗数：排盘与按问题取材。盘由 x-iztro 计算，断语只用知识包原文。",
+      "version": "0.1.0"
     }
   ]
 }

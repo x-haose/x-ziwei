@@ -1,27 +1,42 @@
 [package]
 name = "x-ziwei"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 rust-version = "1.88"
 license = "MIT"
-authors = ["昊色居士 <xhrtxh@gmail.com>"]
+description = "Zi Wei Dou Shu MCP and HTTP service: charts from x-iztro, readings from knowledge packs"
 repository = "https://github.com/x-haose/x-ziwei"
-homepage = "https://ziwei.x-haose.com"
-description = "紫微斗数 MCP / HTTP 服务，排盘由 x-iztro 完成"
 readme = "README.md"
-publish = false
-
-[[bin]]
-name = "x-ziwei"
-path = "src/main.rs"
+keywords = ["ziwei", "iztro", "mcp", "astrology"]
+categories = ["command-line-utilities"]
 
 [dependencies]
-# Exact pin. Phase 1 speaks this crate's chart / to_text surface only.
-x-iztro = "=0.6.1"
-axum = "0.7"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
+anyhow = "1"
+axum = "0.8"
+clap = { version = "4.6", features = ["derive", "env"] }
+governor = "0.10"
+http = "1"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+rmcp = { version = "3.2.0", features = [
+    "server",
+    "macros",
+    "schemars",
+    "transport-io",
+    "transport-streamable-http-server",
+] }
+schemars = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "io-std", "net", "fs"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+x-iztro = { version = "0.6.1", path = "../../x-iztro" }
 
 [dev-dependencies]
+http-body-util = "0.1"
+pretty_assertions = "1"
 tower = { version = "0.5", features = ["util"] }

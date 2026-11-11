@@ -1,0 +1,14 @@
+{
+  "name": "ziwei",
+  "displayName": "Ziwei",
+  "version": "0.1.0",
+  "description": "紫微斗数：排盘与按问题取材。盘由 x-iztro 计算，断语只用知识包原文。",
+  "author": {
+    "name": "x-haose",
+    "url": "https://github.com/x-haose"
+  },
+  "homepage": "https://ziwei.x-haose.com",
+  "repository": "https://github.com/x-haose/x-ziwei",
+  "license": "MIT",
+  "keywords": ["ziwei", "iztro", "astrology", "mcp"]
+}

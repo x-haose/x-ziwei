@@ -1,314 +1,153 @@
-//! Stateless Streamable HTTP JSON-RPC for the two frozen tools.
-//!
-//! Tool failures stay inside the tool result (`isError`) so the client can
-//! read `{code, message}`. Envelope failures use a JSON-RPC error whose
-//! `data` is the same object, or a bare HTTP body when there is no envelope.
+//! MCP 工具面。三件工具的实现是 [`crate::service::App`]，这里只注册协议。
 
-use std::sync::OnceLock;
+use rmcp::handler::server::router::tool::ToolRouter;
+use rmcp::handler::server::wrapper::Parameters;
+use rmcp::model::{
+    CallToolResult, ContentBlock, Implementation, ProtocolVersion, ServerCapabilities, ServerInfo,
+};
+use rmcp::{ErrorData as McpError, ServerHandler, tool, tool_handler, tool_router};
+use serde::Serialize;
+use serde_json::json;
 
-use axum::http::{header, HeaderMap, StatusCode};
-use serde_json::{json, Value};
+use crate::error::Error;
+use crate::service::{App, ChartRequest, LookupRequest, ReadRequest};
 
-use crate::error::ApiError;
-use crate::tools;
-
-const PROTOCOL_VERSIONS: &[&str] = &[
-    "2024-11-05",
-    "2025-03-26",
-    "2025-06-18",
-    "2025-11-25",
-    "2026-07-28",
-];
-
-const DEFAULT_PROTOCOL: &str = "2025-03-26";
-
-pub enum Outcome {
-    /// Notification or client response. HTTP 202, empty body.
-    Accepted,
-    /// JSON-RPC payload. HTTP 200, JSON or a single SSE message.
-    Rpc { body: Value, sse: bool },
-    /// No JSON-RPC envelope. Body is `{code, message}`.
-    Bare { status: StatusCode, error: ApiError },
+/// 一份工具实现，stdio 与 Streamable HTTP 共用。
+#[derive(Clone)]
+pub struct ZiweiMcp {
+    /// 编排层。
+    app: App,
+    /// `#[tool_router]` 生成的路由表。
+    tool_router: ToolRouter<Self>,
 }
 
-pub fn handle(headers: &HeaderMap, bytes: &[u8]) -> Outcome {
-    if let Err(error) = check_content_type(headers) {
-        return Outcome::Bare {
-            status: StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            error,
-        };
-    }
-    let sse = match accept_sse(headers) {
-        Ok(sse) => sse,
-        Err(error) => {
-            return Outcome::Bare {
-                status: StatusCode::NOT_ACCEPTABLE,
-                error,
-            };
+#[tool_router]
+impl ZiweiMcp {
+    /// 绑定同一份 [`App`]。
+    pub fn new(app: App) -> Self {
+        Self {
+            app,
+            tool_router: Self::tool_router(),
         }
-    };
-    if let Err(error) = check_protocol_header(headers) {
-        return Outcome::Bare {
-            status: StatusCode::BAD_REQUEST,
-            error,
-        };
     }
 
-    let value: Value = match serde_json::from_slice(bytes) {
-        Ok(value) => value,
-        Err(_) => {
-            return Outcome::Bare {
-                status: StatusCode::BAD_REQUEST,
-                error: ApiError::bad_request("request body is not valid JSON"),
-            };
-        }
-    };
-    if value.is_array() {
-        return Outcome::Bare {
-            status: StatusCode::BAD_REQUEST,
-            error: ApiError::bad_request("JSON-RPC batches are not supported"),
-        };
-    }
-    let Some(message) = value.as_object() else {
-        return Outcome::Bare {
-            status: StatusCode::BAD_REQUEST,
-            error: ApiError::bad_request("request must be a JSON object"),
-        };
-    };
-
-    let id = message
-        .get("id")
-        .cloned()
-        .filter(|id| id.is_string() || id.is_number() || id.is_null())
-        .unwrap_or(Value::Null);
-
-    if message.get("jsonrpc").and_then(Value::as_str) != Some("2.0") {
-        return rpc(
-            sse,
-            rpc_error(
-                id,
-                -32600,
-                &ApiError::bad_request("jsonrpc must be \"2.0\""),
-            ),
-        );
+    /// 供契约测试列出工具名与 schema。
+    pub fn router(&self) -> &ToolRouter<Self> {
+        &self.tool_router
     }
 
-    let method = match message.get("method") {
-        None if message.contains_key("result") || message.contains_key("error") => {
-            return Outcome::Accepted;
+    #[tool(
+        name = "ziwei_chart",
+        description = "紫微斗数排盘。给定出生日期、时辰与性别，返回本命盘语义化文本（Markdown）及语言无关 key。可选 target_date 同时返回运限。只返回盘面事实，不含断语。时辰：0 早子 00:00-00:59，1 丑 01:00-02:59，2 寅 03:00-04:59，3 卯 05:00-06:59，4 辰 07:00-08:59，5 巳 09:00-10:59，6 午 11:00-12:59，7 未 13:00-14:59，8 申 15:00-16:59，9 酉 17:00-18:59，10 戌 19:00-20:59，11 亥 21:00-22:59，12 晚子 23:00-23:59。23 点必须用 12，不要写成 0。也可用 clock=HH:MM。",
+        annotations(read_only_hint = true, idempotent_hint = true, open_world_hint = false)
+    )]
+    async fn ziwei_chart(
+        &self,
+        Parameters(req): Parameters<ChartRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.app.chart(req).await {
+            Ok(view) => Ok(tool_ok(view)),
+            Err(err) => Ok(tool_err(err)),
         }
-        None => {
-            return rpc(
-                sse,
-                rpc_error(id, -32600, &ApiError::bad_request("method is required")),
-            );
-        }
-        Some(Value::String(method)) => method.as_str(),
-        Some(_) => {
-            return rpc(
-                sse,
-                rpc_error(
-                    id,
-                    -32600,
-                    &ApiError::bad_request("method must be a string"),
-                ),
-            );
-        }
-    };
-
-    // Notifications omit id. Do not execute tool calls without a response slot.
-    if !message.contains_key("id") {
-        return Outcome::Accepted;
     }
 
-    let params = message.get("params").cloned().unwrap_or(Value::Null);
-    let result = match method {
-        "initialize" => Ok(initialize(&params)),
-        "ping" => Ok(json!({})),
-        "tools/list" => Ok(json!({ "tools": advertised_tools() })),
-        "tools/call" => call_tool(&params),
-        _ => Err(ApiError::bad_request(format!("method not found: {method}"))),
-    };
+    #[tool(
+        name = "ziwei_read",
+        description = "按问题取材。给定生辰、封闭 topic（self/overall/year/wealth/career/spouse/health/children/parents/siblings/friends/property/surface/spirit）与可选额外宫位，返回选中宫的事实文本、对得上的知识包原文 quotes、以及盘上有但包里没释义的 missing。断语只能抄 quotes 原文；missing 与返回里没有的星不准写。问流年用 topic=year 并给 target_date。",
+        annotations(read_only_hint = true, idempotent_hint = true, open_world_hint = false)
+    )]
+    async fn ziwei_read(
+        &self,
+        Parameters(req): Parameters<ReadRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.app.read(req).await {
+            Ok(slice) => Ok(tool_ok(slice)),
+            Err(err) => Ok(tool_err(err)),
+        }
+    }
 
-    match result {
-        Ok(result) => rpc(sse, json!({"jsonrpc": "2.0", "id": id, "result": result})),
-        Err(error) => {
-            let code = if error.code == "internal" {
-                -32603
-            } else if error.message.starts_with("method not found") {
-                -32601
-            } else {
-                -32602
-            };
-            rpc(sse, rpc_error(id, code, &error))
+    #[tool(
+        name = "ziwei_lookup",
+        description = "按语言无关标识查知识包一条，用于核对原文。kind 为 star/pattern/palace/mutagen/concept，key 如 ziweiMaj、soulPalace、sihuaLu。键不存在则失败，不返回相近条目。",
+        annotations(read_only_hint = true, idempotent_hint = true, open_world_hint = false)
+    )]
+    async fn ziwei_lookup(
+        &self,
+        Parameters(req): Parameters<LookupRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        match self.app.lookup(req).await {
+            Ok(entry) => Ok(tool_ok(entry)),
+            Err(err) => Ok(tool_err(err)),
         }
     }
 }
 
-fn rpc(sse: bool, body: Value) -> Outcome {
-    Outcome::Rpc { body, sse }
-}
-
-fn rpc_error(id: Value, code: i32, error: &ApiError) -> Value {
-    json!({
-        "jsonrpc": "2.0",
-        "id": id,
-        "error": {
-            "code": code,
-            "message": error.message,
-            "data": error.body(),
-        }
-    })
-}
-
-fn initialize(params: &Value) -> Value {
-    let requested = params
-        .get("protocolVersion")
-        .and_then(Value::as_str)
-        .unwrap_or(DEFAULT_PROTOCOL);
-    let protocol_version = if PROTOCOL_VERSIONS.contains(&requested) {
-        requested
-    } else {
-        DEFAULT_PROTOCOL
-    };
-    json!({
-        "protocolVersion": protocol_version,
-        "capabilities": { "tools": { "listChanged": false } },
-        "serverInfo": {
-            "name": "x-ziwei",
-            "version": env!("CARGO_PKG_VERSION"),
-        },
-        "instructions": "紫微斗数。工具只有 chart（星盘 JSON）和 to_text（Markdown）。阳历最短入参：calendar=solar，date=YYYY-M-D，timeIndex=0-12，gender=male|female。"
-    })
-}
-
-fn call_tool(params: &Value) -> Result<Value, ApiError> {
-    let Some(obj) = params.as_object() else {
-        return Err(ApiError::bad_request("tools/call params must be an object"));
-    };
-    let name = obj
-        .get("name")
-        .and_then(Value::as_str)
-        .ok_or_else(|| ApiError::bad_request("tool name is required"))?;
-    let arguments = match obj.get("arguments") {
-        None | Some(Value::Null) => Value::Object(Default::default()),
-        Some(value) if value.is_object() => value.clone(),
-        Some(_) => {
-            return Err(ApiError::bad_request("arguments must be an object"));
-        }
-    };
-    if name != "chart" && name != "to_text" {
-        return Err(ApiError::bad_request(format!("unknown tool '{name}'")));
-    }
-
-    let executed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match name {
-        "chart" => tools::chart(&arguments).map(|value| {
-            let text = serde_json::to_string(&value).unwrap_or_else(|_| "{}".to_string());
-            tool_ok(text, value)
-        }),
-        "to_text" => {
-            tools::to_text(&arguments).map(|text| tool_ok(text.clone(), json!({"text": text})))
-        }
-        _ => unreachable!("tool name checked above"),
-    }));
-
-    match executed {
-        Ok(Ok(result)) => Ok(result),
-        Ok(Err(error)) => Ok(tool_err(&error)),
-        Err(_) => Ok(tool_err(&ApiError::internal("internal error"))),
+#[tool_handler]
+impl ServerHandler for ZiweiMcp {
+    fn get_info(&self) -> ServerInfo {
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(Implementation::new("x-ziwei", env!("CARGO_PKG_VERSION")))
+            .with_protocol_version(ProtocolVersion::V_2026_07_28)
+            .with_instructions(
+                "Zi Wei Dou Shu tools. Call ziwei_read for a question (topic + birth). \
+             Call ziwei_chart only when the full natal chart is needed. \
+             Call ziwei_lookup to verify one knowledge-pack sentence. \
+             Never invent stars or quotes that the tools did not return. \
+             Feed the model a Chinese chart; answer in the user's language."
+                    .to_string(),
+            )
     }
 }
 
-fn tool_ok(text: String, structured: Value) -> Value {
-    json!({
-        "content": [{ "type": "text", "text": text }],
-        "structuredContent": structured
-    })
+fn tool_ok<T: Serialize>(value: T) -> CallToolResult {
+    let value = serde_json::to_value(&value).expect("tool payloads are JSON objects");
+    CallToolResult::structured(value)
 }
 
-fn tool_err(error: &ApiError) -> Value {
-    let body = error.body();
-    let text = serde_json::to_string(&body)
-        .unwrap_or_else(|_| "{\"code\":\"internal\",\"message\":\"internal error\"}".to_string());
-    json!({
-        "content": [{ "type": "text", "text": text }],
-        "isError": true
-    })
+fn tool_err(err: Error) -> CallToolResult {
+    let body = json!({
+        "code": err.code.as_str(),
+        "message": err.message,
+        "retryable": err.code.retryable(),
+    });
+    let mut result = CallToolResult::error(vec![ContentBlock::text(body.to_string())]);
+    result.structured_content = Some(body);
+    result
 }
 
-fn advertised_tools() -> &'static Vec<Value> {
-    static TOOLS: OnceLock<Vec<Value>> = OnceLock::new();
-    TOOLS.get_or_init(|| {
-        let schema: Value =
-            serde_json::from_str(include_str!("../contracts/mcp-tools.schema.json"))
-                .expect("contracts/mcp-tools.schema.json is valid JSON");
-        schema["tools"]
-            .as_array()
-            .expect("tools array")
-            .iter()
-            .map(|tool| {
-                json!({
-                    "name": tool["name"],
-                    "description": tool["description"],
-                    "inputSchema": tool["inputSchema"],
-                    "outputSchema": tool["outputSchema"],
-                })
-            })
-            .collect()
-    })
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pack::{PackPolicy, PackStore};
+    use std::sync::Arc;
 
-fn check_content_type(headers: &HeaderMap) -> Result<(), ApiError> {
-    let value = headers
-        .get(header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or("");
-    let mime = value.split(';').next().unwrap_or("").trim();
-    if mime.eq_ignore_ascii_case("application/json") {
-        Ok(())
-    } else {
-        Err(ApiError::bad_request(
-            "content-type must be application/json",
-        ))
+    fn mcp() -> ZiweiMcp {
+        let packs = Arc::new(PackStore::new(PackPolicy::default()).unwrap());
+        ZiweiMcp::new(App { packs })
     }
-}
 
-fn accept_sse(headers: &HeaderMap) -> Result<bool, ApiError> {
-    let accept = headers
-        .get(header::ACCEPT)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or("");
-    let ranges: Vec<&str> = accept
-        .split(',')
-        .map(|part| part.split(';').next().unwrap_or("").trim())
-        .filter(|part| !part.is_empty())
-        .collect();
-    let allows = |mime: &str| ranges.iter().any(|range| *range == mime || *range == "*/*");
-    let json = allows("application/json");
-    let sse = allows("text/event-stream");
-    if json {
-        Ok(false)
-    } else if sse {
-        Ok(true)
-    } else {
-        Err(ApiError::bad_request(
-            "accept must include application/json or text/event-stream",
-        ))
+    #[test]
+    fn registers_three_tools() {
+        let mut names: Vec<_> = mcp()
+            .router()
+            .list_all()
+            .into_iter()
+            .map(|t| t.name.to_string())
+            .collect();
+        names.sort();
+        assert_eq!(names, ["ziwei_chart", "ziwei_lookup", "ziwei_read"]);
     }
-}
 
-fn check_protocol_header(headers: &HeaderMap) -> Result<(), ApiError> {
-    let Some(value) = headers
-        .get("mcp-protocol-version")
-        .and_then(|value| value.to_str().ok())
-    else {
-        return Ok(());
-    };
-    if PROTOCOL_VERSIONS.contains(&value) {
-        Ok(())
-    } else {
-        Err(ApiError::bad_request(format!(
-            "unsupported mcp-protocol-version: {value}"
-        )))
+    #[test]
+    fn chart_schema_mentions_late_zi() {
+        let chart = mcp()
+            .router()
+            .list_all()
+            .into_iter()
+            .find(|t| t.name == "ziwei_chart")
+            .unwrap();
+        let desc = chart.description.unwrap_or_default();
+        assert!(desc.contains("晚子") || desc.contains("12"));
+        assert!(desc.contains("clock") || desc.contains("HH:MM") || desc.contains("23"));
     }
 }

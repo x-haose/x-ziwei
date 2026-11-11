@@ -1,105 +1,79 @@
 # x-ziwei
 
-紫微斗数 MCP / HTTP 服务。排盘由 [x-iztro](https://github.com/x-haose/x-iztro) 完成。
+紫微斗数的 MCP / HTTP 服务。排盘由 [x-iztro](https://github.com/x-haose/x-iztro) 完成；本仓库把事实编成三个工具，并附一份论法 Skill。
 
-**一期目标**：公网一行 URL 可装；工具只暴露 `chart` / `to_text`；契约可钉；盘与 iztro v2.6.1 金标对齐。
+盘由 x-iztro 保证；断法由知识包保证；句子由调用方的模型组织。不保存用户命盘、不缓存排盘结果。
 
-## 安装
+## 工具
 
-公网只有一个 MCP（Streamable HTTP，无鉴权）：
-
-https://ziwei.x-haose.com/mcp
-
-工具只有 `chart` / `to_text`。装好之后用自然语言问紫微排盘或论命；回答前必须先调这两个工具。
-
-### 插件（推荐）
-
-插件把 Skill 和上面的 URL 绑在一起。Skill 要求先排盘再解释，禁止凭记忆编盘。总览见 [`plugin/README.md`](plugin/README.md)。
-
-| 客户端 | 目录 |
+| 工具 | 作用 |
 |---|---|
-| Cursor | [`plugin/cursor`](plugin/cursor/README.md) |
-| Claude Code | [`plugin/claude`](plugin/claude/README.md) |
+| `ziwei_chart` | 本命盘（可选运限）事实 + 语言无关 key |
+| `ziwei_read` | 按封闭 topic 取材：切片事实、对得上的断语原文、缺口 |
+| `ziwei_lookup` | 按标识核对知识包一条 |
 
-Cursor 本地冒烟：把 `plugin/cursor` 拷到 `~/.cursor/plugins/local/ziwei`，重载窗口，用自然语言问一次排盘，确认调用了 `chart` 或 `to_text`。Claude Code 用 `claude --plugin-dir ./plugin/claude`，或 `claude plugin marketplace add x-haose/x-ziwei` 后再安装 `ziwei@x-ziwei`。两处都还没提交官方市场。
+公网主路径是 Streamable HTTP：客户端填一个 HTTPS URL 即可。同一套工具另有 stdio。
 
-### 连接器（B 档）
+## 运行
 
-ChatGPT、Grok、Codex 绑同一条 URL。ChatGPT 有插件页，尚未进公开目录。能导入市场时走 **添加 → 添加插件市场**，Source 填 `https://github.com/x-haose/x-ziwei`，再安装 `ziwei`。自定义 MCP 是备用。步骤见 [`docs/clients/README.md`](docs/clients/README.md)。
-
-### URL 与自定义说明
-
-没有 Skill 通道时，自己填上面的 URL，并把 [`docs/clients/instructions.md`](docs/clients/instructions.md) 贴进系统提示或自定义说明。中英短模板规则与 Skill 相同。
-
-### 兼容：只填 URL
-
-```json
-{
-  "mcpServers": {
-    "x-ziwei": {
-      "url": "https://ziwei.x-haose.com/mcp"
-    }
-  }
-}
-```
-
-只填 URL 时没有 Skill。能贴自定义说明就贴上一段。
-
-健康检查：同域 [`/healthz`](https://ziwei.x-haose.com/healthz)。`GET /install` 301 到[文档站 MCP 页](https://ziwei.x-haose.com/zh/docs/guide/mcp)（不是 `GET /`）。
-
-## 本地
-
-需要 Rust 1.88+。`x-iztro` 钉死在 crates.io `0.6.1`。
+开发期需要本机 [x-iztro](https://github.com/x-haose/x-iztro) 仓库（`Cargo.toml` 里 path 依赖）。
 
 ```bash
-cargo run
+make check
+cargo run -- serve --listen 127.0.0.1:8080
+cargo run -- stdio
 ```
 
-默认监听 `0.0.0.0:8080`。`PORT` 或 `BIND` 可改地址。`POST /mcp` 为 Streamable HTTP；`GET /healthz` 返回 `ok`；`GET /install` 301 到文档站 MCP 页。
+- MCP：`http://127.0.0.1:8080/mcp`
+- JSON：`POST /v1/chart` `POST /v1/read` `POST /v1/lookup`
+- 健康检查：`GET /healthz`
 
-限流按客户端 IP（优先 `X-Forwarded-For` 首段）计 `POST /mcp`。默认每 60 秒 60 次，超出 HTTP 429，正文 `{"code":"rate_limited","message":"rate limit exceeded"}`。`X_ZIWEI_RATE_LIMIT=0` 关闭限流。窗口用 `X_ZIWEI_RATE_WINDOW_SECS`。
+默认每 IP 10 次/秒、突发 30。`--trust-proxy` 才把 `X-Forwarded-For` **最右一跳**当限流键（反代必须覆盖该头）。生产 MCP 应加 `--allowed-host your.domain`。
 
-阳历最短入参（`chart` 与 `to_text` 相同）：
+知识包默认只用 x-iztro 内嵌包。本地文件与远程 URL 必须出现在 `--allow-pack-dir` / `--allow-pack-url`，否则拒绝。
 
-```json
-{"calendar":"solar","date":"2000-8-16","timeIndex":2,"gender":"female"}
-```
+## GPT Actions
 
-## 契约（已冻）
+首版 Actions 提供排盘（可选运限）与默认知识包查询，无需 API Key、注册或登录；不包含 `ziwei_read`。
+接口公开、免费，允许第三方集成到免费或收费 App，本服务不因此收费。
+配置、OpenAPI 导入和请求示例见 [GPT Actions](docs/gpt-actions.md)。
 
-| 文件 | 内容 |
-|---|---|
-| [`contracts/mcp-tools.schema.json`](contracts/mcp-tools.schema.json) | `chart` / `to_text` 入参出参 |
-| [`contracts/error-codes.json`](contracts/error-codes.json) | 引擎四码 + `rate_limited` / `bad_request` |
+## 安装（Skill + MCP 一起进来，不用复制 SKILL.md）
 
-门禁只 diff 稳定键与六码；译名字段不进 diff。可选薄 `config` 六开关；自定义四化/亮度表与 `patternConfig` 一期不做。
+插件目录是 `plugin/`：同一份 `skills/ziwei/SKILL.md` 和 `.mcp.json`，Claude 读 `.claude-plugin/`，Codex 读 `.codex-plugin/`。
 
-`chart` 返回 `to_dto()` JSON。带 `targetDate` 与 `targetTimeIndex` 时附运限 DTO。`to_text` 只回一个 `text` 字段：`astrolabe_to_text`，`includeHoroscope` 时再接 `horoscope_to_text`。`knowledge` 默认 true，走 `TextOptions::knowledge` 的内置知识包。
-
-错误正文只有 `code` 与 `message`。进 `x-iztro` 之前的入参与信封校验用 `bad_request`。`invalid_date`、`invalid_time_index`、`invalid_argument`、`internal` 只转发 `IztroError::code()`。
-
-## 公网
-
-- MCP：`https://ziwei.x-haose.com/mcp`（上游把该 URL 改写到本服务的 `/mcp`）
-- 健康检查：同域 `/healthz`
-- `GET /install`：301 到 `https://ziwei.x-haose.com/zh/docs/guide/mcp`。不占用 `GET /`，避免反代盖住文档站首页。
-
-## 部署（Dokploy）
-
-Dokploy 选择仓库根目录 `Dockerfile` 构建。官方 `rust` 与 `debian:bookworm-slim` 都带 `linux/amd64` 和 `linux/arm64`，Oracle aarch64 上按本机架构编译即可。容器暴露 `8080`，进程默认听 `0.0.0.0:8080`。健康检查用 `GET /healthz`。
-
-Traefik 以后按 Host 接入。在那之前公网 MCP 仍是 `https://ziwei.x-haose.com/mcp`，由上游改写到容器内 `/mcp`。
-
-本地冒烟：
+**Claude Code**
 
 ```bash
-docker compose up --build
+# 本机仓库当 marketplace
+/plugin marketplace add /Users/haose/code/work-hs/x-ziwei
+/plugin install ziwei@x-ziwei
 ```
 
-## 不做（一期）
+仓库上 GitHub 之后：
 
-`lookup`、知识包市场、用户体系、网页排盘、自定义包 / OAuth。
+```bash
+/plugin marketplace add x-haose/x-ziwei
+/plugin install ziwei@x-ziwei
+```
 
-## License
+开发期不装 marketplace，直接：
 
-MIT
+```bash
+claude --plugin-dir ./plugin
+```
+
+**Codex**
+
+在本仓库里，Codex 会读 `.agents/plugins/marketplace.json`。在插件目录里安装 `ziwei`，或：
+
+```bash
+codex plugin marketplace add /Users/haose/code/work-hs/x-ziwei
+```
+
+装上后 MCP 指向 `https://ziwei.x-haose.com/mcp`。本机还没部署公网时，先起服务再单独加本地 MCP（Skill 仍走插件，不用手抄）：
+
+```bash
+./target/release/x-ziwei serve --listen 127.0.0.1:8080
+claude mcp add --transport http ziwei http://127.0.0.1:8080/mcp
+```

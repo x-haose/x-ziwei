@@ -1,279 +1,406 @@
-//! HTTP surface: `GET /install` redirects to the docs MCP page, `GET /healthz`,
-//! Streamable HTTP `POST /mcp`. `GET /` is intentionally unrouted so a reverse
-//! proxy can keep the docs homepage.
+//! Streamable HTTP（`/mcp`）与可选 JSON 门（`/v1/*`）。限流按对端 IP，把打满变成 429。
 
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::net::{IpAddr, SocketAddr};
+use std::num::NonZeroU32;
+use std::sync::Arc;
 
-use axum::body::Body;
-use axum::extract::State;
-use axum::http::{header, HeaderMap, HeaderValue, Request, StatusCode};
+use axum::extract::{ConnectInfo, DefaultBodyLimit, Request, State};
+use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
-use axum::Router;
+use axum::{Json, Router};
+use governor::clock::DefaultClock;
+use governor::{Quota, RateLimiter};
+use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
+use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
+use serde::Serialize;
+use tokio_util::sync::CancellationToken;
+use tower_http::cors::CorsLayer;
 
-use crate::error::ApiError;
-use crate::mcp::{self, Outcome};
+use crate::error::{Error, ErrorCode};
+use crate::mcp::ZiweiMcp;
+use crate::service::{App, ChartRequest, LookupRequest, ReadRequest};
 
-const MAX_BODY: usize = 64 * 1024;
+/// 每 IP 令牌桶。`per_second` 为补充速率，`burst` 为桶深。
+#[derive(Debug, Clone, Copy)]
+pub struct RateLimit {
+    /// 每秒补充的令牌数。
+    pub per_second: NonZeroU32,
+    /// 突发上限。
+    pub burst: NonZeroU32,
+}
 
-/// Agreed docs-site page for MCP install. The Fumadocs page is landing at this path.
-const INSTALL_DOCS: &str = "https://ziwei.x-haose.com/zh/docs/guide/mcp";
+impl RateLimit {
+    /// 正常人问询无感、单地址打满会被挡住。10/s、桶深 30。
+    pub fn default_public() -> Self {
+        Self {
+            per_second: NonZeroU32::new(10).expect("10 is non-zero"),
+            burst: NonZeroU32::new(30).expect("30 is non-zero"),
+        }
+    }
+}
 
+/// HTTP 服务配置。
 #[derive(Clone)]
-pub struct AppState {
-    limiter: Arc<RateLimiter>,
+pub struct HttpConfig {
+    /// 监听地址。
+    pub listen: SocketAddr,
+    /// 为 `true` 时用 `X-Forwarded-For` **最右边**一跳作为限流键（须在会覆盖该头的可信反代之后）。
+    pub trust_proxy: bool,
+    /// `None` 关闭限流（stdio 不走这里；测试可关）。
+    pub rate_limit: Option<RateLimit>,
+    /// MCP `Host` 白名单。空列表表示不检查 Host（公网默认）；生产应填公网域名。
+    pub allowed_hosts: Vec<String>,
+    /// 配置公网地址后开放 GPT Actions；None 不注册对应路由。
+    pub actions: Option<crate::actions::ActionsConfig>,
 }
 
-impl AppState {
-    pub fn new(limit: u32, window: Duration) -> Self {
+/// JSON 门的统一信封。失败时没有 `data`。
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct Envelope<T: Serialize> {
+    /// 是否成功。
+    pub ok: bool,
+    /// 成功时的载荷；失败时为 `null`，不会缺这个键。
+    pub data: Option<T>,
+    /// 失败时的错误。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<ErrorBody>,
+}
+
+/// 对外错误体。
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+pub struct ErrorBody {
+    /// 机器可读分类。
+    pub code: &'static str,
+    /// 给人看的说明。
+    pub message: String,
+    /// 出站依赖故障为 `true`。
+    pub retryable: bool,
+}
+
+impl<T: Serialize> Envelope<T> {
+    pub(crate) fn ok(data: T) -> Self {
         Self {
-            limiter: Arc::new(RateLimiter::new(limit, window)),
+            ok: true,
+            data: Some(data),
+            error: None,
         }
     }
 
-    pub fn from_env() -> Self {
-        let limit = env_u32("X_ZIWEI_RATE_LIMIT", 60);
-        let window_secs = env_u32("X_ZIWEI_RATE_WINDOW_SECS", 60).max(1);
-        Self::new(limit, Duration::from_secs(u64::from(window_secs)))
+    fn err(err: &Error) -> Envelope<()> {
+        Envelope {
+            ok: false,
+            data: None,
+            error: Some(ErrorBody {
+                code: err.code.as_str(),
+                message: err.message.clone(),
+                retryable: err.code.retryable(),
+            }),
+        }
     }
 }
 
-pub fn router(state: AppState) -> Router {
-    Router::new()
-        .route("/install", get(index))
-        .route("/healthz", get(healthz))
-        .route(
-            "/mcp",
-            post(mcp).get(method_not_allowed).delete(method_not_allowed),
-        )
-        .layer(middleware::from_fn(cors))
-        .with_state(state)
+/// axum 共享状态：编排层 + 可选每 IP 限流。
+struct HttpState {
+    app: App,
+    ip_limiter: Option<Arc<KeyedLimiter>>,
+    trust_proxy: bool,
 }
 
-pub async fn serve() {
-    let state = AppState::from_env();
-    let app = router(state);
-    let addr = bind_addr();
-    let listener = match tokio::net::TcpListener::bind(&addr).await {
-        Ok(listener) => listener,
-        Err(err) => {
-            eprintln!("failed to bind {addr}: {err}");
-            std::process::exit(1);
-        }
+type KeyedLimiter =
+    RateLimiter<IpAddr, governor::state::keyed::DefaultKeyedStateStore<IpAddr>, DefaultClock>;
+
+/// 构造 axum 路由：`/mcp`、`/v1/*`、`/healthz`。返回已注入状态的 `Router<()>`。
+pub fn router(app: App, config: &HttpConfig, cancel: CancellationToken) -> Router {
+    let mcp = ZiweiMcp::new(app.clone());
+    let mut mcp_config = StreamableHttpServerConfig::default()
+        .with_legacy_session_mode(false)
+        .with_json_response(true)
+        .with_cancellation_token(cancel.child_token())
+        .with_max_request_body_bytes(64 * 1024);
+    mcp_config = if config.allowed_hosts.is_empty() {
+        mcp_config.disable_allowed_hosts()
+    } else {
+        mcp_config.with_allowed_hosts(config.allowed_hosts.clone())
     };
-    println!("x-ziwei listening on http://{addr}");
-    if let Err(err) = axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(async {
-        let _ = tokio::signal::ctrl_c().await;
-    })
-    .await
-    {
-        eprintln!("server error: {err}");
-        std::process::exit(1);
-    }
-}
+    let service = StreamableHttpService::new(
+        move || Ok(mcp.clone()),
+        LocalSessionManager::default().into(),
+        mcp_config,
+    );
 
-fn bind_addr() -> String {
-    if let Ok(bind) = std::env::var("BIND") {
-        let bind = bind.trim();
-        if !bind.is_empty() {
-            return bind.to_string();
-        }
-    }
-    let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
-    format!("0.0.0.0:{port}")
-}
-
-fn env_u32(name: &str, default: u32) -> u32 {
-    match std::env::var(name) {
-        Ok(value) => value.trim().parse().unwrap_or(default),
-        Err(_) => default,
-    }
-}
-
-async fn index() -> Response {
-    Response::builder()
-        .status(StatusCode::MOVED_PERMANENTLY)
-        .header(header::LOCATION, INSTALL_DOCS)
-        .body(Body::empty())
-        .expect("install redirect")
-}
-
-async fn healthz() -> Response {
-    Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
-        .body(Body::from("ok\n"))
-        .expect("health response")
-}
-
-async fn method_not_allowed() -> Response {
-    let error = ApiError::bad_request("use POST for Streamable HTTP");
-    let mut response = bare(StatusCode::METHOD_NOT_ALLOWED, &error);
-    response
-        .headers_mut()
-        .insert(header::ALLOW, HeaderValue::from_static("POST"));
-    response
-}
-
-async fn mcp(State(state): State<AppState>, request: Request<Body>) -> Response {
-    let peer = request
-        .extensions()
-        .get::<axum::extract::ConnectInfo<SocketAddr>>()
-        .map(|info| info.0);
-    let key = client_key(request.headers(), peer);
-    if let Err(error) = state.limiter.check(&key) {
-        let mut response = bare(StatusCode::TOO_MANY_REQUESTS, &error);
-        if let Ok(value) = HeaderValue::from_str(&state.limiter.retry_after_secs().to_string()) {
-            response.headers_mut().insert(header::RETRY_AFTER, value);
-        }
-        return response;
-    }
-
-    let headers = request.headers().clone();
-    let bytes = match axum::body::to_bytes(request.into_body(), MAX_BODY).await {
-        Ok(bytes) => bytes,
-        Err(_) => {
-            return bare(
-                StatusCode::PAYLOAD_TOO_LARGE,
-                &ApiError::bad_request("request body exceeds 65536 bytes"),
-            );
-        }
-    };
-
-    match mcp::handle(&headers, &bytes) {
-        Outcome::Accepted => Response::builder()
-            .status(StatusCode::ACCEPTED)
-            .body(Body::empty())
-            .expect("accepted response"),
-        Outcome::Rpc { body, sse } => {
-            if sse {
-                let data = serde_json::to_string(&body).unwrap_or_else(|_| "{}".to_string());
-                Response::builder()
-                    .status(StatusCode::OK)
-                    .header(header::CONTENT_TYPE, "text/event-stream; charset=utf-8")
-                    .header(header::CACHE_CONTROL, "no-cache")
-                    .body(Body::from(format!("event: message\ndata: {data}\n\n")))
-                    .expect("sse response")
-            } else {
-                json_response(StatusCode::OK, &body)
+    let ip_limiter = config.rate_limit.map(|rl| {
+        let quota = Quota::per_second(rl.per_second).allow_burst(rl.burst);
+        Arc::new(RateLimiter::keyed(quota))
+    });
+    if let Some(limiter) = ip_limiter.clone() {
+        let stop = cancel.clone();
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                tokio::select! {
+                    _ = stop.cancelled() => break,
+                    _ = tick.tick() => {
+                        limiter.retain_recent();
+                        limiter.shrink_to_fit();
+                    }
+                }
             }
-        }
-        Outcome::Bare { status, error } => bare(status, &error),
-    }
-}
-
-async fn cors(request: Request<Body>, next: Next) -> Response {
-    if request.method() == axum::http::Method::OPTIONS {
-        return cors_headers(StatusCode::NO_CONTENT.into_response());
-    }
-    cors_headers(next.run(request).await)
-}
-
-fn cors_headers(mut response: Response) -> Response {
-    let headers = response.headers_mut();
-    headers.insert(
-        header::ACCESS_CONTROL_ALLOW_ORIGIN,
-        HeaderValue::from_static("*"),
-    );
-    headers.insert(
-        header::ACCESS_CONTROL_ALLOW_METHODS,
-        HeaderValue::from_static("GET, POST, DELETE, OPTIONS"),
-    );
-    headers.insert(
-        header::ACCESS_CONTROL_ALLOW_HEADERS,
-        HeaderValue::from_static(
-            "content-type, accept, mcp-protocol-version, mcp-session-id, last-event-id",
-        ),
-    );
-    response
-}
-
-fn bare(status: StatusCode, error: &ApiError) -> Response {
-    Response::builder()
-        .status(status)
-        .header(header::CONTENT_TYPE, "application/json; charset=utf-8")
-        .body(Body::from(error.json_bytes()))
-        .expect("error response")
-}
-
-fn json_response(status: StatusCode, body: &serde_json::Value) -> Response {
-    let bytes = serde_json::to_vec(body).unwrap_or_else(|_| b"{}".to_vec());
-    Response::builder()
-        .status(status)
-        .header(header::CONTENT_TYPE, "application/json; charset=utf-8")
-        .body(Body::from(bytes))
-        .expect("json response")
-}
-
-fn client_key(headers: &HeaderMap, peer: Option<SocketAddr>) -> String {
-    if let Some(forwarded) = headers
-        .get("x-forwarded-for")
-        .and_then(|value| value.to_str().ok())
-    {
-        let first = forwarded.split(',').next().unwrap_or("").trim();
-        if !first.is_empty() {
-            return first.to_string();
-        }
-    }
-    peer.map(|addr| addr.ip().to_string())
-        .unwrap_or_else(|| "unknown".to_string())
-}
-
-struct Window {
-    start: Instant,
-    count: u32,
-}
-
-struct RateLimiter {
-    inner: Mutex<HashMap<String, Window>>,
-    limit: u32,
-    window: Duration,
-}
-
-impl RateLimiter {
-    fn new(limit: u32, window: Duration) -> Self {
-        Self {
-            inner: Mutex::new(HashMap::new()),
-            limit,
-            window,
-        }
-    }
-
-    fn retry_after_secs(&self) -> u64 {
-        self.window.as_secs().max(1)
-    }
-
-    /// `limit == 0` disables the limiter.
-    fn check(&self, key: &str) -> Result<(), ApiError> {
-        if self.limit == 0 {
-            return Ok(());
-        }
-        let mut map = self.inner.lock().unwrap_or_else(|err| err.into_inner());
-        let now = Instant::now();
-        if map.len() > 10_000 {
-            let window = self.window;
-            map.retain(|_, entry| now.duration_since(entry.start) < window);
-        }
-        let entry = map.entry(key.to_string()).or_insert(Window {
-            start: now,
-            count: 0,
         });
-        if now.duration_since(entry.start) >= self.window {
-            entry.start = now;
-            entry.count = 0;
+    }
+
+    let state = Arc::new(HttpState {
+        app,
+        ip_limiter,
+        trust_proxy: config.trust_proxy,
+    });
+
+    let routes = Router::new()
+        .route("/healthz", get(healthz))
+        .route("/v1/chart", post(v1_chart))
+        .route("/v1/read", post(v1_read))
+        .route("/v1/lookup", post(v1_lookup))
+        .nest_service("/mcp", service)
+        .with_state(Arc::clone(&state));
+    let routes = match &config.actions {
+        Some(actions) => routes.nest(
+            "/actions",
+            crate::actions::router(state.app.clone(), actions),
+        ),
+        None => routes,
+    };
+    routes
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            rate_limit_mw,
+        ))
+        .layer(DefaultBodyLimit::max(64 * 1024))
+        .layer(CorsLayer::permissive())
+}
+
+async fn healthz() -> impl IntoResponse {
+    Json(serde_json::json!({ "ok": true }))
+}
+
+async fn v1_chart(State(state): State<Arc<HttpState>>, Json(req): Json<ChartRequest>) -> Response {
+    match state.app.chart(req).await {
+        Ok(data) => (StatusCode::OK, Json(Envelope::ok(data))).into_response(),
+        Err(err) => error_response(err),
+    }
+}
+
+async fn v1_read(State(state): State<Arc<HttpState>>, Json(req): Json<ReadRequest>) -> Response {
+    match state.app.read(req).await {
+        Ok(data) => (StatusCode::OK, Json(Envelope::ok(data))).into_response(),
+        Err(err) => error_response(err),
+    }
+}
+
+async fn v1_lookup(
+    State(state): State<Arc<HttpState>>,
+    Json(req): Json<LookupRequest>,
+) -> Response {
+    match state.app.lookup(req).await {
+        Ok(data) => (StatusCode::OK, Json(Envelope::ok(data))).into_response(),
+        Err(err) => error_response(err),
+    }
+}
+
+async fn rate_limit_mw(
+    State(state): State<Arc<HttpState>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if request.uri().path() == "/healthz" {
+        return next.run(request).await;
+    }
+    if let Some(limiter) = state.ip_limiter.as_ref() {
+        let ip = client_ip(state.trust_proxy, request.headers(), request.extensions());
+        if limiter.check_key(&ip).is_err() {
+            let err = Error::new(ErrorCode::RateLimited, "rate limit exceeded");
+            return (
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(Envelope::<()>::err(&err)),
+            )
+                .into_response();
         }
-        if entry.count >= self.limit {
-            return Err(ApiError::rate_limited("rate limit exceeded"));
+    }
+    next.run(request).await
+}
+
+fn client_ip(trust_proxy: bool, headers: &HeaderMap, extensions: &http::Extensions) -> IpAddr {
+    if trust_proxy && let Some(ip) = forwarded_ip(headers) {
+        return ip;
+    }
+    extensions
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|ConnectInfo(addr)| addr.ip())
+        .unwrap_or(IpAddr::from([0, 0, 0, 0]))
+}
+
+fn forwarded_ip(headers: &HeaderMap) -> Option<IpAddr> {
+    let value = headers.get("x-forwarded-for")?.to_str().ok()?;
+    value
+        .split(',')
+        .map(str::trim)
+        .rfind(|s| !s.is_empty())
+        .and_then(|s| s.parse().ok())
+}
+
+pub(crate) fn error_response(err: Error) -> Response {
+    let status = match err.code {
+        ErrorCode::PackUnavailable => StatusCode::SERVICE_UNAVAILABLE,
+        ErrorCode::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+        ErrorCode::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+        _ => StatusCode::BAD_REQUEST,
+    };
+    (status, Json(Envelope::<()>::err(&err))).into_response()
+}
+
+/// 在 `listen` 上启动 HTTP，直到取消。
+pub async fn serve(app: App, config: HttpConfig, cancel: CancellationToken) -> anyhow::Result<()> {
+    let listener = tokio::net::TcpListener::bind(config.listen).await?;
+    tracing::info!(listen = %config.listen, "http listening");
+    let app = router(app, &config, cancel.child_token())
+        .into_make_service_with_connect_info::<SocketAddr>();
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            cancel.cancelled().await;
+        })
+        .await?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pack::{PackPolicy, PackStore};
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    fn test_app() -> App {
+        App {
+            packs: Arc::new(PackStore::new(PackPolicy::default()).unwrap()),
         }
-        entry.count += 1;
-        Ok(())
+    }
+
+    fn test_router() -> Router {
+        router(
+            test_app(),
+            &HttpConfig {
+                listen: "127.0.0.1:0".parse().unwrap(),
+                trust_proxy: false,
+                rate_limit: None,
+                allowed_hosts: Vec::new(),
+                actions: None,
+            },
+            CancellationToken::new(),
+        )
+    }
+
+    #[test]
+    fn forwarded_ip_uses_rightmost_hop() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-forwarded-for",
+            "1.0.0.1, 10.0.0.2, 192.0.2.8".parse().unwrap(),
+        );
+        assert_eq!(
+            forwarded_ip(&headers).unwrap(),
+            "192.0.2.8".parse::<IpAddr>().unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn healthz_ok() {
+        let resp = test_router()
+            .oneshot(
+                Request::builder()
+                    .uri("/healthz")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn lookup_ziwei_via_json() {
+        let resp = test_router()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/lookup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"kind":"star","key":"ziweiMaj"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["data"]["key"], "ziweiMaj");
+        assert!(v["data"]["text"].as_str().unwrap().len() > 8);
+    }
+
+    #[tokio::test]
+    async fn read_wealth_via_json() {
+        let body = serde_json::json!({
+            "date": "2000-8-16",
+            "time_index": 2,
+            "gender": "female",
+            "topic": "wealth"
+        });
+        let resp = test_router()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/read")
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["data"]["topic"], "wealth");
+        assert!(v["data"]["quotes"].as_array().unwrap().len() > 3);
+        assert!(
+            v["data"]["palaces"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|p| p["key"] == "wealthPalace")
+        );
+    }
+
+    #[tokio::test]
+    async fn lookup_unknown_is_400() {
+        let resp = test_router()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/v1/lookup")
+                    .header("content-type", "application/json")
+                    .body(Body::from(r#"{"kind":"star","key":"notAStar"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(v["ok"], false);
+        assert_eq!(v["data"], serde_json::Value::Null);
+        assert_eq!(v["error"]["code"], "unknown_key");
     }
 }

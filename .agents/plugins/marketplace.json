@@ -1,15 +1,20 @@
 {
   "name": "x-ziwei",
   "interface": {
-    "displayName": "紫微斗数"
+    "displayName": "x-ziwei"
   },
   "plugins": [
     {
       "name": "ziwei",
       "source": {
         "source": "local",
-        "path": "./plugin/claude"
-      }
+        "path": "./plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
     }
   ]
 }
