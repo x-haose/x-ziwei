@@ -66,7 +66,7 @@ docker run --rm -p 8080:8080 x-ziwei
 ```
 
 - 健康检查：`GET /healthz`
-- 限流：默认每 IP 10 次/秒、突发 30。服务在反向代理之后时加 `--trust-proxy`，取 `X-Forwarded-For` **最右一跳**作限流键；反代必须覆盖该头，否则客户端可以伪造。
+- 限流：默认每 IP 10 次/秒、突发 30。服务在反向代理之后时，对端地址是代理而不是用户，要用 `--client-ip-header` 指明哪个请求头带客户端地址：Cloudflare 之后填 `cf-connecting-ip`，Traefik 或 nginx 之后填 `x-real-ip`。代理必须覆盖该头，否则客户端可以伪造；经 Cloudflare 时还要保证源站只接受 Cloudflare 的连接。
 - 公网部署加 `--allowed-host your.domain`，MCP 只接受该 `Host`。
 - `--public-url https://your.domain` 开启 `/v1/openapi.json`。
 

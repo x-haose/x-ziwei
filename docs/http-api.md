@@ -114,7 +114,7 @@
   --allowed-host ziwei.example.com
 ```
 
-也可用环境变量 `X_ZIWEI_PUBLIC_URL`。HTTPS 由反向代理提供；反代不得记录请求体。只在反代会覆盖 `X-Forwarded-For` 时加 `--trust-proxy`，否则客户端可以伪造限流地址。
+也可用环境变量 `X_ZIWEI_PUBLIC_URL`。HTTPS 由反向代理提供；反代不得记录请求体。在反代之后用 `--client-ip-header` 指明带客户端地址的请求头（Cloudflare 为 `cf-connecting-ip`），反代必须覆盖该头，否则客户端可以伪造限流地址。
 
 自定义 GPT 正在退役、Actions 不随之迁移（见 [ChatGPT 上架](chatgpt-submission.md)），ChatGPT 侧的公开分发改走插件目录。仍在使用的 GPT 编辑器可导入 `<公网根地址>/v1/openapi.json`，Authentication 选 **None**。五个操作都标了 `x-openai-isConsequential: false`。GPT 的指令可直接用 [`plugin/skills/ziwei/SKILL.md`](../plugin/skills/ziwei/SKILL.md) 的正文。
 

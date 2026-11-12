@@ -15,7 +15,7 @@ async fn spawn(public_url: Option<PublicUrl>) -> String {
     };
     let config = HttpConfig {
         listen: "127.0.0.1:0".parse().unwrap(),
-        trust_proxy: false,
+        client_ip_header: None,
         rate_limit: None,
         allowed_hosts: vec![],
         public_url,

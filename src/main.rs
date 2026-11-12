@@ -31,9 +31,10 @@ enum Command {
         /// 监听地址。
         #[arg(long, default_value = "0.0.0.0:8080")]
         listen: SocketAddr,
-        /// 信任 `X-Forwarded-For` / `X-Real-IP` 作为限流键。只在可信反代后打开。
-        #[arg(long, default_value_t = false)]
-        trust_proxy: bool,
+        /// 带客户端地址的请求头，其值作为限流键：Cloudflare 之后填 `cf-connecting-ip`，Traefik 或 nginx 之后填 `x-real-ip`。
+        /// 只在前面的代理一定会覆盖该头时设置。省略则按对端地址限流。
+        #[arg(long, env = "X_ZIWEI_CLIENT_IP_HEADER")]
+        client_ip_header: Option<::http::HeaderName>,
         /// 每 IP 每秒补充令牌数。
         #[arg(long, default_value_t = 10)]
         rate_per_second: u32,
@@ -78,7 +79,7 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Command::Serve {
             listen,
-            trust_proxy,
+            client_ip_header,
             rate_per_second,
             rate_burst,
             allowed_host,
@@ -95,7 +96,7 @@ async fn main() -> anyhow::Result<()> {
             let cancel = shutdown_token()?;
             let config = HttpConfig {
                 listen,
-                trust_proxy,
+                client_ip_header,
                 rate_limit: Some(RateLimit { per_second, burst }),
                 allowed_hosts: allowed_host,
                 public_url: public_url

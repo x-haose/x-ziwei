@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{ConnectInfo, DefaultBodyLimit, Request, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{HeaderMap, HeaderName, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -50,8 +50,10 @@ impl RateLimit {
 pub struct HttpConfig {
     /// 监听地址。
     pub listen: SocketAddr,
-    /// 为 `true` 时用 `X-Forwarded-For` **最右边**一跳作为限流键（须在会覆盖该头的可信反代之后）。
-    pub trust_proxy: bool,
+    /// 带客户端地址的请求头，如 Cloudflare 的 `cf-connecting-ip`、Traefik 与 nginx 的 `x-real-ip`；
+    /// 给出后其值作为限流键。只有前面的代理一定会覆盖该头时才能设置，否则客户端可以伪造限流地址。
+    /// `None` 或请求里没有该头时用对端地址。
+    pub client_ip_header: Option<HeaderName>,
     /// `None` 关闭限流（stdio 不走这里；测试可关）。
     pub rate_limit: Option<RateLimit>,
     /// MCP `Host` 白名单。空列表表示不检查 Host（公网默认）；生产应填公网域名。
@@ -111,7 +113,7 @@ impl<T: Serialize> Envelope<T> {
 struct HttpState {
     app: App,
     ip_limiter: Option<Arc<KeyedLimiter>>,
-    trust_proxy: bool,
+    client_ip_header: Option<HeaderName>,
 }
 
 type KeyedLimiter =
@@ -159,7 +161,7 @@ pub fn router(app: App, config: &HttpConfig, cancel: CancellationToken) -> Route
     let state = Arc::new(HttpState {
         app,
         ip_limiter,
-        trust_proxy: config.trust_proxy,
+        client_ip_header: config.client_ip_header.clone(),
     });
 
     let mut routes = Router::new()
@@ -260,7 +262,11 @@ async fn rate_limit_mw(
         return next.run(request).await;
     }
     if let Some(limiter) = state.ip_limiter.as_ref() {
-        let Some(ip) = client_ip(state.trust_proxy, request.headers(), request.extensions()) else {
+        let Some(ip) = client_ip(
+            state.client_ip_header.as_ref(),
+            request.headers(),
+            request.extensions(),
+        ) else {
             return error_response(Error::internal("peer address missing from connection"));
         };
         if limiter.check_key(&ip).is_err() {
@@ -270,27 +276,22 @@ async fn rate_limit_mw(
     next.run(request).await
 }
 
-/// 限流键。取不到对端地址说明监听没有带连接信息启动，属于本进程的装配错误，不拿一个共用地址顶替。
+/// 限流键：配置了客户端地址头且请求带着合法取值时用它，否则用对端地址。
+/// 取不到对端地址说明监听没有带连接信息启动，属于本进程的装配错误，不拿一个共用地址顶替。
 fn client_ip(
-    trust_proxy: bool,
+    header: Option<&HeaderName>,
     headers: &HeaderMap,
     extensions: &http::Extensions,
 ) -> Option<IpAddr> {
-    if trust_proxy && let Some(ip) = forwarded_ip(headers) {
-        return Some(ip);
-    }
-    extensions
-        .get::<ConnectInfo<SocketAddr>>()
-        .map(|ConnectInfo(addr)| addr.ip())
-}
-
-fn forwarded_ip(headers: &HeaderMap) -> Option<IpAddr> {
-    let value = headers.get("x-forwarded-for")?.to_str().ok()?;
-    value
-        .split(',')
-        .map(str::trim)
-        .rfind(|s| !s.is_empty())
-        .and_then(|s| s.parse().ok())
+    let from_header = header
+        .and_then(|name| headers.get(name))
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.trim().parse().ok());
+    from_header.or_else(|| {
+        extensions
+            .get::<ConnectInfo<SocketAddr>>()
+            .map(|ConnectInfo(addr)| addr.ip())
+    })
 }
 
 fn error_response(err: Error) -> Response {
@@ -322,15 +323,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn forwarded_ip_uses_rightmost_hop() {
+    fn rate_limit_key_prefers_the_configured_header() {
+        let name = HeaderName::from_static("cf-connecting-ip");
+        let peer: SocketAddr = "10.0.0.2:4000".parse().unwrap();
+        let mut extensions = http::Extensions::new();
+        extensions.insert(ConnectInfo(peer));
         let mut headers = HeaderMap::new();
-        headers.insert(
-            "x-forwarded-for",
-            "1.0.0.1, 10.0.0.2, 192.0.2.8".parse().unwrap(),
+
+        assert_eq!(
+            client_ip(Some(&name), &headers, &extensions),
+            Some(peer.ip())
+        );
+        headers.insert(&name, "not-an-ip".parse().unwrap());
+        assert_eq!(
+            client_ip(Some(&name), &headers, &extensions),
+            Some(peer.ip())
+        );
+        headers.insert(&name, "2001:db8::7".parse().unwrap());
+        assert_eq!(
+            client_ip(Some(&name), &headers, &extensions),
+            Some("2001:db8::7".parse().unwrap())
+        );
+        assert_eq!(client_ip(None, &headers, &extensions), Some(peer.ip()));
+        assert_eq!(
+            client_ip(Some(&name), &headers, &http::Extensions::new()),
+            Some("2001:db8::7".parse().unwrap())
         );
         assert_eq!(
-            forwarded_ip(&headers).unwrap(),
-            "192.0.2.8".parse::<IpAddr>().unwrap()
+            client_ip(None, &HeaderMap::new(), &http::Extensions::new()),
+            None
         );
     }
 }
