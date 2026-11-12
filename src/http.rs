@@ -4,8 +4,9 @@ use std::net::{IpAddr, SocketAddr};
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
+use axum::body::Body;
 use axum::extract::rejection::JsonRejection;
-use axum::extract::{ConnectInfo, DefaultBodyLimit, Request, State};
+use axum::extract::{ConnectInfo, Request, State};
 use axum::http::{HeaderMap, HeaderName, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
@@ -25,6 +26,9 @@ use crate::openapi::{self, PublicUrl};
 use crate::service::{
     App, CatalogRequest, ChartRequest, HoroscopeRequest, LookupRequest, TopicRequest,
 };
+
+/// 请求体上限，字节。全部入口的请求都是小段 JSON。
+const MAX_BODY_BYTES: usize = 64 * 1024;
 
 /// 每 IP 令牌桶。`per_second` 为补充速率，`burst` 为桶深。
 #[derive(Debug, Clone, Copy)]
@@ -126,7 +130,7 @@ pub fn router(app: App, config: &HttpConfig, cancel: CancellationToken) -> Route
         .with_legacy_session_mode(false)
         .with_json_response(true)
         .with_cancellation_token(cancel.child_token())
-        .with_max_request_body_bytes(64 * 1024);
+        .with_max_request_body_bytes(MAX_BODY_BYTES);
     mcp_config = if config.allowed_hosts.is_empty() {
         mcp_config.disable_allowed_hosts()
     } else {
@@ -191,7 +195,7 @@ pub fn router(app: App, config: &HttpConfig, cancel: CancellationToken) -> Route
             Arc::clone(&state),
             rate_limit_mw,
         ))
-        .layer(DefaultBodyLimit::max(64 * 1024))
+        .layer(middleware::from_fn(buffer_body))
         .layer(CorsLayer::permissive())
 }
 
@@ -251,6 +255,31 @@ async fn v1_catalog(
     input: Result<Json<CatalogRequest>, JsonRejection>,
 ) -> Response {
     respond(input, |req| state.app.catalog(req)).await
+}
+
+/// 先把请求体整段读进内存，再交给限流与路由。
+///
+/// 限流、路由不匹配、入参错误都会在不读请求体的情况下回应；那时请求体若还在路上，HTTP 层只能在回应后
+/// 关闭连接，而回应里不带 `Connection: close`。反向代理会把这条连接放回连接池，下一个复用它的请求随即失败。
+/// 先读完请求体，任何回应都不会留下半读的连接。超过 [`MAX_BODY_BYTES`] 的请求在这里拒绝。
+async fn buffer_body(request: Request, next: Next) -> Response {
+    let (parts, body) = request.into_parts();
+    match axum::body::to_bytes(body, MAX_BODY_BYTES).await {
+        Ok(bytes) => {
+            next.run(Request::from_parts(parts, Body::from(bytes)))
+                .await
+        }
+        Err(_) => {
+            let err = Error::invalid_argument(format!(
+                "request body is unreadable or larger than {MAX_BODY_BYTES} bytes"
+            ));
+            (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                Json(Envelope::<()>::err(&err)),
+            )
+                .into_response()
+        }
+    }
 }
 
 async fn rate_limit_mw(

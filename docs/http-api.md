@@ -95,11 +95,12 @@
 | 400 | `invalid_date` `invalid_time_index` `invalid_clock` `time_mismatch` `invalid_argument` | 入参非法 |
 | 400 | `unknown_key` `unknown_topic` | 知识条目或主题不存在 |
 | 400 | `pack_not_allowed` | 知识包不在白名单 |
+| 413 | `invalid_argument` | 请求体超过 64 KiB |
 | 429 | `rate_limited` | 单地址超过限流，可重试 |
 | 500 | `internal` | 内部错误 |
 | 503 | `pack_unavailable` | 白名单内的知识包读不到，可重试 |
 
-- 请求体上限 64 KiB；超限或方法不对由 HTTP 框架直接拒绝，不带信封。
+- 请求体上限 64 KiB，超限返回 413 与 `invalid_argument`。路径或方法不对由 HTTP 框架直接拒绝，不带信封。
 - 与 `/mcp` 共用每 IP 限流，默认 10 次/秒、突发 30。
 - 允许任意来源跨域访问，不使用 Cookie 或其他凭证。
 - 全部操作只读，不创建用户记录，不缓存命盘。

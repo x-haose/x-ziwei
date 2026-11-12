@@ -3,20 +3,26 @@ use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
-use x_ziwei::http::{HttpConfig, router};
+use x_ziwei::http::{HttpConfig, RateLimit, router};
 use x_ziwei::openapi::PublicUrl;
 use x_ziwei::{App, PackPolicy, PackStore};
 
 /// 在随机端口起一个服务，返回其根地址。
 async fn spawn(public_url: Option<PublicUrl>) -> String {
+    spawn_with(public_url, None).await
+}
+
+/// 同 [`spawn`]，可指定限流。
+async fn spawn_with(public_url: Option<PublicUrl>, rate_limit: Option<RateLimit>) -> String {
     let app = App {
         packs: Arc::new(PackStore::new(PackPolicy::default()).unwrap()),
     };
     let config = HttpConfig {
         listen: "127.0.0.1:0".parse().unwrap(),
         client_ip_header: None,
-        rate_limit: None,
+        rate_limit,
         allowed_hosts: vec![],
         public_url,
         openai_apps_challenge: Some("challenge-token".into()),
@@ -341,4 +347,105 @@ fn invalid_public_url_fails() {
     ] {
         assert!(PublicUrl::new(url).is_err());
     }
+}
+
+/// 读一个带 `Content-Length` 的 HTTP/1.1 响应，返回状态行与响应头；连接被对端关闭时返回 `None`。
+async fn read_response(stream: &mut tokio::net::TcpStream) -> Option<String> {
+    let mut data = Vec::new();
+    let mut chunk = [0u8; 4096];
+    let head_end = loop {
+        if let Some(pos) = data.windows(4).position(|w| w == b"\r\n\r\n") {
+            break pos + 4;
+        }
+        match stream.read(&mut chunk).await {
+            Ok(0) | Err(_) => return None,
+            Ok(n) => data.extend_from_slice(&chunk[..n]),
+        }
+    };
+    let head = String::from_utf8(data[..head_end].to_vec()).unwrap();
+    let length: usize = head
+        .lines()
+        .find_map(|l| {
+            l.to_ascii_lowercase()
+                .strip_prefix("content-length:")
+                .map(|v| v.trim().parse().unwrap())
+        })
+        .unwrap();
+    while data.len() < head_end + length {
+        match stream.read(&mut chunk).await {
+            Ok(0) | Err(_) => return None,
+            Ok(n) => data.extend_from_slice(&chunk[..n]),
+        }
+    }
+    Some(head)
+}
+
+/// 反向代理先发请求头、后发请求体。被限流的请求不能让这条长连接作废：代理会复用它发下一个请求。
+#[tokio::test]
+async fn rejected_request_keeps_the_connection_reusable() {
+    let one = std::num::NonZeroU32::new(1).unwrap();
+    let base = spawn_with(
+        None,
+        Some(RateLimit {
+            per_second: one,
+            burst: one,
+        }),
+    )
+    .await;
+    let address = base.strip_prefix("http://").unwrap();
+    let body = r#"{"kind":"mutagen"}"#;
+    let head = format!(
+        "POST /v1/catalog HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+        body.len()
+    );
+    let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
+
+    stream
+        .write_all(format!("{head}{body}").as_bytes())
+        .await
+        .unwrap();
+    assert!(
+        read_response(&mut stream)
+            .await
+            .unwrap()
+            .starts_with("HTTP/1.1 200")
+    );
+
+    stream.write_all(head.as_bytes()).await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    stream.write_all(body.as_bytes()).await.unwrap();
+    assert!(
+        read_response(&mut stream)
+            .await
+            .unwrap()
+            .starts_with("HTTP/1.1 429")
+    );
+
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+    stream
+        .write_all(format!("{head}{body}").as_bytes())
+        .await
+        .unwrap();
+    let third = read_response(&mut stream).await;
+    assert!(
+        third
+            .as_deref()
+            .is_some_and(|h| h.starts_with("HTTP/1.1 200")),
+        "connection was not reusable after a rate-limited request: {third:?}"
+    );
+}
+
+#[tokio::test]
+async fn oversized_body_is_rejected_with_an_envelope() {
+    let base = spawn(None).await;
+    let response = client()
+        .post(format!("{base}/v1/catalog"))
+        .header("content-type", "application/json")
+        .body(vec![b' '; 64 * 1024 + 1])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    let body = response.json::<Value>().await.unwrap();
+    assert_eq!(body["error"]["code"], "invalid_argument");
 }
