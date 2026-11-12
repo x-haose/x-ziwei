@@ -10,11 +10,11 @@
 
 | 路径 | 同名 MCP 工具 | 作用 |
 |---|---|---|
-| `/v1/chart` | `ziwei_chart` | 本命盘事实，可选附释义 |
-| `/v1/horoscope` | `ziwei_horoscope` | 目标日期与时辰的运限事实 |
-| `/v1/topic` | `ziwei_topic` | 按知识包的主题定义取本命宫位事实与释义 |
-| `/v1/lookup` | `ziwei_lookup` | 按标识查知识包条目 |
-| `/v1/catalog` | `ziwei_catalog` | 知识包目录 |
+| `/v1/chart` | `ziwei_get_natal_chart` | 本命盘事实，可选附释义 |
+| `/v1/horoscope` | `ziwei_get_horoscope` | 目标日期与时辰的运限事实 |
+| `/v1/topic` | `ziwei_get_topic_palaces` | 按知识包的主题定义取本命宫位事实与释义 |
+| `/v1/lookup` | `ziwei_lookup_knowledge` | 按标识查知识包条目 |
+| `/v1/catalog` | `ziwei_list_knowledge` | 知识包目录 |
 
 响应信封：成功 `{"ok": true, "data": …}`；失败 `{"ok": false, "data": null, "error": {"code", "message", "retryable"}}`。
 

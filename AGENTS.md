@@ -31,7 +31,7 @@ x-ziwei：紫微斗数的托管服务层。排盘、运限、格局判定由 [x-
 第一版能力：
 
 - 默认知识包（x-iztro 内嵌包）；自定义包经启动参数的白名单加载，`extends` 指向默认包时按覆盖包合并
-- 五个 MCP 工具：`ziwei_chart` 本命盘事实；`ziwei_horoscope` 运限事实；`ziwei_topic` 按知识包的主题定义取材；`ziwei_lookup` 查知识包条目；`ziwei_catalog` 知识包目录
+- 五个 MCP 工具：`ziwei_get_natal_chart` 本命盘事实；`ziwei_get_horoscope` 运限事实；`ziwei_get_topic_palaces` 按知识包的主题定义取材；`ziwei_lookup_knowledge` 查知识包条目；`ziwei_list_knowledge` 知识包目录
 - 一份 Skill（先确认生辰再调工具；工具没返回的星不写；盘面事实、知识包释义、模型分析三者分清）。用户的包是参数，不按人生成第二套用法
 - 与 MCP 同一套实现的 HTTPS JSON 接口 `/v1/*` 与 OpenAPI，给不接 MCP 的调用方，契约见 `docs/http-api.md`
 

@@ -23,7 +23,7 @@ pub struct App {
     pub packs: Arc<PackStore>,
 }
 
-/// `ziwei_chart` / `POST /v1/chart` 入参。
+/// `ziwei_get_natal_chart` / `POST /v1/chart` 入参。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ChartRequest {
@@ -40,7 +40,7 @@ pub struct ChartRequest {
     pub pack: Option<String>,
 }
 
-/// `ziwei_horoscope` / `POST /v1/horoscope` 入参。
+/// `ziwei_get_horoscope` / `POST /v1/horoscope` 入参。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct HoroscopeRequest {
@@ -54,12 +54,12 @@ pub struct HoroscopeRequest {
     /// 是否附流耀与行运格局的知识包释义：`summary` 或 `full`。省略则只返回事实。
     #[serde(default)]
     pub knowledge: Option<Depth>,
-    /// 知识包，规则同 `ziwei_chart`。
+    /// 知识包，规则同 `ziwei_get_natal_chart`。
     #[serde(default)]
     pub pack: Option<String>,
 }
 
-/// `ziwei_topic` / `POST /v1/topic` 入参。
+/// `ziwei_get_topic_palaces` / `POST /v1/topic` 入参。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TopicRequest {
@@ -73,7 +73,7 @@ pub struct TopicRequest {
     /// 释义深度：`summary`（默认）或 `full`。
     #[serde(default = "default_topic_depth")]
     pub knowledge: Depth,
-    /// 知识包，规则同 `ziwei_chart`。主题的选宫定义与释义都取自它。
+    /// 知识包，规则同 `ziwei_get_natal_chart`。主题的选宫定义与释义都取自它。
     #[serde(default)]
     pub pack: Option<String>,
 }
@@ -82,28 +82,28 @@ fn default_topic_depth() -> Depth {
     Depth::Summary
 }
 
-/// `ziwei_lookup` / `POST /v1/lookup` 入参。
+/// `ziwei_lookup_knowledge` / `POST /v1/lookup` 入参。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct LookupRequest {
     /// 条目段：`star` / `pattern` / `palace` / `mutagen` / `concept` / `topic`。
     pub kind: Kind,
-    /// 语言无关标识，1 到 20 个，取自 `ziwei_catalog`；不接受译名。
+    /// 语言无关标识，1 到 20 个，取自 `ziwei_list_knowledge`；不接受译名。
     #[schemars(length(min = 1, max = 20))]
     pub keys: Vec<String>,
-    /// 知识包，规则同 `ziwei_chart`。
+    /// 知识包，规则同 `ziwei_get_natal_chart`。
     #[serde(default)]
     pub pack: Option<String>,
 }
 
-/// `ziwei_catalog` / `POST /v1/catalog` 入参。
+/// `ziwei_list_knowledge` / `POST /v1/catalog` 入参。
 #[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CatalogRequest {
     /// 只列某一段；省略则列全部。
     #[serde(default)]
     pub kind: Option<Kind>,
-    /// 知识包，规则同 `ziwei_chart`。
+    /// 知识包，规则同 `ziwei_get_natal_chart`。
     #[serde(default)]
     pub pack: Option<String>,
 }
@@ -126,7 +126,7 @@ impl App {
         let birth = req.birth.parse()?;
         let pack = self.pack_for(req.knowledge, req.pack.as_deref()).await?;
         let chart = cast(&birth)?;
-        tracing::info!(tool = "ziwei_chart", language = %birth.language.as_key(), "chart");
+        tracing::info!(tool = "ziwei_get_natal_chart", language = %birth.language.as_key(), "chart");
         let text = natal_text(
             &chart,
             Projection {
@@ -145,7 +145,7 @@ impl App {
         let pack = self.pack_for(req.knowledge, req.pack.as_deref()).await?;
         let chart = cast(&birth)?;
         let horoscope = cast_horoscope(&chart, &target)?;
-        tracing::info!(tool = "ziwei_horoscope", language = %birth.language.as_key(), "horoscope");
+        tracing::info!(tool = "ziwei_get_horoscope", language = %birth.language.as_key(), "horoscope");
         let text = horoscope_text(
             &chart,
             &horoscope,
@@ -178,7 +178,7 @@ impl App {
             ));
         }
         let chart = cast(&birth)?;
-        tracing::info!(tool = "ziwei_topic", topic = %req.topic, pack_id = %pack.id, "topic");
+        tracing::info!(tool = "ziwei_get_topic_palaces", topic = %req.topic, pack_id = %pack.id, "topic");
         let text = topic_text(
             &chart,
             &req.topic,
@@ -203,7 +203,7 @@ impl App {
             .packs
             .load(PackRef::parse(req.pack.as_deref())?)
             .await?;
-        tracing::info!(tool = "ziwei_lookup", kind = ?req.kind, pack_id = %pack.id, "lookup");
+        tracing::info!(tool = "ziwei_lookup_knowledge", kind = ?req.kind, pack_id = %pack.id, "lookup");
         lookup(pack.as_ref(), req.kind, &req.keys)
     }
 
@@ -213,7 +213,7 @@ impl App {
             .packs
             .load(PackRef::parse(req.pack.as_deref())?)
             .await?;
-        tracing::info!(tool = "ziwei_catalog", kind = ?req.kind, pack_id = %pack.id, "catalog");
+        tracing::info!(tool = "ziwei_list_knowledge", kind = ?req.kind, pack_id = %pack.id, "catalog");
         Ok(catalog(pack.as_ref(), req.kind))
     }
 

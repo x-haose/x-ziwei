@@ -88,11 +88,11 @@ async fn mcp_lists_five_tools_and_returns_one_text_block() {
     assert_eq!(
         names,
         [
-            "ziwei_catalog",
-            "ziwei_chart",
-            "ziwei_horoscope",
-            "ziwei_lookup",
-            "ziwei_topic"
+            "ziwei_get_horoscope",
+            "ziwei_get_natal_chart",
+            "ziwei_get_topic_palaces",
+            "ziwei_list_knowledge",
+            "ziwei_lookup_knowledge"
         ]
     );
     for tool in tools {
@@ -105,7 +105,7 @@ async fn mcp_lists_five_tools_and_returns_one_text_block() {
 
     let called: Value = rpc(
         "tools/call",
-        json!({"name": "ziwei_topic", "arguments": {"birth": birth(), "topic": "romance"}}),
+        json!({"name": "ziwei_get_topic_palaces", "arguments": {"birth": birth(), "topic": "romance"}}),
     )
     .await
     .unwrap()
@@ -123,7 +123,7 @@ async fn mcp_lists_five_tools_and_returns_one_text_block() {
 
     let failed: Value = rpc(
         "tools/call",
-        json!({"name": "ziwei_topic", "arguments": {"birth": birth(), "topic": "spouse"}}),
+        json!({"name": "ziwei_get_topic_palaces", "arguments": {"birth": birth(), "topic": "spouse"}}),
     )
     .await
     .unwrap()

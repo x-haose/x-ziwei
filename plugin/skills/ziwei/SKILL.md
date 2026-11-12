@@ -19,13 +19,13 @@ description: Use when the user asks about Zi Wei Dou Shu (紫微斗数), natal c
 
 | 要什么 | 工具 |
 |---|---|
-| 完整本命盘 | `ziwei_chart`（`detail=overview` 只要总览；`knowledge=summary` 顺带附释义摘要） |
-| 某个日期的大限、流年、流月、流日、流时 | `ziwei_horoscope`（`target` 的日期和时辰都要明确，用户只说年份时先问清） |
-| 知识包对某类问题的取材（婚恋、事业、财运等） | `ziwei_topic` |
-| 知识包里有哪些星、格局、术语、主题，名称对应什么标识 | `ziwei_catalog` |
-| 某条释义的全文、格局的古籍引文与成立条件、主题的选宫定义 | `ziwei_lookup` |
+| 完整本命盘 | `ziwei_get_natal_chart`（`detail=overview` 只要总览；`knowledge=summary` 顺带附释义摘要） |
+| 某个日期的大限、流年、流月、流日、流时 | `ziwei_get_horoscope`（`target` 的日期和时辰都要明确，用户只说年份时先问清） |
+| 知识包对某类问题的取材（婚恋、事业、财运等） | `ziwei_get_topic_palaces` |
+| 知识包里有哪些星、格局、术语、主题，名称对应什么标识 | `ziwei_list_knowledge` |
+| 某条释义的全文、格局的古籍引文与成立条件、主题的选宫定义 | `ziwei_lookup_knowledge` |
 
-`ziwei_topic` 选哪些宫是知识包的观点，不是唯一看法。想按别的方法看（夹宫、飞化、本命与运限合参等），直接取 `ziwei_chart` / `ziwei_horoscope` 的完整事实自己组织。
+`ziwei_get_topic_palaces` 选哪些宫是知识包的观点，不是唯一看法。想按别的方法看（夹宫、飞化、本命与运限合参等），直接取 `ziwei_get_natal_chart` / `ziwei_get_horoscope` 的完整事实自己组织。
 
 排盘语言默认 `zh-CN`。用户用别的语言时仍取中文盘，用用户的语言回答。
 

@@ -16,11 +16,11 @@
 
 | 工具 | 作用 |
 |---|---|
-| `ziwei_chart` | 本命盘事实（Markdown），可选附知识包释义 |
-| `ziwei_horoscope` | 指定日期与时辰的大限、小限、流年、流月、流日、流时 |
-| `ziwei_topic` | 按知识包里的主题定义（婚恋、事业、财运等）取本命宫位事实与释义 |
-| `ziwei_lookup` | 按标识查知识包条目原文：释义、古籍引文、成立条件、主题的选宫定义 |
-| `ziwei_catalog` | 知识包目录：有哪些条目，名称对应什么标识 |
+| `ziwei_get_natal_chart` | 本命盘事实（Markdown），可选附知识包释义 |
+| `ziwei_get_horoscope` | 指定日期与时辰的大限、小限、流年、流月、流日、流时 |
+| `ziwei_get_topic_palaces` | 按知识包里的主题定义（婚恋、事业、财运等）取本命宫位事实与释义 |
+| `ziwei_lookup_knowledge` | 按标识查知识包条目原文：释义、古籍引文、成立条件、主题的选宫定义 |
+| `ziwei_list_knowledge` | 知识包目录：有哪些条目，名称对应什么标识 |
 
 同一份实现有三个入口：
 
@@ -78,7 +78,7 @@ x-ziwei stdio --allow-pack-dir ./packs
 
 之后工具的 `pack` 参数可以写 `file:./packs/my-school.json`。远程包用 `--allow-pack-url` 逐条登记。不在白名单里的路径和 URL 一律拒绝。
 
-包的格式见 x-iztro 的[知识包格式规范](https://github.com/x-haose/x-iztro/blob/main/knowledge/SCHEMA.md)。`extends` 写 `iztro-docs` 的包会合并到默认包之上，只需写要改的条目；包里 `topics` 段的选宫定义直接决定 `ziwei_topic` 取哪些宫。
+包的格式见 x-iztro 的[知识包格式规范](https://github.com/x-haose/x-iztro/blob/main/knowledge/SCHEMA.md)。`extends` 写 `iztro-docs` 的包会合并到默认包之上，只需写要改的条目；包里 `topics` 段的选宫定义直接决定 `ziwei_get_topic_palaces` 取哪些宫。
 
 ## License
 
