@@ -11,7 +11,7 @@
 | 路径 | 同名 MCP 工具 | 作用 |
 |---|---|---|
 | `/v1/chart` | `ziwei_get_natal_chart` | 本命盘事实，可选附释义 |
-| `/v1/horoscope` | `ziwei_get_horoscope` | 目标日期与时辰的运限事实 |
+| `/v1/horoscope` | `ziwei_get_horoscope` | 运限事实，层数随目标精度 |
 | `/v1/topic` | `ziwei_get_topic_palaces` | 按知识包的主题定义取本命宫位事实与释义 |
 | `/v1/lookup` | `ziwei_lookup_knowledge` | 按标识查知识包条目 |
 | `/v1/catalog` | `ziwei_list_knowledge` | 知识包目录 |
@@ -46,12 +46,21 @@
 ### `/v1/horoscope`
 
 ```json
-{"birth": {…}, "target": {"date": "2026-11-11", "time_index": 12}}
+{"birth": {…}, "target": {"year": 2027}}
 ```
 
-- `target.date` 恒为公历；`target.time_index` 或 `target.clock` 至少给一个。目标时辰不继承出生时辰，也不读取当前时间。
+`target` 给到哪个精度，返回的 Markdown 就写到哪一层：
+
+| 用户问 | `target` | 返回 |
+| --- | --- | --- |
+| 今年、明年、某一年 | `{"year": 2027}` | 大限、小限、流年 |
+| 这个月、某一天 | `{"date": "2027-3-1"}` | 再加流月、流日 |
+| 某个时辰 | `{"date": "2027-3-1", "clock": "12:00"}` | 再加流时 |
+
+- `year` 是农历年，用公历年份数字表示：2027 指 2027 年正月初一起的丁未年。公历年初到春节前的日子仍属上一个农历年，所以问某一年要给 `year`，不要给那一年的 1 月 1 日。只给 `year` 时，标题里的日期是该农历年六月初一，三层取自那一天。
+- `date` 恒为公历，不含钟点。`year` 与 `date` 二选一。
+- 时辰用 `clock` 或 `time_index`，只能跟着 `date`。目标时辰不继承出生时辰，服务也不读取当前时间。
 - `detail`、`knowledge`、`pack` 同 `/v1/chart`。
-- 返回的 Markdown 分大限、小限、流年、流月、流日、流时六节。
 
 ### `/v1/topic`
 

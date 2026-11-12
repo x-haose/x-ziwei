@@ -9,7 +9,7 @@ All five tools are read-only and store nothing. The first three compute charts; 
 | Tool | Returns |
 | --- | --- |
 | `ziwei_get_natal_chart` | Natal chart facts (Markdown): basic info, the twelve palaces, patterns. Optionally overview only; optionally with knowledge-pack notes |
-| `ziwei_get_horoscope` | Decadal, age, yearly, monthly, daily and hourly layers for a given date and hour |
+| `ziwei_get_horoscope` | Horoscope layers: decadal, age and yearly for a year; plus monthly and daily for a date; plus hourly for an hour |
 | `ziwei_get_topic_palaces` | Natal palace facts and notes selected by a topic defined in the knowledge pack. Which palaces is the pack's decision |
 | `ziwei_lookup_knowledge` | Knowledge-pack entries as written: notes, classical quotes, conditions, a topic's palace selection |
 | `ziwei_list_knowledge` | The knowledge pack's catalog: which entries exist and which key each name maps to |
@@ -53,16 +53,26 @@ The default chart language is Simplified Chinese. A model reads a Chinese chart 
 
 ### `ziwei_get_horoscope`
 
-Besides `birth`, `target` is required:
+Besides `birth`, `target` is required. The layers returned follow the precision of `target`:
 
 ```json
 {
   "birth": { "date": "2000-8-16", "clock": "03:30", "gender": "female" },
-  "target": { "date": "2027-3-1", "clock": "12:00" }
+  "target": { "year": 2027 }
 }
 ```
 
-`target.date` is always a solar date; give at least one of `target.clock` and `target.time_index`. The target hour is not inherited from the birth hour and the current time is never read. `detail` and `knowledge` work as above.
+| The user asks about | `target` | Returns |
+| --- | --- | --- |
+| This year, next year, a given year | `{"year": 2027}` | Decadal, age and yearly layers |
+| This month, a given day | `{"date": "2027-3-1"}` | Plus monthly and daily |
+| A given hour | `{"date": "2027-3-1", "clock": "12:00"}` | Plus hourly |
+
+- `year` is a lunar year written as a Gregorian year number: 2027 means the Dingwei year that starts on the first day of the first lunar month of 2027. The days from 1 January up to the Spring Festival still belong to the previous lunar year, so ask about a year with `year`, not with that year's 1 January. With `year` alone, the date in the heading is the first day of the sixth lunar month of that year; the three layers are taken from that day.
+- `date` is always a solar date without a clock time. Give either `year` or `date`.
+- The hour is `clock` or `time_index` and only goes with `date`. The target hour is not inherited from the birth hour, and the service never reads the current time.
+
+`detail` and `knowledge` work as above.
 
 ### `ziwei_get_topic_palaces`
 

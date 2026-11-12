@@ -46,7 +46,7 @@ pub struct ChartRequest {
 pub struct HoroscopeRequest {
     /// 生辰。
     pub birth: BirthRequest,
-    /// 运限目标：公历日期与时辰。
+    /// 运限目标：农历年、公历日期，或公历日期加时辰。给到哪个精度就返回到哪一层。
     pub target: TargetRequest,
     /// 事实详略：`full`（默认）或 `overview`。
     #[serde(default)]
@@ -138,7 +138,7 @@ impl App {
         Ok(view(text, &birth.language, pack.as_deref()))
     }
 
-    /// 目标日期与时辰的运限事实，可选附释义。
+    /// 运限事实，层数随目标精度，可选附释义。
     pub async fn horoscope(&self, req: HoroscopeRequest) -> Result<TextView, Error> {
         let birth = req.birth.parse()?;
         let target = req.target.parse()?;

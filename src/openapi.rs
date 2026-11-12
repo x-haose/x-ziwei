@@ -52,7 +52,7 @@ const OPERATIONS: [Operation; 5] = [
     Operation {
         path: "/v1/horoscope",
         id: "ziwei_get_horoscope",
-        summary: "明确目标日期与时辰的运限事实：大限、小限、流年、流月、流日、流时。",
+        summary: "运限事实：目标给农历年返回大限、小限、流年，给日期再加流月、流日，再给时辰加流时。",
         request: "HoroscopeRequest",
         response: "TextResponse",
     },

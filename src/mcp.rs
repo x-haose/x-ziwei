@@ -58,7 +58,7 @@ impl ZiweiMcp {
     #[tool(
         name = "ziwei_get_horoscope",
         title = "紫微斗数运限",
-        description = "紫微斗数运限。给定生辰与目标公历日期、目标时辰，返回 Markdown：大限、小限、流年、流月、流日、流时各一节，含各层宫名对照、四化落宫、流耀与行运格局。target 的日期和时辰都必须明确给出：不继承出生时辰，也不取当前时间；用户只说某一年时先确认具体日期与时辰。只问年运、月运时流日流时两节可以不用。knowledge=summary/full 时附流耀与格局的知识包释义。",
+        description = "紫微斗数运限。给定生辰与运限目标，返回 Markdown：各层的宫名对照、四化落宫、流耀与行运格局。目标给到哪个精度就返回到哪一层：只给 target.year 返回大限、小限、流年；给 target.date 再加流月、流日；再给 target.clock 或 target.time_index 才有流时。target.year 是农历年，用公历年份数字表示（2027 指 2027 年正月初一起的丁未年）；问某一年的运势用它，不要改填该年 1 月 1 日，春节前的日子仍属上一个农历年。用户说今年、这个月、今天，而你知道当前日期时直接填，不必追问；用户没给的日期或时辰不要替他编。只给 year 时，标题里的日期是该农历年六月初一，这三层取自那一天。knowledge=summary/full 时附流耀与格局的知识包释义。",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -141,8 +141,8 @@ impl ServerHandler for ZiweiMcp {
                  Keep chart facts, knowledge-pack text and your own analysis distinguishable. \
                  Knowledge-pack text is one school's reference view, not the only reading; you may follow the user's own \
                  method or knowledge instead. \
-                 Tools: ziwei_get_natal_chart returns the natal chart; ziwei_get_horoscope the decadal, yearly, monthly, daily and hourly \
-                 layers for an explicit target date and hour; ziwei_get_topic_palaces the palaces a knowledge-pack topic selects; \
+                 Tools: ziwei_get_natal_chart returns the natal chart; ziwei_get_horoscope the decadal and yearly layers for a target year, \
+                 plus monthly and daily for a date and hourly for an hour; ziwei_get_topic_palaces the palaces a knowledge-pack topic selects; \
                  ziwei_list_knowledge and ziwei_lookup_knowledge the knowledge pack itself."
                     .to_string(),
             )

@@ -213,15 +213,26 @@ async fn v1_api_over_http() {
         .unwrap();
     assert_eq!(with_notes["data"]["pack"]["id"], "iztro-docs");
 
-    let horoscope = post(
-        "horoscope",
-        json!({"birth": birth(), "target": {"date": "2026-11-11", "time_index": 12}}),
-    )
-    .await
-    .unwrap();
-    assert_eq!(horoscope.status(), StatusCode::OK);
-    let horoscope = horoscope.json::<Value>().await.unwrap();
-    assert!(horoscope["data"]["text"].as_str().unwrap().contains("流时"));
+    for (target, last, absent) in [
+        (json!({"year": 2027}), "## 流年", Some("## 流月")),
+        (json!({"date": "2026-11-11"}), "## 流日", Some("## 流时")),
+        (
+            json!({"date": "2026-11-11", "time_index": 12}),
+            "## 流时",
+            None,
+        ),
+    ] {
+        let horoscope = post("horoscope", json!({"birth": birth(), "target": target}))
+            .await
+            .unwrap();
+        assert_eq!(horoscope.status(), StatusCode::OK, "{target}");
+        let horoscope = horoscope.json::<Value>().await.unwrap();
+        let text = horoscope["data"]["text"].as_str().unwrap();
+        assert!(text.contains(last), "{target} lacks {last}");
+        if let Some(absent) = absent {
+            assert!(!text.contains(absent), "{target} has {absent}");
+        }
+    }
 
     let topic = post("topic", json!({"birth": birth(), "topic": "career"}))
         .await
@@ -287,9 +298,14 @@ async fn v1_api_over_http() {
         ("chart", json!({"birth": birth(), "topic": "spouse"})),
         ("chart", json!({"birth": birth(), "pack": "builtin"})),
         ("horoscope", json!({"birth": birth()})),
+        ("horoscope", json!({"birth": birth(), "target": {}})),
         (
             "horoscope",
-            json!({"birth": birth(), "target": {"date": "2026-11-11"}}),
+            json!({"birth": birth(), "target": {"year": 2027, "date": "2027-3-1"}}),
+        ),
+        (
+            "horoscope",
+            json!({"birth": birth(), "target": {"year": 2027, "clock": "12:00"}}),
         ),
         (
             "horoscope",

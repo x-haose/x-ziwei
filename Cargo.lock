@@ -2524,7 +2524,7 @@ checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 [[package]]
 name = "x-iztro"
 version = "0.6.1"
-source = "git+https://github.com/x-haose/x-iztro?rev=1b73cbcc01e550cb2c2e9dc90f45baaa7a421c04#1b73cbcc01e550cb2c2e9dc90f45baaa7a421c04"
+source = "git+https://github.com/x-haose/x-iztro?rev=a2036a9dc8db60318f5adccb850e383ec1f93e92#a2036a9dc8db60318f5adccb850e383ec1f93e92"
 dependencies = [
  "chrono",
  "libm",

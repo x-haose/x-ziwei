@@ -1,4 +1,4 @@
-//! 生辰与运限目标入参：历法、日期、时辰、性别。时辰同时收序号与钟点，晚子必须是 12。
+//! 生辰与运限目标入参：历法、日期、时辰、性别；运限目标另可只给农历年。时辰同时收序号与钟点，晚子必须是 12。
 
 use serde::{Deserialize, Serialize};
 use x_iztro::{Config, Gender, Language, LeapMonth};
@@ -101,37 +101,64 @@ fn default_language() -> String {
     "zh-CN".to_string()
 }
 
-/// 运限目标。日期恒为公历；时辰必须显式给出，不继承出生时辰，也不读取当前时间。
+/// 运限目标，三种精度，给到哪个精度就算到哪一层：只给 `year` 是大限、小限、流年；给 `date` 再加流月、
+/// 流日；给 `date` 与时辰再加流时。不继承出生时辰，也不读取当前时间。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TargetRequest {
-    /// 目标公历日期 `YYYY-M-D`，不含钟点。
-    pub date: String,
-    /// 目标时辰序号 0–12，取值同出生时辰。与 `clock` 至少填一个；两个都填时必须指向同一时辰。
+    /// 目标农历年，用公历年份数字表示：2027 指 2027 年正月初一起的那个农历年（丁未年）。问某一年的运势填它；
+    /// 不要改填该年 1 月 1 日，春节前的日子仍属上一个农历年。与 `date` 二选一，不能再带时辰。
+    #[serde(default)]
+    #[schemars(range(min = 1, max = 9999))]
+    pub year: Option<i64>,
+    /// 目标公历日期 `YYYY-M-D`，不含钟点。问某个月、某一天填它。与 `year` 二选一。
+    #[serde(default)]
+    pub date: Option<String>,
+    /// 目标时辰序号 0–12，取值同出生时辰。只在要流时这一层时与 `date` 一起给；与 `clock` 都填时必须指向同一时辰。
     #[serde(default)]
     #[schemars(range(min = 0, max = 12))]
     pub time_index: Option<u8>,
-    /// 目标钟点 `HH:MM`。23:00–23:59 为晚子（12）。
+    /// 目标钟点 `HH:MM`。只在要流时这一层时与 `date` 一起给。23:00–23:59 为晚子（12）。
     #[serde(default)]
     pub clock: Option<String>,
 }
 
-/// 已校验的运限目标。
+/// 已校验的运限目标。精度决定算到哪一层。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Target {
-    /// 目标公历日期 `YYYY-M-D`；存在性由内核校验。
-    pub date: String,
-    /// 目标时辰，闭区间 0–12。
-    pub time_index: u8,
+pub enum Target {
+    /// 农历年：大限、小限、流年。
+    Year(i64),
+    /// 公历日 `YYYY-M-D`（存在性由内核校验）：再加流月、流日。
+    Day(String),
+    /// 公历日与时辰（闭区间 0–12）：再加流时。
+    Hour(String, u8),
 }
 
 impl TargetRequest {
-    /// 校验并收成 [`Target`]。
+    /// 校验并收成 [`Target`]。`year` 与 `date` 必须恰好给一个；时辰只能跟着 `date`。
     pub fn parse(&self) -> Result<Target, Error> {
-        Ok(Target {
-            date: plain_date(&self.date, "target.date")?,
-            time_index: resolve_time_index(self.time_index, self.clock.as_deref())?,
-        })
+        let has_time = self.time_index.is_some() || self.clock.is_some();
+        match (self.year, self.date.as_deref()) {
+            (Some(_), Some(_)) => Err(Error::invalid_argument(
+                "target takes either year or date, not both",
+            )),
+            (None, None) => Err(Error::invalid_argument(
+                "target needs year (a lunar year, e.g. 2027) or date (YYYY-M-D)",
+            )),
+            (Some(_), None) if has_time => Err(Error::invalid_argument(
+                "target.year cannot carry time_index or clock; give target.date for the hourly layer",
+            )),
+            (Some(year), None) => Ok(Target::Year(year)),
+            (None, Some(date)) => {
+                let date = plain_date(date, "target.date")?;
+                if has_time {
+                    let time_index = resolve_time_index(self.time_index, self.clock.as_deref())?;
+                    Ok(Target::Hour(date, time_index))
+                } else {
+                    Ok(Target::Day(date))
+                }
+            }
+        }
     }
 }
 
@@ -380,18 +407,34 @@ mod tests {
     }
 
     #[test]
-    fn target_needs_explicit_time() {
-        let target = TargetRequest {
-            date: "2026-11-11".into(),
+    fn target_precision_follows_the_fields_given() {
+        let target = |year, date: Option<&str>, clock: Option<&str>| TargetRequest {
+            year,
+            date: date.map(Into::into),
             time_index: None,
-            clock: None,
+            clock: clock.map(Into::into),
         };
-        assert_eq!(target.parse().unwrap_err().code, ErrorCode::InvalidArgument);
-        let target = TargetRequest {
-            date: "2026-11-11".into(),
-            time_index: None,
-            clock: Some("23:10".into()),
-        };
-        assert_eq!(target.parse().unwrap().time_index, 12);
+        assert_eq!(
+            target(Some(2027), None, None).parse().unwrap(),
+            Target::Year(2027)
+        );
+        assert_eq!(
+            target(None, Some("2026-11-11"), None).parse().unwrap(),
+            Target::Day("2026-11-11".into())
+        );
+        assert_eq!(
+            target(None, Some("2026-11-11"), Some("23:10"))
+                .parse()
+                .unwrap(),
+            Target::Hour("2026-11-11".into(), 12)
+        );
+        for bad in [
+            target(None, None, None),
+            target(None, None, Some("12:00")),
+            target(Some(2027), Some("2027-3-1"), None),
+            target(Some(2027), None, Some("12:00")),
+        ] {
+            assert_eq!(bad.parse().unwrap_err().code, ErrorCode::InvalidArgument);
+        }
     }
 }
