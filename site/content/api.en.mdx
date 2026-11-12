@@ -1,0 +1,61 @@
+---
+title: HTTP API
+description: A JSON API that mirrors the MCP tools one to one, with an OpenAPI document. For programs and low-code platforms without MCP.
+icon: Network
+---
+
+`/v1` and the MCP tools are two protocols over one implementation: five operations, one to one, with the same parameters. The API is public and free, needs no API key or account, and may be built into your own product.
+
+```text
+https://ziwei-mcp.x-haose.com
+```
+
+| Path | Matching MCP tool |
+| --- | --- |
+| `POST /v1/chart` | `ziwei_get_natal_chart` |
+| `POST /v1/horoscope` | `ziwei_get_horoscope` |
+| `POST /v1/topic` | `ziwei_get_topic_palaces` |
+| `POST /v1/lookup` | `ziwei_lookup_knowledge` |
+| `POST /v1/catalog` | `ziwei_list_knowledge` |
+
+The OpenAPI 3.1 document is at [`/v1/openapi.json`](https://ziwei-mcp.x-haose.com/v1/openapi.json), generated from the service's request and response types.
+
+## Calling it
+
+```bash
+curl https://ziwei-mcp.x-haose.com/v1/chart \
+  -H 'Content-Type: application/json' \
+  -d '{"birth":{"date":"2000-8-16","clock":"03:30","gender":"female"}}'
+```
+
+Request and response bodies are JSON; parameters are on [Tools](/en/tools). A request with an unknown field is rejected.
+
+Success:
+
+```json
+{ "ok": true, "data": { "text": "# 命盘 2000-8-16 寅时 女\n…", "language": "zh-CN" } }
+```
+
+Failure:
+
+```json
+{ "ok": false, "data": null, "error": { "code": "invalid_date", "message": "…", "retryable": false } }
+```
+
+## Errors and limits
+
+| HTTP | `error.code` | Meaning |
+| --- | --- | --- |
+| 400 | `invalid_date` `invalid_time_index` `invalid_clock` `time_mismatch` `invalid_argument` | Invalid input |
+| 400 | `unknown_key` `unknown_topic` | No such knowledge entry or topic |
+| 400 | `pack_not_allowed` | Knowledge pack not on the allowlist |
+| 413 | `invalid_argument` | Request body over 64 KiB |
+| 429 | `rate_limited` | Rate limit exceeded; retry later |
+| 500 | `internal` | Internal error |
+| 503 | `pack_unavailable` | Knowledge pack cannot be read; retry later |
+
+- 10 requests per second per address, with bursts of 30.
+- Cross-origin requests from any origin are allowed, so a web page can call it directly. No cookies are used.
+- This is a free public service with no availability guarantee. For production, [host it yourself](/en/self-host) or embed the [x-iztro library](https://x-iztro.x-haose.com/en).
+
+The full contract is the [interface reference](https://github.com/x-haose/x-ziwei/blob/main/docs/http-api.md) in the repository (in Chinese).

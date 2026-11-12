@@ -1,0 +1,115 @@
+---
+title: Tools
+description: "Five read-only tools: natal chart, horoscope layers, topic palaces, knowledge-pack entries and catalog."
+icon: Wrench
+---
+
+All five tools are read-only and store nothing. The first three compute charts; the last two read the knowledge pack.
+
+| Tool | Returns |
+| --- | --- |
+| `ziwei_get_natal_chart` | Natal chart facts (Markdown): basic info, the twelve palaces, patterns. Optionally overview only; optionally with knowledge-pack notes |
+| `ziwei_get_horoscope` | Decadal, age, yearly, monthly, daily and hourly layers for a given date and hour |
+| `ziwei_get_topic_palaces` | Natal palace facts and notes selected by a topic defined in the knowledge pack. Which palaces is the pack's decision |
+| `ziwei_lookup_knowledge` | Knowledge-pack entries as written: notes, classical quotes, conditions, a topic's palace selection |
+| `ziwei_list_knowledge` | The knowledge pack's catalog: which entries exist and which key each name maps to |
+
+Charts are computed by [x-iztro](https://x-iztro.x-haose.com/en), field-for-field with iztro; the core this service runs is aligned with iztro v2.6.3. That is a reproduction standard, not a ruling between schools.
+
+## Birth parameters
+
+The first three tools share one set of birth parameters, under `birth`:
+
+```json title="Minimal input"
+{
+  "birth": {
+    "date": "2000-8-16",
+    "clock": "03:30",
+    "gender": "female"
+  }
+}
+```
+
+| Field | Required | Value |
+| --- | --- | --- |
+| `calendar` | no | `solar` (default) or `lunar` |
+| `date` | yes | `YYYY-M-D`, such as `2000-8-16`, without a clock time |
+| `clock` / `time_index` | one of them | `clock` is `HH:MM`; `time_index` is an integer 0–12, see [Hours](#hours) |
+| `gender` | yes | `male` or `female` |
+| `leap` | no | Lunar leap month: `not_leap` (default), `leap`, `leap_fixed` (after the 15th of a leap month counts as the next month) |
+| `fix_leap` | no | Default `true`; only meaningful for solar dates |
+| `language` | no | Default `zh-CN`. Also `zh-TW` `en-US` `ja-JP` `ko-KR` `vi-VN` |
+
+The default chart language is Simplified Chinese. A model reads a Chinese chart more reliably than translated star names; when you ask in another language, the chart stays Chinese and the answer comes in your language.
+
+## Other parameters
+
+### `ziwei_get_natal_chart`
+
+| Field | Value |
+| --- | --- |
+| `detail` | `full` (default, with every palace in detail) or `overview` (basic info, the twelve-palace table, patterns) |
+| `knowledge` | `summary` or `full`: attach knowledge-pack notes after each palace and pattern. Omit for facts only |
+
+### `ziwei_get_horoscope`
+
+Besides `birth`, `target` is required:
+
+```json
+{
+  "birth": { "date": "2000-8-16", "clock": "03:30", "gender": "female" },
+  "target": { "date": "2027-3-1", "clock": "12:00" }
+}
+```
+
+`target.date` is always a solar date; give at least one of `target.clock` and `target.time_index`. The target hour is not inherited from the birth hour and the current time is never read. `detail` and `knowledge` work as above.
+
+### `ziwei_get_topic_palaces`
+
+| Field | Value |
+| --- | --- |
+| `topic` | A topic key from the knowledge pack, such as `romance`, `career` or `wealth` in the default pack. List them with `ziwei_list_knowledge` |
+| `knowledge` | `summary` (default) or `full` |
+| `detail` | As above |
+
+Natal palaces only; use `ziwei_get_horoscope` for the horoscope layers. Which palaces are selected is the knowledge pack's view, see [Knowledge pack](/en/knowledge#topics).
+
+### `ziwei_lookup_knowledge`
+
+```json
+{ "kind": "star", "keys": ["ziweiMaj", "tianfuMaj"] }
+```
+
+`kind` is `star` / `pattern` / `palace` / `mutagen` / `concept` / `topic`. `keys` holds 1–20 language-independent keys, not translated names. If any key is missing the whole call fails; no near matches are returned.
+
+### `ziwei_list_knowledge`
+
+`kind` is optional; omit it to list all six sections. Each section maps keys to display names, so the star, palace and pattern names in the chart text can be turned into lookup keys.
+
+## Hours
+
+`time_index` is not a clock hour. Zi is split into a head and a tail, so the index runs 0–12. If you know the clock time, pass `clock` and skip the conversion.
+
+| Index | Hour | Clock | Index | Hour | Clock |
+| --- | --- | --- | --- | --- | --- |
+| 0 | early Zi | 00:00–01:00 | 7 | Wei | 13:00–15:00 |
+| 1 | Chou | 01:00–03:00 | 8 | Shen | 15:00–17:00 |
+| 2 | Yin | 03:00–05:00 | 9 | You | 17:00–19:00 |
+| 3 | Mao | 05:00–07:00 | 10 | Xu | 19:00–21:00 |
+| 4 | Chen | 07:00–09:00 | 11 | Hai | 21:00–23:00 |
+| 5 | Si | 09:00–11:00 | 12 | late Zi | 23:00–24:00 |
+| 6 | Wu | 11:00–13:00 | | | |
+
+<Callout type="warn" title="After 23:00 the index is 12, not 0">
+A birth at 23:00–24:00 is late Zi. Say "11pm" or "late Zi", not a bare "Zi". The two indexes produce different charts: under the default config, late Zi takes the next day's day pillar.
+</Callout>
+
+The tools cast charts by clock time and do not correct for true solar time. When the birthplace is far from its time zone's central meridian and the clock time is close to an hour boundary, the hour may be off by one.
+
+## What it does not do
+
+- It does not write the reading. The tools return the chart in words and knowledge-pack text. The interpretation is what the model says after reading them.
+- It does not store charts, cache results, or need an account.
+- It does not accept a chart the model placed itself, or stems and branches the model invented.
+
+Error codes and the HTTP JSON interface to the same functions are on [HTTP API](/en/api).

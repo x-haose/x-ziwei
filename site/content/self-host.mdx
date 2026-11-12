@@ -1,0 +1,70 @@
+---
+title: 自己部署
+description: 一个二进制或一个容器。用自己的知识包，或让生辰不出本机。
+icon: Server
+---
+
+公网服务够用时不需要部署。这两种情况值得自己跑一份：想让工具用你自己的知识包；或者不想让生辰离开自己的机器。
+
+源码在 [x-haose/x-ziwei](https://github.com/x-haose/x-ziwei)，MIT 许可。
+
+## 本机用（stdio）
+
+需要 Rust 1.88 以上和 Git。
+
+```bash
+git clone https://github.com/x-haose/x-ziwei
+cd x-ziwei
+cargo build --release --locked
+```
+
+得到 `target/release/x-ziwei`。在客户端里把它登记为本地 MCP 服务器，生辰只在本机处理：
+
+```json title=".mcp.json"
+{
+  "mcpServers": {
+    "ziwei": {
+      "command": "/你的路径/x-ziwei",
+      "args": ["stdio"]
+    }
+  }
+}
+```
+
+## 作为服务跑
+
+```bash
+docker build -t x-ziwei .
+docker run --rm -p 8080:8080 x-ziwei
+```
+
+或直接运行二进制：`x-ziwei serve --listen 127.0.0.1:8080`。
+
+- MCP：`http://127.0.0.1:8080/mcp`
+- JSON 接口：`http://127.0.0.1:8080/v1/*`
+- 健康检查：`GET /healthz`
+
+| 参数 | 作用 |
+| --- | --- |
+| `--listen` | 监听地址，默认 `0.0.0.0:8080` |
+| `--allowed-host` | MCP 只接受这个 `Host`，可重复。公网部署要设 |
+| `--public-url` | 对外的 HTTPS 根地址。设了才提供 `/v1/openapi.json` |
+| `--client-ip-header` | 服务在反向代理之后时，指明哪个请求头带客户端地址，用作限流键。Cloudflare 之后填 `cf-connecting-ip`，Traefik 或 nginx 之后填 `x-real-ip` |
+| `--rate-per-second` / `--rate-burst` | 每个地址的限流，默认每秒 10 次、突发 30 次 |
+
+<Callout type="warn" title="客户端地址头必须由代理覆盖">
+只有前面的代理一定会改写这个头时才能设 `--client-ip-header`，否则客户端可以伪造地址绕过限流。经 Cloudflare 时还要让源站只接受 Cloudflare 的连接。
+</Callout>
+
+## 用自己的知识包
+
+启动时登记允许读取的目录或地址：
+
+```bash
+x-ziwei stdio --allow-pack-dir ./packs
+x-ziwei serve --allow-pack-url https://example.com/my-school.json
+```
+
+之后各工具的 `pack` 参数可以写 `file:./packs/my-school.json` 或登记过的那个 URL。不在白名单里的路径和地址一律拒绝；远程包上限 1 MiB。
+
+包的写法见[知识包](/zh/knowledge#用自己的知识)。`extends` 写 `iztro-docs` 的包会合并到默认包之上。

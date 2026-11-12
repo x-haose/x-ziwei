@@ -69,6 +69,16 @@ x-ziwei：紫微斗数的托管服务层。排盘、运限、格局判定由 [x-
 - 限流键取 Cloudflare 写入的 `CF-Connecting-IP`。这个头只有经 Cloudflare 才可信，靠 Traefik 中间件 `cloudflare-only@file` 保证：`ipAllowList` 只放行 Cloudflare 的地址段，绕过 Cloudflare 直连源站返回 403。它定义在 Dokploy 该应用的 Advanced → Traefik 配置里，在 Domains 里挂在 `ziwei-mcp.x-haose.com` 上。地址段取自 <https://www.cloudflare.com/ips/>（2026-11-12），Cloudflare 增减地址段时要同步更新，否则新节点来的请求会被拒。
 - 服务只有 `ziwei-mcp.x-haose.com` 这一个域名。文档站 `ziwei.x-haose.com`（仓库 `x-haose/ziwei-docs`）只有介绍 MCP 的一页，不反代本服务。
 
+## 站点
+
+`site/` 是面向使用者的站点，部署在 `https://ziwei.x-haose.com`（Vercel，Root Directory 设为 `site`）。它与服务分开部署，改站点不需要重新构建服务。
+
+- 技术栈照抄 x-iztro 文档站：Next.js + Fumadocs + Tailwind，版本见 `site/package.json`。中文是默认语言，`content/` 里无后缀为中文，`.en.mdx` 为英文，两种语言成对维护。
+- 页面直接挂在语言段之下（`/zh/install`），不带 `/docs`。`/{lang}/docs/*` 是排盘库文档的旧地址，永久跳转到 `https://x-iztro.x-haose.com`；旧的 MCP 说明页跳到本站安装页。
+- 两站互为入口：本站顶栏、页脚、首页指向 x-iztro 文档；x-iztro 文档的「给 AI 用」指向本站。紫微斗数概念、数据结构、准确性说明只在 x-iztro 文档里写，本站不重复。
+- 隐私政策、服务条款、支持三页是上架要填的链接，写的都是服务的实际行为；服务的数据处理方式有变化时要同步改这三页。
+- 检查：`cd site && npm ci && npm run types:check && npm run build`，CI 的 `site` 任务跑同一组命令。
+
 ## 注释规范
 
 - 只解释「当前代码在当前项目的含义」，必须自包含。

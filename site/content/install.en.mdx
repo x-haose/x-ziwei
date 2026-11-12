@@ -1,0 +1,155 @@
+---
+title: Install
+description: Connect Zi Wei Dou Shu to your AI client. One URL for every client, no account.
+icon: Download
+---
+
+There is one service address:
+
+```text
+https://ziwei-mcp.x-haose.com/mcp
+```
+
+Streamable HTTP, no authentication, public and free. On Claude Code and Codex, install the plugin and the reading method (the Skill) arrives with the service. Every other client takes this URL, plus the instructions under [When there is no Skill](#when-there-is-no-skill).
+
+<Callout title="Opening it in a browser does not show an article">
+The address is an endpoint for clients, not a web page. Read this page. Copy the address above.
+</Callout>
+
+## Install the plugin
+
+The plugin ships the Skill. The Skill makes the model confirm the birth data first, then call the tools, and keep chart facts, knowledge-pack text and its own analysis apart.
+
+### Claude Code
+
+In a session, enter:
+
+```text title="Claude Code"
+/plugin marketplace add x-haose/x-ziwei
+/plugin install ziwei@x-ziwei
+```
+
+<Steps>
+<Step>Run the two commands above.</Step>
+<Step>Ask once in plain language, for example "Cast a Ziwei chart: solar 2000-8-16, born 3:30am, female".</Step>
+<Step>You should see it call `ziwei_get_natal_chart` before it answers.</Step>
+</Steps>
+
+### Codex
+
+```bash title="Codex"
+codex plugin marketplace add x-haose/x-ziwei
+```
+
+After adding the marketplace, install `ziwei` from the Codex plugin list.
+
+### ChatGPT
+
+The public plugin directory listing is still being prepared, so it cannot be found there yet. Until then, add it as a custom MCP server:
+
+<Steps>
+<Step>Open the Plugins page, click Add, and choose Add custom MCP server.</Step>
+<Step>Set the URL to `https://ziwei-mcp.x-haose.com/mcp` and Authentication to No authentication.</Step>
+<Step>Create and install it, then type `@` in a chat to pick it.</Step>
+</Steps>
+
+This path has no Skill, so paste the instructions under [When there is no Skill](#when-there-is-no-skill) into your custom instructions. Official steps: [Add custom MCP server](https://developers.openai.com/api/docs/guides/custom-mcp-server).
+
+## URL only
+
+Any client that accepts a remote MCP URL uses the same address. Do not add an authentication header. If other servers are already configured, merge in only the `"ziwei"` entry rather than overwriting the file.
+
+Cursor reads `~/.cursor/mcp.json` for the user, or `.cursor/mcp.json` inside a project:
+
+```json title="Cursor"
+{
+  "mcpServers": {
+    "ziwei": {
+      "url": "https://ziwei-mcp.x-haose.com/mcp"
+    }
+  }
+}
+```
+
+Claude needs one more field than Cursor, `"type": "http"`. Claude Code reads `.mcp.json` at the project root, or `mcpServers` in the user config:
+
+```json title="Claude"
+{
+  "mcpServers": {
+    "ziwei": {
+      "type": "http",
+      "url": "https://ziwei-mcp.x-haose.com/mcp"
+    }
+  }
+}
+```
+
+Codex reads `~/.codex/config.toml`, or use the equivalent command. Do not add a bearer token and do not run `codex mcp login`:
+
+```toml title="Codex"
+[mcp_servers.ziwei]
+url = "https://ziwei-mcp.x-haose.com/mcp"
+```
+
+```bash title="Codex"
+codex mcp add ziwei --url https://ziwei-mcp.x-haose.com/mcp
+```
+
+For Grok on the web, open [grok.com/connectors](https://grok.com/connectors), **New Connector** → **Custom**, enter the address above and leave authentication empty. For Grok Build:
+
+```bash title="Grok"
+grok mcp add --transport http ziwei https://ziwei-mcp.x-haose.com/mcp
+```
+
+Cascade (Windsurf / Devin Desktop) uses `serverUrl` for a remote HTTP entry:
+
+```json title="Cascade"
+{
+  "mcpServers": {
+    "ziwei": {
+      "serverUrl": "https://ziwei-mcp.x-haose.com/mcp"
+    }
+  }
+}
+```
+
+## When there is no Skill
+
+Paste the block below into the system prompt or custom instructions. It is a short form of the plugin Skill; the full text is [`SKILL.md`](https://github.com/x-haose/x-ziwei/blob/main/plugin/skills/ziwei/SKILL.md) in the repository. It is only the default method, and you can replace it with your own way of reading.
+
+```text title="Instructions"
+You read Zi Wei Dou Shu charts with the Ziwei tools. The tools compute the chart; the reading is yours.
+
+Confirm the birth data first: calendar (solar or lunar), date, gender, and the birth clock time or hour. Ask for whatever is missing. Do not guess.
+Pass a clock time as birth.clock (HH:MM); if only the traditional hour is known, pass birth.time_index (0 early Zi, 12 late Zi). 23:00 is 12, not 0.
+For a lunar date, confirm whether the month is a leap month and pass birth.leap. Do not convert between calendars yourself.
+
+Tools:
+- ziwei_get_natal_chart: the full natal chart.
+- ziwei_get_horoscope: decadal, yearly, monthly, daily and hourly layers for a date; both the target date and hour must be explicit.
+- ziwei_get_topic_palaces: what the knowledge pack selects for a kind of question (romance, career, wealth and so on).
+- ziwei_list_knowledge / ziwei_lookup_knowledge: the knowledge pack's catalog and entry text.
+
+When answering:
+- Do not state a star, palace, mutagen or pattern the tools did not return. Do not fill in from memory.
+- Keep chart facts, knowledge-pack text (one school's reference view) and your own analysis distinguishable.
+- If a tool fails, say so. Do not make up a result.
+- Do not assert lifespan, a medical diagnosis, or that a misfortune will certainly happen.
+```
+
+## What to say once it is installed
+
+You do not need to memorise parameter names. Say it in plain words and the model fills them in.
+
+| You say | The model calls |
+| --- | --- |
+| "Cast my chart: solar 2000-8-16, 3:30am, female" | `ziwei_get_natal_chart` |
+| "What does 1 March 2027 at noon look like for me?" | `ziwei_get_horoscope` |
+| "How do my relationships look?" | `ziwei_get_topic_palaces` |
+| "What does Ziwei with Tianfu in the same palace mean?" | `ziwei_list_knowledge`, `ziwei_lookup_knowledge` |
+
+What the tools hand back is chart facts and knowledge-pack text, not a finished "your career will be…". The model does the talking; the tools do the computing.
+
+<Callout type="warn" title="Do not let the model place the stars itself">
+It cannot compute stems, branches or star placement reliably, and its mistakes look plausible. The chart comes from the tools only. If the model starts reciting stars from memory, make it call the tools again.
+</Callout>

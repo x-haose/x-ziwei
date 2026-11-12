@@ -1,0 +1,77 @@
+---
+title: Knowledge pack
+description: Reference notes, glossary and topic definitions live in one open JSON file. Replace it whole, or change a few entries.
+icon: BookOpen
+---
+
+A chart is computed and has one answer. How a star reads, what a pattern means, which palaces to look at for romance: schools disagree, and there is no single answer. That layer is split out of the computation and kept in the knowledge pack, a JSON file that maps keys to text.
+
+Every reference sentence the model quotes can be found in the pack as written, along with which pack and version it came from.
+
+## The default pack
+
+The service ships one default pack, with the id `iztro-docs`:
+
+| Section | Count | Content |
+| --- | --- | --- |
+| Stars `star` | 162 | Notes and school attributes such as yin-yang and five elements; the fourteen major stars also have notes for pairs sharing a palace |
+| Patterns `pattern` | 64 | Notes, classical quotes, conditions |
+| Palaces `palace` | 12 | What each palace governs |
+| Mutagens `mutagen` | 4 | Lu, Quan, Ke, Ji |
+| Glossary `concept` | 50 | Basic concepts |
+| Topics `topic` | 13 | Which palaces to read for a kind of question |
+
+It is based on the Learn pages of [iztro-docs](https://github.com/SylarLong/iztro-docs) (MIT licence, by Sylar Long), rewritten by x-iztro into a third-person reference voice without changing the substance. The default pack is in Chinese only.
+
+It is one reference view, not the only way to read a chart.
+
+## Topics
+
+A topic answers "which palaces do I read for this kind of question". The default pack has 13:
+
+`overall` · `personality` · `romance` · `career` · `wealth` · `health` · `children` · `parents` · `siblings` · `friends` · `property` · `travel` · `spirit`
+
+Each definition can be read with `ziwei_lookup_knowledge`. Romance, for example:
+
+```json
+{
+  "title": "婚恋",
+  "surround": ["spousePalace"],
+  "palaces": ["soulPalace", "bodyPalace", "childrenPalace"]
+}
+```
+
+Palaces under `surround` are taken together with their three-sided, four-square companions; palaces under `palaces` are taken alone. `ziwei_get_topic_palaces` follows this definition, and the service itself has no rule about which palaces to read. Change the pack and the selection changes with it.
+
+A topic expresses palace selection only. It cannot express steps such as flanking palaces, tracing flying mutagens, or reading the natal chart together with the horoscope layers. For those methods, have the model take the full chart and organise it itself.
+
+## Using your own knowledge
+
+There are two ways.
+
+**Keep it on the model's side.** Give your material to your AI: project files in ChatGPT, a Skill in Claude, or paste it into the chat. The tools supply an accurate chart and the model reads it with your material. Nothing needs to be deployed.
+
+**Write a knowledge pack.** The format is open; the specification is x-iztro's [knowledge pack schema](https://github.com/x-haose/x-iztro/blob/main/knowledge/SCHEMA.md) (in Chinese). To change only a few entries, write an overlay pack with `extends` set to `iztro-docs`, containing just the entries you change or add:
+
+```json
+{
+  "schema": 1,
+  "id": "my-school",
+  "version": "2026-11-12",
+  "language": "zh-CN",
+  "extends": "iztro-docs",
+  "stars": {
+    "ziweiMaj": { "intro": "Our school reads Ziwei as…" }
+  },
+  "topics": {
+    "romance": {
+      "surround": ["spousePalace", "spiritPalace"],
+      "palaces": ["soulPalace"]
+    }
+  }
+}
+```
+
+It is merged on top of the default pack: the note for Ziwei and the palace selection for romance become yours, and every other entry stays. A pack without `extends` is used on its own.
+
+The public service has the default pack only. To make the tools use your pack, [host it yourself](/en/self-host).

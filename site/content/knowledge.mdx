@@ -1,0 +1,77 @@
+---
+title: 知识包
+description: 释义、术语和主题定义都在一份公开的 JSON 里，可以整包替换，也可以只改几条。
+icon: BookOpen
+---
+
+盘面是算出来的，只有一个答案。星耀怎么解读、格局意味着什么、问婚恋该看哪些宫，各门各派说法不一，没有唯一答案。这一层从计算里分了出来，放在知识包里：一份「标识 → 文本」的 JSON 文件。
+
+模型引用的每一句释义都能在包里查到原文，并知道出自哪份包、哪个版本。
+
+## 默认包
+
+服务内置一份默认包，标识是 `iztro-docs`：
+
+| 段 | 数量 | 内容 |
+| --- | --- | --- |
+| 星耀 `star` | 162 | 释义、阴阳五行等门派属性；十四主星另有双星同宫的组合释义 |
+| 格局 `pattern` | 64 | 释义、古籍引文、成立条件 |
+| 宫位 `palace` | 12 | 各宫主管什么 |
+| 四化 `mutagen` | 4 | 禄、权、科、忌 |
+| 术语 `concept` | 50 | 基础概念 |
+| 主题 `topic` | 13 | 读某类问题看哪些宫 |
+
+底本是 [iztro-docs](https://github.com/SylarLong/iztro-docs) 的《学习》页（MIT 许可，作者 Sylar Long），文字经 x-iztro 整理改写为第三人称的释义口吻，命理内容不变。默认包只有中文。
+
+它是一种资料观点，不是唯一论法。
+
+## 主题
+
+主题回答「读这类问题要看哪些宫」。默认包有 13 个：
+
+`overall` 总论 · `personality` 性格 · `romance` 婚恋 · `career` 事业 · `wealth` 财运 · `health` 健康 · `children` 子女 · `parents` 父母 · `siblings` 兄弟 · `friends` 交友 · `property` 田宅 · `travel` 迁移 · `spirit` 精神
+
+每个主题的定义都能用 `ziwei_lookup_knowledge` 查出来。比如婚恋：
+
+```json
+{
+  "title": "婚恋",
+  "surround": ["spousePalace"],
+  "palaces": ["soulPalace", "bodyPalace", "childrenPalace"]
+}
+```
+
+`surround` 里的宫连同各自的三方四正一起取，`palaces` 里的宫只取本宫。`ziwei_get_topic_palaces` 就照这份定义取材，服务自己不规定看哪些宫。换一份包，取的宫就跟着变。
+
+主题只表达选宫，表达不了夹宫、飞化追踪、本命与运限合参这类步骤。要按这些方法看，让模型直接取完整盘面自己组织。
+
+## 用自己的知识
+
+有两种做法。
+
+**放在模型这一侧。** 把你的资料交给你的 AI：ChatGPT 的项目文件、Claude 的 Skill、或者直接贴进对话。工具只负责给准确的盘面，模型拿你的资料来读。这种做法不需要部署任何东西。
+
+**写一份知识包。** 知识包是开放格式，规范见 x-iztro 的[知识包格式规范](https://github.com/x-haose/x-iztro/blob/main/knowledge/SCHEMA.md)。只想改几条时，写一份覆盖包，`extends` 填 `iztro-docs`，只写要改或要加的条目：
+
+```json
+{
+  "schema": 1,
+  "id": "my-school",
+  "version": "2026-11-12",
+  "language": "zh-CN",
+  "extends": "iztro-docs",
+  "stars": {
+    "ziweiMaj": { "intro": "本门认为紫微星……" }
+  },
+  "topics": {
+    "romance": {
+      "surround": ["spousePalace", "spiritPalace"],
+      "palaces": ["soulPalace"]
+    }
+  }
+}
+```
+
+它会合并到默认包之上：紫微的释义和婚恋的选宫换成你的，其余条目保留。不写 `extends` 的包整包独立使用。
+
+公网服务只有默认包。要让工具用你的包，需要[自己部署](/zh/self-host)。

@@ -1,0 +1,28 @@
+---
+title: 支持
+description: 遇到问题、发现排盘有误、或想提建议时去哪里。
+icon: LifeBuoy
+---
+
+问题、错误报告和建议都提到 GitHub：
+
+**[github.com/x-haose/x-ziwei/issues](https://github.com/x-haose/x-ziwei/issues)**
+
+这是一个个人维护的开源项目，没有客服，回复时间不保证。
+
+## 报告问题时请附上
+
+- 用的是哪个客户端（Claude Code、ChatGPT、Codex 等）。
+- 调用了哪个工具、传了什么参数、返回了什么。工具报错时把 `code` 和 `message` 贴出来。
+- 认为排盘有误时：你期望的结果，以及依据（例如另一个排盘程序的输出）。
+
+<Callout type="warn" title="Issue 是公开的">
+提交的内容所有人都能看到。不要贴别人的真实生辰；说明问题时换一个能复现的日期即可。
+</Callout>
+
+## 先看这几条
+
+- **晚上 11 点出生排得不对**：23:00–24:00 是晚子时，时辰索引是 12 不是 0，见[时辰](/zh/tools#时辰)。
+- **模型说的星盘里没有**：模型在凭记忆补内容。让它重新调用工具，并只用工具返回的内容。
+- **被限流（429）**：每个地址每秒 10 次。稍后再试；需要更高频率请[自己部署](/zh/self-host)。
+- **排盘库本身的问题**（Rust / Python / Go 库）：提到 [x-iztro](https://github.com/x-haose/x-iztro/issues)。

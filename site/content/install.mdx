@@ -1,0 +1,155 @@
+---
+title: 安装
+description: 把紫微斗数接进你的 AI 客户端。所有客户端共用一个地址，无需账号。
+icon: Download
+---
+
+服务地址只有一个：
+
+```text
+https://ziwei-mcp.x-haose.com/mcp
+```
+
+Streamable HTTP，无鉴权，公开免费。Claude Code 与 Codex 装插件，解读方法（Skill）和服务一起进来；其余客户端填这个地址，再贴上[没有 Skill 时](#没有-skill-时)的说明。
+
+<Callout title="浏览器打开它看不到文章">
+这个地址是给客户端连的端点，不是网页。要读的是这一页；要复制的是上面的地址。
+</Callout>
+
+## 装插件
+
+插件带上 Skill。Skill 让模型先问清生辰、再调工具，并把盘面事实、知识包释义和它自己的分析分开说。
+
+### Claude Code
+
+在会话里依次输入：
+
+```text title="Claude Code"
+/plugin marketplace add x-haose/x-ziwei
+/plugin install ziwei@x-ziwei
+```
+
+<Steps>
+<Step>执行上面两条命令。</Step>
+<Step>用自然语言问一次，例如「阳历 2000-8-16 凌晨 3 点半出生，女，排紫微盘」。</Step>
+<Step>回答前应能看到它调用了 `ziwei_get_natal_chart`。</Step>
+</Steps>
+
+### Codex
+
+```bash title="Codex"
+codex plugin marketplace add x-haose/x-ziwei
+```
+
+添加市场后，在 Codex 的插件列表里安装 `ziwei`。
+
+### ChatGPT
+
+公开插件目录的上架还在准备，现在不能在目录里搜到。上架之前用自定义 MCP：
+
+<Steps>
+<Step>打开插件页，点添加，选自定义 MCP 服务器（英文界面是 Add custom MCP server）。</Step>
+<Step>地址填 `https://ziwei-mcp.x-haose.com/mcp`，认证选无（No authentication）。</Step>
+<Step>创建并安装，对话里输入 `@` 选用。</Step>
+</Steps>
+
+这条路没有 Skill，把[没有 Skill 时](#没有-skill-时)的说明贴进自定义说明。官方步骤见 [Add custom MCP server](https://developers.openai.com/api/docs/guides/custom-mcp-server)。
+
+## 只接地址
+
+能填远程 MCP 地址的客户端都用同一个地址，不要加认证头。已经有别的服务器时，只把 `"ziwei"` 这一段合并进去，不要整份覆盖。
+
+Cursor 用户级写在 `~/.cursor/mcp.json`，只给当前项目用就写在项目里的 `.cursor/mcp.json`：
+
+```json title="Cursor"
+{
+  "mcpServers": {
+    "ziwei": {
+      "url": "https://ziwei-mcp.x-haose.com/mcp"
+    }
+  }
+}
+```
+
+Claude 比 Cursor 多一个 `"type": "http"`。Claude Code 写在项目根目录的 `.mcp.json`，或写进用户配置里的 `mcpServers`：
+
+```json title="Claude"
+{
+  "mcpServers": {
+    "ziwei": {
+      "type": "http",
+      "url": "https://ziwei-mcp.x-haose.com/mcp"
+    }
+  }
+}
+```
+
+Codex 写在 `~/.codex/config.toml`，或用等价命令。不要加 bearer token，也不要跑 `codex mcp login`：
+
+```toml title="Codex"
+[mcp_servers.ziwei]
+url = "https://ziwei-mcp.x-haose.com/mcp"
+```
+
+```bash title="Codex"
+codex mcp add ziwei --url https://ziwei-mcp.x-haose.com/mcp
+```
+
+Grok 网页打开 [grok.com/connectors](https://grok.com/connectors)，**New Connector** → **Custom**，URL 填上面的地址，认证留空。Grok Build 写进配置：
+
+```bash title="Grok"
+grok mcp add --transport http ziwei https://ziwei-mcp.x-haose.com/mcp
+```
+
+Cascade（Windsurf / Devin Desktop）的远程 HTTP 条目用 `serverUrl`：
+
+```json title="Cascade"
+{
+  "mcpServers": {
+    "ziwei": {
+      "serverUrl": "https://ziwei-mcp.x-haose.com/mcp"
+    }
+  }
+}
+```
+
+## 没有 Skill 时
+
+把下面这段贴进系统提示或自定义说明。它是插件 Skill 的精简版，完整版是仓库里的 [`SKILL.md`](https://github.com/x-haose/x-ziwei/blob/main/plugin/skills/ziwei/SKILL.md)。这只是默认做法，你可以改成自己的解读方法。
+
+```text title="说明"
+你用紫微斗数工具解读命盘。盘由工具算，解读由你做。
+
+先确认生辰：历法（公历或农历）、日期、性别、出生钟点或时辰。缺哪项问哪项，不猜。
+钟点传 birth.clock（HH:MM）；只知道时辰传 birth.time_index（0 早子，12 晚子）。23 点是 12，不是 0。
+农历要确认是否闰月，传 birth.leap；不要自己换算公历农历。
+
+工具：
+- ziwei_get_natal_chart：完整本命盘。
+- ziwei_get_horoscope：某个日期的大限、流年、流月、流日、流时；目标日期和时辰都要明确。
+- ziwei_get_topic_palaces：知识包对某类问题（婚恋、事业、财运等）的取材。
+- ziwei_list_knowledge / ziwei_lookup_knowledge：查知识包目录与条目原文。
+
+回答时：
+- 工具没返回的星、宫、四化、格局不写，不凭记忆补。
+- 分清盘面事实、知识包释义（一种资料观点）和你自己的分析。
+- 工具报错就说明错误，不编结果。
+- 不断言寿命、疾病诊断或灾祸一定发生。
+```
+
+## 装上之后怎么说
+
+不必背参数名。用白话说，模型自己去填。
+
+| 你说 | 模型调用 |
+| --- | --- |
+| 「帮我排个盘：公历 2000-8-16，凌晨 3 点半，女」 | `ziwei_get_natal_chart` |
+| 「看看我 2027 年 3 月 1 日中午的流年」 | `ziwei_get_horoscope` |
+| 「我的感情婚姻怎么样」 | `ziwei_get_topic_palaces` |
+| 「紫微和天府同宫是什么意思」 | `ziwei_list_knowledge`、`ziwei_lookup_knowledge` |
+
+工具交出来的是盘面事实和知识包原文，不是已经写好的「事业如何」。话是模型说的，数是工具算的。
+
+<Callout type="warn" title="别让模型自己安星">
+它算不准干支与安星，而且错得看不出来。盘只从工具来。模型若开始凭记忆报星，让它重新调用工具。
+</Callout>

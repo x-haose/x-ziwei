@@ -1,0 +1,17 @@
+{
+  "title": "x-ziwei",
+  "root": true,
+  "pages": [
+    "---使用---",
+    "install",
+    "tools",
+    "knowledge",
+    "---开发者---",
+    "api",
+    "self-host",
+    "---关于---",
+    "privacy",
+    "terms",
+    "support"
+  ]
+}

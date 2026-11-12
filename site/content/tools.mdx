@@ -1,0 +1,115 @@
+---
+title: 工具
+description: 五个只读工具：本命盘、运限、按主题取材、知识包条目与目录。
+icon: Wrench
+---
+
+五个工具都只读，不保存任何东西。前三个算盘，后两个查知识包。
+
+| 工具 | 返回 |
+| --- | --- |
+| `ziwei_get_natal_chart` | 本命盘事实（Markdown）：基本信息、十二宫、格局。可选只要总览，可选附知识包释义 |
+| `ziwei_get_horoscope` | 指定日期与时辰的大限、小限、流年、流月、流日、流时 |
+| `ziwei_get_topic_palaces` | 按知识包里的主题定义取本命宫位事实与释义。看哪些宫由知识包决定 |
+| `ziwei_lookup_knowledge` | 知识包条目原文：释义、古籍引文、成立条件、主题的选宫定义 |
+| `ziwei_list_knowledge` | 知识包目录：有哪些条目，名称对应什么标识 |
+
+盘面由 [x-iztro](https://x-iztro.x-haose.com/zh) 计算，与 iztro 逐字段对齐，服务所用内核对齐的是 iztro v2.6.3。这是复现口径，不是流派裁决。
+
+## 出生参数
+
+前三个工具共用一组出生参数，放在 `birth` 里：
+
+```json title="最短入参"
+{
+  "birth": {
+    "date": "2000-8-16",
+    "clock": "03:30",
+    "gender": "female"
+  }
+}
+```
+
+| 字段 | 必填 | 取值 |
+| --- | --- | --- |
+| `calendar` | 否 | `solar` 公历（默认），`lunar` 农历 |
+| `date` | 是 | `YYYY-M-D`，如 `2000-8-16`，不含钟点 |
+| `clock` / `time_index` | 二选一 | `clock` 是 `HH:MM`；`time_index` 是整数 0–12，见[时辰](#时辰) |
+| `gender` | 是 | `male` 或 `female` |
+| `leap` | 否 | 农历闰月：`not_leap`（默认）、`leap`、`leap_fixed`（闰月十五之后按下月） |
+| `fix_leap` | 否 | 默认 `true`，只对公历有意义 |
+| `language` | 否 | 默认 `zh-CN`。另有 `zh-TW` `en-US` `ja-JP` `ko-KR` `vi-VN` |
+
+默认盘面语言是简体中文。给模型喂中文盘，比喂英文意译的星名更稳；用别的语言提问时，仍取中文盘，用提问的语言回答。
+
+## 各工具的其余参数
+
+### `ziwei_get_natal_chart`
+
+| 字段 | 取值 |
+| --- | --- |
+| `detail` | `full`（默认，含十二宫详解）或 `overview`（基本信息、十二宫总览表、格局） |
+| `knowledge` | `summary` 或 `full`：在各宫与格局后附知识包释义。省略则只返回事实 |
+
+### `ziwei_get_horoscope`
+
+在 `birth` 之外必须给 `target`：
+
+```json
+{
+  "birth": { "date": "2000-8-16", "clock": "03:30", "gender": "female" },
+  "target": { "date": "2027-3-1", "clock": "12:00" }
+}
+```
+
+`target.date` 恒为公历；`target.clock` 或 `target.time_index` 至少给一个。目标时辰不继承出生时辰，也不读取当前时间。`detail` 与 `knowledge` 同上。
+
+### `ziwei_get_topic_palaces`
+
+| 字段 | 取值 |
+| --- | --- |
+| `topic` | 知识包里的主题标识，如默认包的 `romance`、`career`、`wealth`。用 `ziwei_list_knowledge` 列出 |
+| `knowledge` | `summary`（默认）或 `full` |
+| `detail` | 同上 |
+
+只取本命宫位；运限用 `ziwei_get_horoscope`。选哪些宫是知识包的观点，见[知识包](/zh/knowledge#主题)。
+
+### `ziwei_lookup_knowledge`
+
+```json
+{ "kind": "star", "keys": ["ziweiMaj", "tianfuMaj"] }
+```
+
+`kind` 为 `star` / `pattern` / `palace` / `mutagen` / `concept` / `topic`。`keys` 是 1–20 个语言无关标识，不接受译名；任一不存在则整次失败，不返回相近条目。
+
+### `ziwei_list_knowledge`
+
+`kind` 可选，省略则列全部六段。每段是标识与显示名的对照，用来把盘面文本里的星名、宫名、格局名对应到查询用的标识。
+
+## 时辰
+
+`time_index` 不是钟点。子时拆成首尾两段，所以是 0–12 共 13 个值。知道钟点时直接传 `clock`，不用自己换算。
+
+| 索引 | 时辰 | 时间 | 索引 | 时辰 | 时间 |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 早子时 | 00:00–01:00 | 7 | 未时 | 13:00–15:00 |
+| 1 | 丑时 | 01:00–03:00 | 8 | 申时 | 15:00–17:00 |
+| 2 | 寅时 | 03:00–05:00 | 9 | 酉时 | 17:00–19:00 |
+| 3 | 卯时 | 05:00–07:00 | 10 | 戌时 | 19:00–21:00 |
+| 4 | 辰时 | 07:00–09:00 | 11 | 亥时 | 21:00–23:00 |
+| 5 | 巳时 | 09:00–11:00 | 12 | 晚子时 | 23:00–24:00 |
+| 6 | 午时 | 11:00–13:00 | | | |
+
+<Callout type="warn" title="晚上 11 点以后是 12，不是 0">
+23:00–24:00 出生要说「晚子时」或「23 点」，不要笼统说「子时」。这两个索引排出的盘不同：默认配置下晚子时按次日推算日柱。
+</Callout>
+
+工具按钟表时间排盘，不做真太阳时校正。出生地经度偏离时区中线较多、钟点又贴近时辰交界时，时辰可能有出入。
+
+## 它不做什么
+
+- 不写命理结论。工具给的是盘面文字和知识包原文，解读是模型读完之后的事。
+- 不保存命盘，不缓存排盘结果，不需要账号。
+- 不接受模型自己安星、自己推干支。
+
+错误码与同一套功能的 HTTP JSON 接口见 [HTTP 接口](/zh/api)。

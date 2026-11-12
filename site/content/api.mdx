@@ -1,0 +1,61 @@
+---
+title: HTTP 接口
+description: 与 MCP 工具一一对应的 JSON 接口，附 OpenAPI 文档。给不接 MCP 的程序和低代码平台。
+icon: Network
+---
+
+`/v1` 与 MCP 工具是同一份实现的两种协议：五个操作一一对应、入参相同。接口公开、免费，无需 API Key 或账号，允许集成到你自己的产品里。
+
+```text
+https://ziwei-mcp.x-haose.com
+```
+
+| 路径 | 对应的 MCP 工具 |
+| --- | --- |
+| `POST /v1/chart` | `ziwei_get_natal_chart` |
+| `POST /v1/horoscope` | `ziwei_get_horoscope` |
+| `POST /v1/topic` | `ziwei_get_topic_palaces` |
+| `POST /v1/lookup` | `ziwei_lookup_knowledge` |
+| `POST /v1/catalog` | `ziwei_list_knowledge` |
+
+OpenAPI 3.1 文档在 [`/v1/openapi.json`](https://ziwei-mcp.x-haose.com/v1/openapi.json)，结构由服务的请求与响应类型生成。
+
+## 调用
+
+```bash
+curl https://ziwei-mcp.x-haose.com/v1/chart \
+  -H 'Content-Type: application/json' \
+  -d '{"birth":{"date":"2000-8-16","clock":"03:30","gender":"female"}}'
+```
+
+请求体与响应体都是 JSON，入参见[工具](/zh/tools)。请求里出现未知字段即拒绝。
+
+成功：
+
+```json
+{ "ok": true, "data": { "text": "# 命盘 2000-8-16 寅时 女\n…", "language": "zh-CN" } }
+```
+
+失败：
+
+```json
+{ "ok": false, "data": null, "error": { "code": "invalid_date", "message": "…", "retryable": false } }
+```
+
+## 错误与限制
+
+| HTTP | `error.code` | 含义 |
+| --- | --- | --- |
+| 400 | `invalid_date` `invalid_time_index` `invalid_clock` `time_mismatch` `invalid_argument` | 入参非法 |
+| 400 | `unknown_key` `unknown_topic` | 知识条目或主题不存在 |
+| 400 | `pack_not_allowed` | 知识包不在白名单 |
+| 413 | `invalid_argument` | 请求体超过 64 KiB |
+| 429 | `rate_limited` | 超过限流，可稍后重试 |
+| 500 | `internal` | 内部错误 |
+| 503 | `pack_unavailable` | 知识包读不到，可稍后重试 |
+
+- 每个地址每秒 10 次，可突发 30 次。
+- 允许任意来源跨域访问，浏览器网页可以直接请求；不使用 Cookie。
+- 这是免费的公开服务，不保证可用性。生产环境建议[自己部署](/zh/self-host)，或直接嵌入[排盘库 x-iztro](https://x-iztro.x-haose.com/zh)。
+
+完整契约见仓库里的[接口说明](https://github.com/x-haose/x-ziwei/blob/main/docs/http-api.md)。

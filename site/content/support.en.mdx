@@ -1,0 +1,28 @@
+---
+title: Support
+description: Where to go with a problem, a chart you believe is wrong, or a suggestion.
+icon: LifeBuoy
+---
+
+Questions, bug reports and suggestions go to GitHub:
+
+**[github.com/x-haose/x-ziwei/issues](https://github.com/x-haose/x-ziwei/issues)**
+
+This is an open-source project maintained by one person. There is no help desk and no guaranteed response time.
+
+## When reporting a problem, include
+
+- Which client you used (Claude Code, ChatGPT, Codex and so on).
+- Which tool was called, with what parameters, and what came back. If the tool failed, paste the `code` and `message`.
+- If you believe a chart is wrong: the result you expected and what it is based on, such as the output of another charting program.
+
+<Callout type="warn" title="Issues are public">
+Anything you post is visible to everyone. Do not post another person's real birth data; use a different date that reproduces the problem.
+</Callout>
+
+## Check these first
+
+- **A birth after 11pm looks wrong**: 23:00–24:00 is late Zi, with hour index 12, not 0. See [Hours](/en/tools#hours).
+- **The model mentions stars that are not in the chart**: the model is filling in from memory. Make it call the tools again and use only what they return.
+- **Rate limited (429)**: the limit is 10 requests per second per address. Try again shortly; for more, [host it yourself](/en/self-host).
+- **A problem with the charting library itself** (the Rust, Python or Go library): report it at [x-iztro](https://github.com/x-haose/x-iztro/issues).

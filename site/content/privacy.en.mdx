@@ -1,0 +1,61 @@
+---
+title: Privacy policy
+description: What data the x-ziwei service and this site process, how long it is kept, and who handles it.
+icon: ShieldCheck
+---
+
+Effective date: 12 November 2026
+
+x-ziwei is an open-source project maintained by x-haose as an individual. This policy covers the public service at `https://ziwei-mcp.x-haose.com` (MCP and HTTP API) and this site at `https://ziwei.x-haose.com`.
+
+In one sentence: the service computes and discards. There are no accounts, your birth data is not stored, and your conversations are not recorded.
+
+## What the service receives
+
+When your AI client calls a tool, the service receives that call's parameters:
+
+- Birth information: calendar, date, hour or clock time, gender, and whether the month is a leap month.
+- The target date and hour for horoscope layers.
+- Options such as a topic key, knowledge-pack entry keys and the text language.
+
+The service does **not** receive your name, account or contact details, and it does not receive your conversation with the AI. Some clients attach an anonymous user or session identifier, a locale and an approximate location to a call; the service does not read, use or store those fields.
+
+A birth date and hour are personal information. The service uses them only to cast the chart: a chart cannot be cast without them, and they have no other use here.
+
+## How it is handled
+
+- **Computed in memory only.** The service receives the parameters, computes the chart and returns it. Birth data and results are not written to a database, a file or a cache, and are discarded when the request ends.
+- **No accounts and no user profiles.** The service cannot tell that two calls came from the same person.
+- **Operational logs contain no birth data.** For each call the service logs only the tool name, text language, topic key, knowledge-pack id and error category, for troubleshooting. Logs contain neither birth information nor your network address; they stay in the container that runs the service and are not archived elsewhere.
+- **Network addresses are used for rate limiting only.** To stop a single address from exhausting the service, it counts requests per address in memory. Idle entries are dropped automatically and nothing is written to logs or disk.
+
+## Third parties involved
+
+Before a request reaches the service it passes through infrastructure providers, which handle network-level data such as IP address and request time under their own policies:
+
+- **Cloudflare**: the network proxy in front of the public service.
+- **A cloud server provider**: the host the service runs on. The gateway in front of the service has access logging turned off.
+- **Vercel**: the host of this site.
+- **GitHub**: anything you post in Issues is public under GitHub's policies.
+
+We do not sell data, show ads, or pass data to anyone other than the above.
+
+## Your AI client
+
+Your conversation with the AI and the readings it generates are processed and stored by the client you use (such as ChatGPT or Claude) under its own privacy policy. A chart returned by the tools becomes part of that conversation; x-ziwei cannot view or delete it.
+
+## This site
+
+This site uses no cookies and has no analytics or advertising. Your browser remembers your light or dark theme choice locally. Search terms are sent to this site's own search endpoint and are not stored.
+
+## Retention and your choices
+
+The service does not keep your birth data, so there is no record to access, correct or delete. If you would rather birth data did not pass through the public service, you can [host it yourself](/en/self-host) and have it processed only on your machine.
+
+## Children
+
+The service is intended for a general audience and is not directed at children under 13.
+
+## Changes and contact
+
+When this policy changes, this page and the effective date above are updated. For questions, open an issue at [GitHub Issues](https://github.com/x-haose/x-ziwei/issues).

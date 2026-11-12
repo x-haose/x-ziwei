@@ -1,0 +1,70 @@
+---
+title: Self-hosting
+description: One binary or one container. Use your own knowledge pack, or keep birth data on your machine.
+icon: Server
+---
+
+When the public service is enough, there is nothing to deploy. Two cases make running your own worthwhile: you want the tools to use your own knowledge pack, or you do not want birth data to leave your machine.
+
+The source is at [x-haose/x-ziwei](https://github.com/x-haose/x-ziwei), MIT licensed.
+
+## On your machine (stdio)
+
+Requires Rust 1.88 or later and Git.
+
+```bash
+git clone https://github.com/x-haose/x-ziwei
+cd x-ziwei
+cargo build --release --locked
+```
+
+This produces `target/release/x-ziwei`. Register it in your client as a local MCP server, and birth data is handled only on your machine:
+
+```json title=".mcp.json"
+{
+  "mcpServers": {
+    "ziwei": {
+      "command": "/your/path/x-ziwei",
+      "args": ["stdio"]
+    }
+  }
+}
+```
+
+## As a service
+
+```bash
+docker build -t x-ziwei .
+docker run --rm -p 8080:8080 x-ziwei
+```
+
+Or run the binary directly: `x-ziwei serve --listen 127.0.0.1:8080`.
+
+- MCP: `http://127.0.0.1:8080/mcp`
+- JSON API: `http://127.0.0.1:8080/v1/*`
+- Health check: `GET /healthz`
+
+| Flag | Purpose |
+| --- | --- |
+| `--listen` | Listen address, default `0.0.0.0:8080` |
+| `--allowed-host` | MCP accepts only this `Host`; repeatable. Set it for a public deployment |
+| `--public-url` | The public HTTPS origin. `/v1/openapi.json` is served only when it is set |
+| `--client-ip-header` | Behind a reverse proxy, the request header that carries the client address, used as the rate-limit key. `cf-connecting-ip` behind Cloudflare, `x-real-ip` behind Traefik or nginx |
+| `--rate-per-second` / `--rate-burst` | Per-address rate limit, default 10 per second with bursts of 30 |
+
+<Callout type="warn" title="The proxy must overwrite the client address header">
+Set `--client-ip-header` only when the proxy in front always rewrites that header; otherwise a client can forge an address and bypass the limit. Behind Cloudflare, also make the origin accept connections from Cloudflare only.
+</Callout>
+
+## Using your own knowledge pack
+
+Register the directories or URLs it may read at startup:
+
+```bash
+x-ziwei stdio --allow-pack-dir ./packs
+x-ziwei serve --allow-pack-url https://example.com/my-school.json
+```
+
+After that, each tool's `pack` parameter accepts `file:./packs/my-school.json` or the registered URL. Paths and URLs outside the allowlist are rejected; a remote pack may be at most 1 MiB.
+
+How to write a pack is on [Knowledge pack](/en/knowledge#using-your-own-knowledge). A pack whose `extends` is `iztro-docs` is merged on top of the default pack.
