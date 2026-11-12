@@ -1,7 +1,7 @@
 {
   "name": "ziwei",
   "displayName": "x-ziwei 紫微斗数",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "紫微斗数：公开的盘面事实、知识包与解读 Skill。盘由 x-iztro 计算，解读交给你的模型。",
   "author": {
     "name": "x-haose",

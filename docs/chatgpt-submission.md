@@ -10,6 +10,13 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 
 上架前，用户可以在 ChatGPT 的 Plugins 页用「Add custom MCP server」自己接入：填 MCP 地址，Authentication 选 No authentication。
 
+上架前从插件市场（`x-haose/x-ziwei`）安装的插件，在两种对话里表现不同（2026-11-12 实测，ChatGPT 桌面应用自带的 codex-cli 0.163.0-alpha.11.1）：
+
+- Codex 线程：`.mcp.json` 里的服务器由本机 Codex 运行时连接，五个工具可调用，Skill 也在。
+- ChatGPT 普通对话：模型在云端，看得到插件和 Skill，看不到 `.mcp.json` 里的服务器。这里的 MCP 工具只来自在 ChatGPT 里登记过的服务器（「Add custom MCP server」，或上架时由门户登记），插件用 `.app.json` 指向登记后的 `plugin_asdk_app…` 标识。这个标识属于登记它的账号，不能写进公开仓库给所有人用。
+
+项目级的 `.codex/config.toml` 里如果有同名的 `[mcp_servers.ziwei]`，在该目录下开的 Codex 线程会用它，而不是插件里的那一个。
+
 ## 服务端要求与现状
 
 | 要求 | 现状 |
@@ -37,7 +44,7 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 `interface` 的要求与现状：
 
 - `longDescription`（≤4000 字符）、`capabilities`：已填，`capabilities` 为 `["Read"]`
-- `category`：只能从 Productivity、Creativity、Developer Tools、Business & Operations、Data & Analytics、Communication、Education & Research、Security、Finance、Healthcare、Travel、Entertainment、Other 里选。现为 Productivity，待发布者定
+- `category`：只能从 Productivity、Creativity、Developer Tools、Business & Operations、Data & Analytics、Communication、Education & Research、Security、Finance、Healthcare、Travel、Entertainment、Other 里选。现为 Entertainment（可选项里没有命理或生活方式类）
 - `websiteURL`、`supportURL`、`privacyPolicyURL`、`termsOfServiceURL`：带 MCP 的插件四个链接都必填，HTTPS，页面要能打开，且与提交者是同一发布方。已填站点不带语言前缀的地址，站点按浏览器语言跳到 `/zh` 或 `/en`
 - `logo`、`composerIcon`：方形，≥48×48，PNG / JPEG / WebP / SVG，≤5 MiB。已填
 
