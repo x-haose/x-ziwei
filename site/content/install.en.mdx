@@ -126,7 +126,7 @@ For a lunar date, confirm whether the month is a leap month and pass birth.leap.
 
 Tools:
 - ziwei_get_natal_chart: the full natal chart.
-- ziwei_get_horoscope: horoscope layers. For a year pass target.year (a lunar year, e.g. 2027) and get the decadal, age and yearly layers; for a month or day pass target.date and get monthly and daily too; add target.clock only for the hourly layer. When the user says this year, this month or today, fill in the current date without asking; never invent a date or hour the user did not give.
+- ziwei_get_horoscope: horoscope layers. For a year pass only target.year (a lunar year, e.g. 2027) and get the decadal, age and yearly layers with a month-by-month table; for a month pass target.year and target.month (a lunar month); pass target.date only when a specific day is asked about, and add target.clock only for a specific hour. Answer at the level the user asked. When you know the current date, fill in "this year" or "this month" without asking; never invent a date or hour the user did not give.
 - ziwei_get_topic_palaces: what the knowledge pack selects for a kind of question (romance, career, wealth and so on).
 - ziwei_list_knowledge / ziwei_lookup_knowledge: the knowledge pack's catalog and entry text.
 
@@ -144,7 +144,7 @@ You do not need to memorise parameter names. Say it in plain words and the model
 | You say | The model calls |
 | --- | --- |
 | "Cast my chart: solar 2000-8-16, 3:30am, female" | `ziwei_get_natal_chart` |
-| "How does this year look for me?" / "What about 1 March 2027?" | `ziwei_get_horoscope` |
+| "How does this year look for me?" / "And the third lunar month next year?" | `ziwei_get_horoscope` |
 | "How do my relationships look?" | `ziwei_get_topic_palaces` |
 | "What does Ziwei with Tianfu in the same palace mean?" | `ziwei_list_knowledge`, `ziwei_lookup_knowledge` |
 

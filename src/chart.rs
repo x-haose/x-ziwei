@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use x_iztro::{
     Astrolabe, HoroscopeData, KnowledgePack, Scope, TextDetail, TextOptions,
     astrolabe_to_text_with, by_lunar, by_solar, get_horoscope, horoscope_to_text_with,
-    topic_to_text,
+    monthly_list_to_text_with, topic_to_text,
 };
 
 use crate::birth::{Birth, Calendar, Target};
@@ -92,26 +92,36 @@ pub fn cast(birth: &Birth) -> Result<Astrolabe, Error> {
 /// 一次运限计算的结果，连同目标精度允许写到的最细一层。
 pub struct Horoscope {
     /// 内核算出的各层运限。比 `through` 更细的层取自内核定的代表时刻（农历年取六月初一，
-    /// 公历日取早子时），不是调用方给的，文本不写它们。
+    /// 农历月取初一，公历日取早子时），不是调用方给的，文本不写它们。
     data: HoroscopeData,
     /// 文本写到这一层为止。
     through: Scope,
+    /// 只问年份时，文末附这个农历年的流月一览。
+    months_of: Option<i64>,
 }
 
-/// 按目标精度算运限：农历年到流年，公历日到流日，带时辰到流时。
+/// 按目标精度算运限：农历年到流年，农历月到流月，公历日到流日，带时辰到流时。
 pub fn cast_horoscope(chart: &Astrolabe, target: &Target) -> Result<Horoscope, Error> {
     Ok(match target {
         Target::Year(year) => Horoscope {
             data: chart.horoscope_of_year(*year)?.into_data(),
             through: Scope::Yearly,
+            months_of: Some(*year),
+        },
+        Target::Month(year, month) => Horoscope {
+            data: chart.horoscope_of_month(*year, *month)?.into_data(),
+            through: Scope::Monthly,
+            months_of: None,
         },
         Target::Day(date) => Horoscope {
             data: get_horoscope(chart, date, None, chart.language)?,
             through: Scope::Daily,
+            months_of: None,
         },
         Target::Hour(date, time_index) => Horoscope {
             data: get_horoscope(chart, date, *time_index, chart.language)?,
             through: Scope::Hourly,
+            months_of: None,
         },
     })
 }
@@ -125,20 +135,30 @@ pub fn natal_text(chart: &Astrolabe, projection: Projection) -> Result<String, E
     ))
 }
 
-/// 运限 Markdown：大限、小限、流年、流月、流日、流时各一节，写到目标精度对应的那一层为止；
-/// 宫名按各层自己的命宫起排。
+/// 运限 Markdown：大限、小限、流年、流月、流日、流时各一节，写到目标精度对应的那一层为止，
+/// 宫名按各层自己的命宫起排；只问年份时文末另附该农历年的流月一览。
 pub fn horoscope_text(
     chart: &Astrolabe,
     horoscope: &Horoscope,
     projection: Projection,
 ) -> Result<String, Error> {
-    let options = projection.options()?.horoscope_through(horoscope.through)?;
-    Ok(horoscope_to_text_with(
+    let options = projection.options()?;
+    let mut text = horoscope_to_text_with(
         chart,
         &horoscope.data,
-        &options,
+        &options.horoscope_through(horoscope.through)?,
         chart.language,
-    ))
+    );
+    if let Some(year) = horoscope.months_of {
+        text.push('\n');
+        text.push_str(&monthly_list_to_text_with(
+            chart,
+            year,
+            &options,
+            chart.language,
+        )?);
+    }
+    Ok(text)
 }
 
 /// 主题 Markdown：选哪些宫由知识包里该主题的定义决定，本进程不参与。只取本命宫位。
@@ -243,16 +263,18 @@ mod tests {
             "## 流日",
             "## 流时",
         ];
-        for (target, kept) in [
-            (Target::Year(2027), 3),
-            (Target::Day("2026-11-11".into()), 5),
-            (Target::Hour("2026-11-11".into(), 12), 6),
+        for (target, kept, months) in [
+            (Target::Year(2027), 3, true),
+            (Target::Month(2027, 3), 4, false),
+            (Target::Day("2026-11-11".into()), 5, false),
+            (Target::Hour("2026-11-11".into(), 12), 6, false),
         ] {
             let horoscope = cast_horoscope(&chart, &target).unwrap();
             let text = horoscope_text(&chart, &horoscope, facts(Detail::Overview)).unwrap();
             for (i, heading) in sections.iter().enumerate() {
                 assert_eq!(text.contains(heading), i < kept, "{target:?} {heading}");
             }
+            assert_eq!(text.contains("# 流月一览 2027"), months, "{target:?}");
         }
     }
 

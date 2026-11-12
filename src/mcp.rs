@@ -58,7 +58,7 @@ impl ZiweiMcp {
     #[tool(
         name = "ziwei_get_horoscope",
         title = "紫微斗数运限",
-        description = "紫微斗数运限。给定生辰与运限目标，返回 Markdown：各层的宫名对照、四化落宫、流耀与行运格局。目标给到哪个精度就返回到哪一层：只给 target.year 返回大限、小限、流年；给 target.date 再加流月、流日；再给 target.clock 或 target.time_index 才有流时。target.year 是农历年，用公历年份数字表示（2027 指 2027 年正月初一起的丁未年）；问某一年的运势用它，不要改填该年 1 月 1 日，春节前的日子仍属上一个农历年。用户说今年、这个月、今天，而你知道当前日期时直接填，不必追问；用户没给的日期或时辰不要替他编。只给 year 时，标题里的日期是该农历年六月初一，这三层取自那一天。knowledge=summary/full 时附流耀与格局的知识包释义。",
+        description = "紫微斗数运限。给定生辰与运限目标，返回 Markdown：各层的宫名对照、四化落宫、流耀与行运格局。目标按用户怎么问来给，问到哪一层就返回到哪一层，不要比用户问得更细：问某一年（今年、明年、2027 年）只给 target.year，返回大限、小限、流年和全年各流月一览；问某个月给 target.year 加 target.month，返回到流月；只有问到具体某一天才给 target.date，返回到流日；只有问到具体时辰才再给 target.clock 或 target.time_index，返回到流时。target.year 是农历年，用公历年份数字表示（2027 指 2027 年正月初一起的丁未年）；不要改填该年 1 月 1 日，春节前的日子仍属上一个农历年。target.month 是农历月 1–12；用户说公历月份时，按流月一览里的阳历起止日对应到农历月，并在回答里说明。你知道当前日期时，「今年」「这个月」直接填，不必追问；用户没给的日期或时辰不要替他编。只给 year 时标题里的日期是该农历年六月初一，给 year 加 month 时是该月初一，各层取自那一天。knowledge=summary/full 时附流耀、格局与流月四化星的知识包释义。",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -141,8 +141,8 @@ impl ServerHandler for ZiweiMcp {
                  Keep chart facts, knowledge-pack text and your own analysis distinguishable. \
                  Knowledge-pack text is one school's reference view, not the only reading; you may follow the user's own \
                  method or knowledge instead. \
-                 Tools: ziwei_get_natal_chart returns the natal chart; ziwei_get_horoscope the decadal and yearly layers for a target year, \
-                 plus monthly and daily for a date and hourly for an hour; ziwei_get_topic_palaces the palaces a knowledge-pack topic selects; \
+                 Tools: ziwei_get_natal_chart returns the natal chart; ziwei_get_horoscope the decadal and yearly layers with a month-by-month table for a target year, \
+                 down to the monthly layer for a year and month, the daily layer for a date, the hourly layer for an hour; ziwei_get_topic_palaces the palaces a knowledge-pack topic selects; \
                  ziwei_list_knowledge and ziwei_lookup_knowledge the knowledge pack itself."
                     .to_string(),
             )

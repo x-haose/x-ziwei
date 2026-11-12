@@ -12,7 +12,7 @@
       "name": "ziwei",
       "source": "./plugin",
       "description": "紫微斗数：公开的盘面事实、知识包与解读 Skill。盘由 x-iztro 计算，解读交给你的模型。",
-      "version": "0.2.2"
+      "version": "0.2.3"
     }
   ]
 }

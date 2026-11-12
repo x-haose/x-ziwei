@@ -214,7 +214,12 @@ async fn v1_api_over_http() {
     assert_eq!(with_notes["data"]["pack"]["id"], "iztro-docs");
 
     for (target, last, absent) in [
-        (json!({"year": 2027}), "## 流年", Some("## 流月")),
+        (json!({"year": 2027}), "# 流月一览 2027", Some("## 流月")),
+        (
+            json!({"year": 2027, "month": 3}),
+            "## 流月",
+            Some("## 流日"),
+        ),
         (json!({"date": "2026-11-11"}), "## 流日", Some("## 流时")),
         (
             json!({"date": "2026-11-11", "time_index": 12}),
@@ -306,6 +311,14 @@ async fn v1_api_over_http() {
         (
             "horoscope",
             json!({"birth": birth(), "target": {"year": 2027, "clock": "12:00"}}),
+        ),
+        (
+            "horoscope",
+            json!({"birth": birth(), "target": {"year": 2027, "month": 13}}),
+        ),
+        (
+            "horoscope",
+            json!({"birth": birth(), "target": {"date": "2027-3-1", "month": 3}}),
         ),
         (
             "horoscope",

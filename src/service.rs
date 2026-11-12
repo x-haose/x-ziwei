@@ -46,7 +46,7 @@ pub struct ChartRequest {
 pub struct HoroscopeRequest {
     /// 生辰。
     pub birth: BirthRequest,
-    /// 运限目标：农历年、公历日期，或公历日期加时辰。给到哪个精度就返回到哪一层。
+    /// 运限目标：农历年、农历年加月、公历日期，或公历日期加时辰。问到哪一层就返回到哪一层。
     pub target: TargetRequest,
     /// 事实详略：`full`（默认）或 `overview`。
     #[serde(default)]

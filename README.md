@@ -19,7 +19,7 @@
 | 工具 | 作用 |
 |---|---|
 | `ziwei_get_natal_chart` | 本命盘事实（Markdown），可选附知识包释义 |
-| `ziwei_get_horoscope` | 运限：给年份返回大限、小限、流年，给日期再加流月、流日，再给时辰加流时 |
+| `ziwei_get_horoscope` | 运限：问某一年返回大限、小限、流年与各月一览，问某个月到流月，问某一天到流日，问时辰到流时 |
 | `ziwei_get_topic_palaces` | 按知识包里的主题定义（婚恋、事业、财运等）取本命宫位事实与释义 |
 | `ziwei_lookup_knowledge` | 按标识查知识包条目原文：释义、古籍引文、成立条件、主题的选宫定义 |
 | `ziwei_list_knowledge` | 知识包目录：有哪些条目，名称对应什么标识 |

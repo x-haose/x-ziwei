@@ -20,20 +20,21 @@ description: Use when the user asks about Zi Wei Dou Shu (紫微斗数), natal c
 | 要什么 | 工具 |
 |---|---|
 | 完整本命盘 | `ziwei_get_natal_chart`（`detail=overview` 只要总览；`knowledge=summary` 顺带附释义摘要） |
-| 某一年的大限、小限、流年 | `ziwei_get_horoscope`，`target.year`（农历年，如 2027） |
-| 某月某日的流月、流日（连同上面三层） | `ziwei_get_horoscope`，`target.date` |
-| 某个时辰的流时（连同上面五层） | `ziwei_get_horoscope`，`target.date` 加 `target.clock` |
+| 某一年的大限、小限、流年，连同全年各流月一览 | `ziwei_get_horoscope`，只给 `target.year`（农历年，如 2027） |
+| 某个月的流月 | `ziwei_get_horoscope`，`target.year` 加 `target.month`（农历月 1–12） |
+| 某一天的流日、某个时辰的流时 | `ziwei_get_horoscope`，`target.date`，要流时再加 `target.clock` |
 | 知识包对某类问题的取材（婚恋、事业、财运等） | `ziwei_get_topic_palaces` |
 | 知识包里有哪些星、格局、术语、主题，名称对应什么标识 | `ziwei_list_knowledge` |
 | 某条释义的全文、格局的古籍引文与成立条件、主题的选宫定义 | `ziwei_lookup_knowledge` |
 
 `ziwei_get_topic_palaces` 选哪些宫是知识包的观点，不是唯一看法。想按别的方法看（夹宫、飞化、本命与运限合参等），直接取 `ziwei_get_natal_chart` / `ziwei_get_horoscope` 的完整事实自己组织。
 
-运限的目标按用户问到的精度给，不多问也不多填：
+运限按用户怎么问来取，问到哪一层就答到哪一层，不主动往下细分：
 
-- 问「今年」「明年」「某某年」：传 `target.year`。不要改传那一年的 1 月 1 日，春节前的日子仍属上一个农历年。
-- 问「这个月」「今天」「某月某日」：传 `target.date`。知道当前日期就直接用，不知道再问。
-- 只有用户问到具体时辰才传 `target.clock`。用户没给的日期和时辰不要替他编。
+- 问「今年」「明年」「某某年」：只传 `target.year`。回答以流年为主，结合大限；流月一览用来点出哪几个月值得留意，不必逐月展开。不要改传那一年的 1 月 1 日，春节前的日子仍属上一个农历年。
+- 问某个月：传 `target.year` 加 `target.month`。月份是农历月；用户说公历月份时，按流月一览里的阳历起止日对应到农历月，并在回答里说明对应的是哪个农历月。
+- 只有用户问到具体某一天才传 `target.date`，问到具体时辰才再传 `target.clock`。
+- 知道当前日期时，「今年」「这个月」直接填，不追问；用户没给的日期和时辰不要替他编。
 
 排盘语言默认 `zh-CN`。用户用别的语言时仍取中文盘，用用户的语言回答。
 
