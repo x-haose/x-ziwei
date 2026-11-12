@@ -1,0 +1,7 @@
+interface:
+  display_name: "紫微斗数解读"
+  short_description: "先问清生辰，用工具排盘，再分清事实、释义与分析作答"
+  icon_small: "../../assets/icon.svg"
+  icon_large: "../../assets/logo.png"
+  brand_color: "#7D40C8"
+  default_prompt: "用 $ziwei 排紫微盘并解读：先问我的历法、出生日期、钟点和性别。"

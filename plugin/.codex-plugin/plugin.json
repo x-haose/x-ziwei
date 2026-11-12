@@ -1,6 +1,6 @@
 {
   "name": "ziwei",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Zi Wei Dou Shu chart facts, an open knowledge pack and a reading skill. Charts are computed by x-iztro; the interpretation is left to your model.",
   "author": {
     "name": "x-haose",
@@ -13,10 +13,24 @@
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "Ziwei",
+    "displayName": "x-ziwei 紫微斗数",
     "shortDescription": "紫微斗数排盘与开放知识包",
+    "longDescription": "x-ziwei 把紫微斗数的三样材料交给你的模型：盘面事实、知识包、解读方法。怎么解读由模型和你决定。\n\n盘面事实：按出生历法、日期、时辰、性别排出本命盘，以及指定日期的大限、小限、流年、流月、流日、流时。盘由 x-iztro 计算，模型不自己安星。\n\n知识包：星曜、格局、宫位、四化、术语的释义与古籍引文，以及婚恋、事业、财运等各类问题看哪些宫。条目可以按名称查目录、取原文。\n\n解读方法：随插件安装的 Skill 让模型先问清生辰再调工具，并把盘面事实、知识包释义和它自己的分析分开说。你给了自己的方法或资料时，按你的来。\n\n服务不写命理结论，不保存生辰，不需要账号。\n\nx-ziwei hands your model three things for Zi Wei Dou Shu: chart facts, a knowledge pack, and a reading method. How to read the chart is up to the model and you.\n\nChart facts: the natal chart from calendar, date, hour and gender, plus the decadal, age, yearly, monthly, daily and hourly layers for a given date. Charts are computed by x-iztro; the model does not place stars itself.\n\nKnowledge pack: notes and classical quotes for stars, patterns, palaces, mutagens and terms, and which palaces to read for a kind of question such as romance, career or wealth. Entries can be listed by name and fetched as written.\n\nReading method: the bundled Skill has the model confirm the birth data before calling the tools, and keep chart facts, knowledge-pack text and its own analysis apart. When you bring your own method or material, yours takes over.\n\nThe service does not write readings, does not store birth data, and needs no account.",
     "developerName": "x-haose",
     "category": "Productivity",
-    "websiteURL": "https://ziwei.x-haose.com"
+    "capabilities": ["Read"],
+    "websiteURL": "https://ziwei.x-haose.com",
+    "supportURL": "https://ziwei.x-haose.com/support",
+    "privacyPolicyURL": "https://ziwei.x-haose.com/privacy",
+    "termsOfServiceURL": "https://ziwei.x-haose.com/terms",
+    "brandColor": "#7D40C8",
+    "defaultPrompt": [
+      "帮我排紫微盘：公历 2000-8-16 凌晨 3 点半出生，女",
+      "我想看感情婚姻，先问我的生辰",
+      "紫微和天府同宫是什么意思"
+    ],
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/logo.png",
+    "screenshots": []
   }
 }

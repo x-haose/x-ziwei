@@ -32,14 +32,21 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 
 ## 提交包
 
-提交的是一个 ZIP，根目录即 `plugin/` 的内容。现有 `.codex-plugin/plugin.json` 是 Codex 兼容格式，缺这些上架字段：
+提交的是一个 ZIP，根目录即 `plugin/` 的内容。展示信息写在 `.codex-plugin/plugin.json` 的 `interface` 里，Skill 自己的名称与图标写在 `skills/ziwei/agents/openai.yaml`，图标在 `assets/`（`logo.png` 由 `icon.svg` 渲染）。官方目录里已上架的插件用的也是这种 `.codex-plugin/plugin.json` 写法；[打包格式](https://developers.openai.com/plugins/build/plugins)另外描述了把同样的内容放在根目录 `plugin.json` 的 `extensions.com.openai` 下的写法，两者并存时后者整体生效。
 
-- `interface.longDescription`（≤4000 字符）、`interface.capabilities`（可为空数组）
-- `interface.category`：只能从 Productivity、Creativity、Developer Tools、Business & Operations、Data & Analytics、Communication、Education & Research、Security、Finance、Healthcare、Travel、Entertainment、Other 里选
-- `interface.supportURL`、`privacyPolicyURL`、`termsOfServiceURL`：带 MCP 的插件四个链接都必填，HTTPS，页面要能打开，且与提交者是同一发布方
-- `interface.logo`、`interface.composerIcon`：方形，≥48×48，PNG / JPEG / WebP / SVG，≤5 MiB
+`interface` 的要求与现状：
+
+- `longDescription`（≤4000 字符）、`capabilities`：已填，`capabilities` 为 `["Read"]`
+- `category`：只能从 Productivity、Creativity、Developer Tools、Business & Operations、Data & Analytics、Communication、Education & Research、Security、Finance、Healthcare、Travel、Entertainment、Other 里选。现为 Productivity，待发布者定
+- `websiteURL`、`supportURL`、`privacyPolicyURL`、`termsOfServiceURL`：带 MCP 的插件四个链接都必填，HTTPS，页面要能打开，且与提交者是同一发布方。已填站点不带语言前缀的地址，站点按浏览器语言跳到 `/zh` 或 `/en`
+- `logo`、`composerIcon`：方形，≥48×48，PNG / JPEG / WebP / SVG，≤5 MiB。已填
+
+还缺的只有提交审核用的两项：
+
 - `extensions.com.openai.review`：恰好 5 条正面用例、3 条反面用例、演示录像地址
 - `extensions.com.openai.publication.release_notes`
+
+插件版本号写在 `.codex-plugin/plugin.json`、`.claude-plugin/plugin.json` 与 `.claude-plugin/marketplace.json` 三处，客户端按版本号缓存已安装的插件，改了插件内容要一起加版本号。
 
 文案限制：`displayName` 与 `shortDescription` 各 ≤30 字符；名称不用通用单词，不加 MCP、Plugin 后缀；描述里不写价格、免费、订阅，不与其他产品比较。
 
@@ -67,11 +74,11 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 
 1. OpenAI Platform 组织：提交人是所有者或有 Apps Management Write 权限；项目不能是欧盟数据驻留。API 支持地区列表不含中国大陆、香港、澳门。
 2. 在组织设置里完成个人或企业身份核验；目录里显示的开发者名取自核验结果。
-3. 四个公开页面已写在 `site/` 里，站点上线后对应：官网 `https://ziwei.x-haose.com/en`、支持 `/en/support`、隐私政策 `/en/privacy`、服务条款 `/en/terms`。隐私政策与条款是按服务的实际行为起草的，提交前要由发布者本人过一遍。
-4. 图标。
+3. 四个公开页面在 `site/` 里：官网 `https://ziwei.x-haose.com`、支持 `/support`、隐私政策 `/privacy`、服务条款 `/terms`，各有 `/zh` 与 `/en` 两个版本。隐私政策与条款是按服务的实际行为起草的，提交前要由发布者本人过一遍。
+4. 确认图标（`plugin/assets/`）。
 5. 演示录像：覆盖主要用例，桌面与移动端都要有。
 6. 真机跑一遍上面 8 条用例：网页、桌面、移动端的 ChatGPT，以及 Codex。
 7. 门户操作：上传 ZIP、连接 MCP、取域名校验口令并配置到服务、Verify Domain、提交、通过后手动点 Publish（批准不会自动上架）。
-8. 决定上架国家、分类、发布名称。
+8. 决定上架国家、分类、发布名称（现为「x-ziwei 紫微斗数」）。
 
 官方页面没有提到任何提交或上架费用，也不承诺审核时长。
