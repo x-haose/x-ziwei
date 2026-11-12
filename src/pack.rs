@@ -1,4 +1,7 @@
 //! 知识包来源：内嵌默认包、白名单本地文件、白名单 URL。任意 URL 直接拒绝。
+//!
+//! 自定义包声明 `extends` 为默认包的 `id` 时按覆盖包处理：合并到默认包之上，只写了几条的包也能查到其余条目。
+//! 没有 `extends` 的包整包独立使用。`extends` 指向其他包时拒绝：本进程拿不到那个底包。
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -100,20 +103,25 @@ impl PackStore {
     }
 
     async fn load_file(&self, path: &Path) -> Result<Arc<KnowledgePack>, Error> {
-        let canonical = tokio::fs::canonicalize(path).await.map_err(|e| {
+        let not_allowed = || {
             Error::new(
-                ErrorCode::PackUnavailable,
-                format!("cannot read pack file {}: {e}", path.display()),
-            )
-        })?;
-        if !self.file_allowed(&canonical) {
-            return Err(Error::new(
                 ErrorCode::PackNotAllowed,
-                format!(
-                    "pack file {} is outside allow-pack-dir",
-                    canonical.display()
-                ),
-            ));
+                format!("pack file {} is outside allow-pack-dir", path.display()),
+            )
+        };
+        let canonical = match tokio::fs::canonicalize(path).await {
+            Ok(canonical) => canonical,
+            // 白名单外的路径一律答「不允许」，不透露文件是否存在。
+            Err(_) if !self.file_allowed(path) => return Err(not_allowed()),
+            Err(e) => {
+                return Err(Error::new(
+                    ErrorCode::PackUnavailable,
+                    format!("cannot read pack file {}: {e}", path.display()),
+                ));
+            }
+        };
+        if !self.file_allowed(&canonical) {
+            return Err(not_allowed());
         }
         let key = format!("file:{}", canonical.display());
         if let Some(hit) = self.cached(&key) {
@@ -175,12 +183,19 @@ impl PackStore {
         self.parse_and_cache(key, json)
     }
 
-    fn file_allowed(&self, canonical: &Path) -> bool {
+    /// 路径是否落在某个白名单目录之下。带 `..` 的路径不算：按字面比较时它可以指到目录外。
+    fn file_allowed(&self, path: &Path) -> bool {
+        if path
+            .components()
+            .any(|c| c == std::path::Component::ParentDir)
+        {
+            return false;
+        }
         self.policy.allow_dirs.iter().any(|dir| {
             let Ok(base) = dir.canonicalize() else {
                 return false;
             };
-            canonical.starts_with(base)
+            path.starts_with(base)
         })
     }
 
@@ -195,7 +210,7 @@ impl PackStore {
     fn parse_and_cache(&self, key: String, json: &str) -> Result<Arc<KnowledgePack>, Error> {
         let pack = KnowledgePack::from_json(json)
             .map_err(|e| Error::invalid_argument(format!("knowledge pack JSON rejected: {e}")))?;
-        let arc = Arc::new(pack);
+        let arc = Arc::new(resolve_extends(pack)?);
         self.cache
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -204,9 +219,56 @@ impl PackStore {
     }
 }
 
+/// 按包的 `extends` 声明决定独立使用还是叠在默认包上。
+fn resolve_extends(pack: KnowledgePack) -> Result<KnowledgePack, Error> {
+    let Some(base_id) = pack.extends.as_deref() else {
+        return Ok(pack);
+    };
+    let builtin = KnowledgePack::builtin(Language::ZhCN)
+        .ok_or_else(|| Error::internal("builtin knowledge pack missing for zh-CN"))?;
+    if base_id != builtin.id {
+        return Err(Error::invalid_argument(format!(
+            "knowledge pack `{}` extends `{base_id}`, but the only base available is `{}`",
+            pack.id, builtin.id
+        )));
+    }
+    Ok(builtin.merged(&[&pack]))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn overlay_pack_is_merged_onto_builtin_and_standalone_pack_is_not() {
+        let overlay = KnowledgePack::from_json(
+            r#"{"schema":1,"id":"my-school","version":"1","language":"zh-CN","extends":"iztro-docs",
+                "topics":{"romance":{"surround":[],"palaces":["soulPalace"]}}}"#,
+        )
+        .unwrap();
+        let merged = resolve_extends(overlay).unwrap();
+        assert_eq!(merged.id, "my-school");
+        assert_eq!(
+            merged.topic("romance").unwrap().palaces.as_deref(),
+            Some(&["soulPalace".to_string()][..])
+        );
+        assert!(merged.stars.contains_key("ziweiMaj"));
+
+        let standalone = KnowledgePack::from_json(
+            r#"{"schema":1,"id":"alone","version":"1","language":"zh-CN"}"#,
+        )
+        .unwrap();
+        assert!(resolve_extends(standalone).unwrap().stars.is_empty());
+
+        let orphan = KnowledgePack::from_json(
+            r#"{"schema":1,"id":"x","version":"1","language":"zh-CN","extends":"other-base"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            resolve_extends(orphan).unwrap_err().code,
+            ErrorCode::InvalidArgument
+        );
+    }
 
     #[test]
     fn parses_builtin_and_rejects_random_id() {

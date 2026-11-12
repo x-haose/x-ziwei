@@ -2,7 +2,7 @@
   "name": "ziwei",
   "displayName": "Ziwei",
   "version": "0.1.0",
-  "description": "紫微斗数：排盘与按问题取材。盘由 x-iztro 计算，断语只用知识包原文。",
+  "description": "紫微斗数：公开的盘面事实、知识包与解读 Skill。盘由 x-iztro 计算，解读交给你的模型。",
   "author": {
     "name": "x-haose",
     "url": "https://github.com/x-haose"

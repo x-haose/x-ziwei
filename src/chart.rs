@@ -1,52 +1,72 @@
-//! 排盘与运限：只调用 x-iztro，不改写安星。
+//! 排盘与文本投影：只调用 x-iztro，不改写安星，也不决定看哪些宫。
 
 use serde::{Deserialize, Serialize};
 use x_iztro::{
-    Astrolabe, HoroscopeData, Language, astrolabe_to_text, by_lunar, by_solar, get_horoscope,
-    horoscope_to_text,
+    Astrolabe, HoroscopeData, KnowledgePack, TextDetail, TextOptions, astrolabe_to_text_with,
+    by_lunar, by_solar, get_horoscope, horoscope_to_text_with, topic_to_text,
 };
 
-use crate::birth::{Birth, Calendar};
+use crate::birth::{Birth, Calendar, Target};
 use crate::error::Error;
 
-/// 本命盘（可选运限）的对外事实。文本是 `to_text` 投影，另附语言无关 key。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
-pub struct ChartView {
-    /// 本命盘语义化文本（Markdown）。默认中文盘。
-    pub text: String,
-    /// 运限语义化文本；未请求运限时为 `None`。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub horoscope_text: Option<String>,
-    /// 命宫标识，如 `soulPalace`。
-    pub soul_palace_key: String,
-    /// 身宫的宫名标识（身宫落在哪一宫）。
-    pub body_palace_key: String,
-    /// 本命格局的语言无关标识，按判定顺序。
-    pub pattern_keys: Vec<String>,
-    /// 文本所用语言码。
-    pub language: String,
+/// 事实写到多细。
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum Detail {
+    /// 全部事实：本命含十二宫详解（三方四正、宫干飞化、十二神、小限），运限的大限与流年展开十二宫表。
+    #[default]
+    Full,
+    /// 总览：本命只有基本信息、十二宫总览表与格局；运限各层只写宫名对照、四化、流耀与格局。
+    Overview,
 }
 
-/// 排盘。运限可选；要运限时 `target_date` 必填。
-pub fn cast(birth: &Birth, horoscope: Option<&HoroscopeQuery>) -> Result<ChartView, Error> {
-    let (chart, horo) = cast_raw(birth, horoscope)?;
-    view_of(&chart, horo.as_ref(), birth.language)
+impl From<Detail> for TextDetail {
+    fn from(detail: Detail) -> Self {
+        match detail {
+            Detail::Full => TextDetail::Full,
+            Detail::Overview => TextDetail::Overview,
+        }
+    }
 }
 
-/// 运限查询：目标公历日期 + 目标时辰。时辰缺省用出生时辰。
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HoroscopeQuery {
-    /// 目标公历日期 `YYYY-M-D`。
-    pub target_date: String,
-    /// 目标时辰 0–12。
-    pub time_index: u8,
+/// 知识包释义附多长。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Depth {
+    /// 条目摘要；正文不超过 120 个汉字的条目取正文本身。格局不附成立条件。
+    Summary,
+    /// 条目正文全文，格局附成立条件。
+    Full,
 }
 
-/// 排出本命与可选运限，给取材层继续用对象而不是文本。
-pub fn cast_raw(
-    birth: &Birth,
-    horoscope: Option<&HoroscopeQuery>,
-) -> Result<(Astrolabe, Option<HoroscopeData>), Error> {
+/// 文本投影的选项。带释义时 `pack` 必须给出。
+#[derive(Clone, Copy)]
+pub struct Projection<'a> {
+    /// 事实详略。
+    pub detail: Detail,
+    /// 释义深度；`None` 只输出事实。
+    pub depth: Option<Depth>,
+    /// 释义与主题定义的来源。
+    pub pack: Option<&'a KnowledgePack>,
+}
+
+impl<'a> Projection<'a> {
+    /// 翻译成内核的文本选项。摘要层要求整包每条长正文都有摘要，缺项时内核报错并列出路径。
+    fn options(self) -> Result<TextOptions<'a>, Error> {
+        let opts = TextOptions::new().detail(self.detail.into());
+        match (self.depth, self.pack) {
+            (None, _) => Ok(opts),
+            (Some(Depth::Full), Some(pack)) => Ok(opts.knowledge(pack)),
+            (Some(Depth::Summary), Some(pack)) => Ok(opts.knowledge_summary(pack)?),
+            (Some(_), None) => Err(Error::internal("knowledge depth set without a pack")),
+        }
+    }
+}
+
+/// 排本命盘。
+pub fn cast(birth: &Birth) -> Result<Astrolabe, Error> {
     let chart = match birth.calendar {
         Calendar::Solar => by_solar(
             &birth.date,
@@ -65,50 +85,58 @@ pub fn cast_raw(
             birth.config.clone(),
         )?,
     };
-    let horo = match horoscope {
-        Some(q) => Some(get_horoscope(
-            &chart,
-            &q.target_date,
-            q.time_index,
-            birth.language,
-        )?),
-        None => None,
-    };
-    Ok((chart, horo))
+    Ok(chart)
 }
 
-fn view_of(
+/// 算目标日期与时辰的运限。
+pub fn cast_horoscope(chart: &Astrolabe, target: &Target) -> Result<HoroscopeData, Error> {
+    Ok(get_horoscope(
+        chart,
+        &target.date,
+        target.time_index,
+        chart.language,
+    )?)
+}
+
+/// 本命盘 Markdown。
+pub fn natal_text(chart: &Astrolabe, projection: Projection) -> Result<String, Error> {
+    Ok(astrolabe_to_text_with(
+        chart,
+        &projection.options()?,
+        chart.language,
+    ))
+}
+
+/// 运限 Markdown：大限、小限、流年、流月、流日、流时各一节，宫名按各层自己的命宫起排。
+pub fn horoscope_text(
     chart: &Astrolabe,
-    horo: Option<&HoroscopeData>,
-    language: Language,
-) -> Result<ChartView, Error> {
-    let soul_palace_key = chart
-        .palace(x_iztro::Palace::Soul)
-        .map(|p| p.name.as_key().to_string())
-        .ok_or_else(|| Error::internal("soul palace missing from chart"))?;
-    let body_palace_key = chart
-        .palace(x_iztro::PalaceTarget::Body)
-        .map(|p| p.name.as_key().to_string())
-        .ok_or_else(|| Error::internal("body palace missing from chart"))?;
-    let pattern_keys = chart
-        .patterns()
-        .into_iter()
-        .map(|hit| hit.key.as_key().to_string())
-        .collect();
-    Ok(ChartView {
-        text: astrolabe_to_text(chart, language),
-        horoscope_text: horo.map(|h| horoscope_to_text(chart, h, language)),
-        soul_palace_key,
-        body_palace_key,
-        pattern_keys,
-        language: language.as_key().to_string(),
-    })
+    horoscope: &HoroscopeData,
+    projection: Projection,
+) -> Result<String, Error> {
+    Ok(horoscope_to_text_with(
+        chart,
+        horoscope,
+        &projection.options()?,
+        chart.language,
+    ))
+}
+
+/// 主题 Markdown：选哪些宫由知识包里该主题的定义决定，本进程不参与。只取本命宫位。
+pub fn topic_text(chart: &Astrolabe, topic: &str, projection: Projection) -> Result<String, Error> {
+    Ok(topic_to_text(
+        chart,
+        topic,
+        &projection.options()?,
+        chart.language,
+    )?)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::birth::{BirthRequest, Calendar};
+    use crate::birth::{BirthRequest, LeapKind};
+    use crate::error::ErrorCode;
+    use x_iztro::Language;
 
     fn example_birth() -> Birth {
         BirthRequest {
@@ -117,7 +145,7 @@ mod tests {
             time_index: Some(2),
             clock: None,
             gender: "female".into(),
-            leap: crate::birth::LeapKind::NotLeap,
+            leap: LeapKind::NotLeap,
             fix_leap: true,
             language: "zh-CN".into(),
         }
@@ -125,52 +153,76 @@ mod tests {
         .unwrap()
     }
 
-    #[test]
-    fn natal_chart_has_text_and_keys() {
-        let view = cast(&example_birth(), None).unwrap();
-        assert!(view.text.contains("命宫") || view.text.contains("soul"));
-        assert_eq!(view.soul_palace_key, "soulPalace");
-        assert!(view.horoscope_text.is_none());
-        assert_eq!(view.language, "zh-CN");
-    }
-
-    #[test]
-    fn missing_palace_fails_instead_of_returning_a_default_key() {
-        let birth = example_birth();
-        let (mut chart, _) = cast_raw(&birth, None).unwrap();
-        for palace in &mut chart.palaces {
-            palace.is_body_palace = false;
+    fn facts(detail: Detail) -> Projection<'static> {
+        Projection {
+            detail,
+            depth: None,
+            pack: None,
         }
-        assert_eq!(
-            view_of(&chart, None, birth.language).unwrap_err().code,
-            crate::error::ErrorCode::Internal
-        );
-        for palace in &mut chart.palaces {
-            if palace.name == x_iztro::Palace::Soul {
-                palace.name = x_iztro::Palace::Parents;
-            }
-        }
-        assert_eq!(
-            view_of(&chart, None, birth.language).unwrap_err().code,
-            crate::error::ErrorCode::Internal
-        );
     }
 
     #[test]
     fn invalid_date_is_invalid_date() {
         let mut birth = example_birth();
-        birth.date = "not-a-date".into();
-        let err = cast(&birth, None).unwrap_err();
-        assert_eq!(err.code, crate::error::ErrorCode::InvalidDate);
+        birth.date = "2000-2-30".into();
+        assert_eq!(cast(&birth).unwrap_err().code, ErrorCode::InvalidDate);
     }
 
     #[test]
-    fn horoscope_attaches_when_requested() {
-        let q = HoroscopeQuery {
-            target_date: "2025-1-1".into(),
-            time_index: 2,
+    fn overview_is_shorter_and_knowledge_is_longer() {
+        let chart = cast(&example_birth()).unwrap();
+        let full = natal_text(&chart, facts(Detail::Full)).unwrap();
+        let overview = natal_text(&chart, facts(Detail::Overview)).unwrap();
+        assert!(overview.len() < full.len());
+        let pack = KnowledgePack::builtin(Language::ZhCN).unwrap();
+        let with_notes = natal_text(
+            &chart,
+            Projection {
+                detail: Detail::Full,
+                depth: Some(Depth::Summary),
+                pack: Some(pack),
+            },
+        )
+        .unwrap();
+        assert!(with_notes.len() > full.len());
+    }
+
+    #[test]
+    fn topic_palaces_follow_the_pack_definition() {
+        let chart = cast(&example_birth()).unwrap();
+        let builtin = KnowledgePack::builtin(Language::ZhCN).unwrap();
+        let projection = |pack| Projection {
+            detail: Detail::Overview,
+            depth: Some(Depth::Summary),
+            pack: Some(pack),
         };
-        let view = cast(&example_birth(), Some(&q)).unwrap();
-        assert!(view.horoscope_text.is_some());
+        let default_text = topic_text(&chart, "romance", projection(builtin)).unwrap();
+        assert!(default_text.contains("## 夫妻 三方四正"));
+
+        let mut custom = builtin.clone();
+        let topic = custom.topics.get_mut("romance").unwrap();
+        topic.surround = None;
+        topic.palaces = Some(vec!["soulPalace".into()]);
+        let custom_text = topic_text(&chart, "romance", projection(&custom)).unwrap();
+        let headings: Vec<&str> = custom_text
+            .lines()
+            .filter(|l| l.starts_with("### "))
+            .collect();
+        assert_eq!(headings.len(), 1, "{headings:?}");
+        assert!(headings[0].starts_with("### 命宫 ("), "{headings:?}");
+    }
+
+    #[test]
+    fn horoscope_text_has_every_scope() {
+        let chart = cast(&example_birth()).unwrap();
+        let target = Target {
+            date: "2026-11-11".into(),
+            time_index: 12,
+        };
+        let horoscope = cast_horoscope(&chart, &target).unwrap();
+        let text = horoscope_text(&chart, &horoscope, facts(Detail::Full)).unwrap();
+        for scope in ["大限", "流年", "流月", "流日", "流时"] {
+            assert!(text.contains(scope), "{scope} missing");
+        }
     }
 }

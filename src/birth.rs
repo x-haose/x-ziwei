@@ -1,4 +1,4 @@
-//! 生辰入参：历法、日期、时辰、性别。时辰同时收序号与钟点，晚子必须是 12。
+//! 生辰与运限目标入参：历法、日期、时辰、性别。时辰同时收序号与钟点，晚子必须是 12。
 
 use serde::{Deserialize, Serialize};
 use x_iztro::{Config, Gender, Language, LeapMonth};
@@ -64,23 +64,25 @@ pub struct Birth {
     pub config: Config,
 }
 
-/// 工具 / HTTP 共用的生辰字段。校验发生在 [`BirthRequest::parse`]，写不进去就是写不进去。
+/// 工具 / HTTP 共用的生辰字段。未知字段拒绝，拼错的闰月或时辰键不会被忽略；其余校验在 [`BirthRequest::parse`]。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct BirthRequest {
     /// 历法。`solar` 公历，`lunar` 农历。默认 `solar`。
     #[serde(default)]
     pub calendar: Calendar,
-    /// 出生日期，格式 `YYYY-M-D` 或 `YYYY-MM-DD`。公历范围 1–9999。
+    /// 出生日期，格式 `YYYY-M-D` 或 `YYYY-MM-DD`，不含钟点。公历范围 1–9999。
     pub date: String,
     /// 时辰序号 0–12。0 早子（00:00–00:59），1 丑（01:00–02:59），2 寅（03:00–04:59），3 卯（05:00–06:59），4 辰（07:00–08:59），5 巳（09:00–10:59），6 午（11:00–12:59），7 未（13:00–14:59），8 申（15:00–16:59），9 酉（17:00–18:59），10 戌（19:00–20:59），11 亥（21:00–22:59），12 晚子（23:00–23:59）。与 `clock` 至少填一个；两个都填时必须指向同一时辰。
     #[serde(default)]
+    #[schemars(range(min = 0, max = 12))]
     pub time_index: Option<u8>,
     /// 出生钟点 `HH:MM`（24 小时制，也接受 `H:MM`）。23:00–23:59 为晚子（12），00:00–00:59 为早子（0）。不要把 23 点写成 0。
     #[serde(default)]
     pub clock: Option<String>,
     /// 性别。`male` / `female`，也接受 `男` / `女`。
     pub gender: String,
-    /// 农历闰月。仅 `calendar=lunar` 时有意义。`not_leap` / `leap` / `leap_fixed`。默认 `not_leap`。
+    /// 农历闰月：`not_leap` / `leap` / `leap_fixed`，默认 `not_leap`。`calendar=solar` 时只能省略或 `not_leap`。
     #[serde(default)]
     pub leap: LeapKind,
     /// 公历排盘是否按 iztro `fixLeap` 处理农历换算。默认 `true`。
@@ -91,12 +93,58 @@ pub struct BirthRequest {
     pub language: String,
 }
 
-pub(crate) fn default_true() -> bool {
+fn default_true() -> bool {
     true
 }
 
-pub(crate) fn default_language() -> String {
+fn default_language() -> String {
     "zh-CN".to_string()
+}
+
+/// 运限目标。日期恒为公历；时辰必须显式给出，不继承出生时辰，也不读取当前时间。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TargetRequest {
+    /// 目标公历日期 `YYYY-M-D`，不含钟点。
+    pub date: String,
+    /// 目标时辰序号 0–12，取值同出生时辰。与 `clock` 至少填一个；两个都填时必须指向同一时辰。
+    #[serde(default)]
+    #[schemars(range(min = 0, max = 12))]
+    pub time_index: Option<u8>,
+    /// 目标钟点 `HH:MM`。23:00–23:59 为晚子（12）。
+    #[serde(default)]
+    pub clock: Option<String>,
+}
+
+/// 已校验的运限目标。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Target {
+    /// 目标公历日期 `YYYY-M-D`；存在性由内核校验。
+    pub date: String,
+    /// 目标时辰，闭区间 0–12。
+    pub time_index: u8,
+}
+
+impl TargetRequest {
+    /// 校验并收成 [`Target`]。
+    pub fn parse(&self) -> Result<Target, Error> {
+        Ok(Target {
+            date: plain_date(&self.date, "target.date")?,
+            time_index: resolve_time_index(self.time_index, self.clock.as_deref())?,
+        })
+    }
+}
+
+/// 日期串只含年月日。内核的日期文法允许尾随 ` HH:mm`：出生日期里它不参与计算，运限里它会改变时辰，
+/// 两处都与单独传入的时辰重复，故在入口拒绝。
+fn plain_date(raw: &str, field: &str) -> Result<String, Error> {
+    if raw.is_empty() || raw.chars().any(char::is_whitespace) {
+        return Err(Error::new(
+            ErrorCode::InvalidDate,
+            format!("{field} must be YYYY-M-D without a clock or whitespace"),
+        ));
+    }
+    Ok(raw.to_string())
 }
 
 impl BirthRequest {
@@ -110,12 +158,14 @@ impl BirthRequest {
                 self.language
             ))
         })?;
-        if self.date.trim().is_empty() {
-            return Err(Error::new(ErrorCode::InvalidDate, "date must be YYYY-M-D"));
+        if self.calendar == Calendar::Solar && self.leap != LeapKind::NotLeap {
+            return Err(Error::invalid_argument(
+                "leap applies only to lunar birth dates",
+            ));
         }
         Ok(Birth {
             calendar: self.calendar,
-            date: self.date.trim().to_string(),
+            date: plain_date(&self.date, "birth.date")?,
             time_index,
             gender,
             leap: self.leap,
@@ -163,7 +213,7 @@ pub fn validate_time_index(index: u8) -> Result<u8, Error> {
 
 /// `HH:MM` / `H:MM` → 时辰序号。23 点是晚子 12，不是早子 0。
 pub fn clock_to_time_index(clock: &str) -> Result<u8, Error> {
-    let (hour, minute) = parse_clock(clock)?;
+    let hour = parse_clock(clock)?;
     let index = match hour {
         0 => 0,
         1 | 2 => 1,
@@ -185,11 +235,11 @@ pub fn clock_to_time_index(clock: &str) -> Result<u8, Error> {
             ));
         }
     };
-    let _ = minute;
     Ok(index)
 }
 
-fn parse_clock(clock: &str) -> Result<(u8, u8), Error> {
+/// 解析 `HH:MM` 并返回小时；分钟只校验范围，时辰由小时决定。
+fn parse_clock(clock: &str) -> Result<u8, Error> {
     let clock = clock.trim();
     let Some((h, m)) = clock.split_once(':') else {
         return Err(Error::new(
@@ -221,7 +271,7 @@ fn parse_clock(clock: &str) -> Result<(u8, u8), Error> {
             format!("clock `{clock}` is out of 00:00-23:59"),
         ));
     }
-    Ok((hour, minute))
+    Ok(hour)
 }
 
 fn parse_gender(raw: &str) -> Result<Gender, Error> {
@@ -300,5 +350,48 @@ mod tests {
         let birth = req.parse().unwrap();
         assert_eq!(birth.gender, Gender::Female);
         assert_eq!(birth.time_index, 2);
+    }
+
+    #[test]
+    fn rejects_clock_in_date_and_leap_on_solar() {
+        let base = BirthRequest {
+            calendar: Calendar::Solar,
+            date: "2000-8-16".into(),
+            time_index: Some(2),
+            clock: None,
+            gender: "female".into(),
+            leap: LeapKind::NotLeap,
+            fix_leap: true,
+            language: "zh-CN".into(),
+        };
+        let with_clock = BirthRequest {
+            date: "2000-8-16 23:15".into(),
+            ..base.clone()
+        };
+        assert_eq!(with_clock.parse().unwrap_err().code, ErrorCode::InvalidDate);
+        let solar_leap = BirthRequest {
+            leap: LeapKind::Leap,
+            ..base
+        };
+        assert_eq!(
+            solar_leap.parse().unwrap_err().code,
+            ErrorCode::InvalidArgument
+        );
+    }
+
+    #[test]
+    fn target_needs_explicit_time() {
+        let target = TargetRequest {
+            date: "2026-11-11".into(),
+            time_index: None,
+            clock: None,
+        };
+        assert_eq!(target.parse().unwrap_err().code, ErrorCode::InvalidArgument);
+        let target = TargetRequest {
+            date: "2026-11-11".into(),
+            time_index: None,
+            clock: Some("23:10".into()),
+        };
+        assert_eq!(target.parse().unwrap().time_index, 12);
     }
 }

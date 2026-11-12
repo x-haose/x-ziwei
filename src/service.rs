@@ -1,16 +1,20 @@
-//! 三件工具的共用编排：适配器只做协议翻译，排盘与取材都走这里。
+//! 五件工具的共用编排：适配器只做协议翻译，排盘、文本与知识查询都走这里。
 
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+use x_iztro::KnowledgePack;
 
-use crate::birth::{BirthRequest, resolve_time_index};
-use crate::chart::{ChartView, HoroscopeQuery, cast, cast_raw};
+use crate::birth::{BirthRequest, TargetRequest};
+use crate::chart::{
+    Depth, Detail, Projection, cast, cast_horoscope, horoscope_text, natal_text, topic_text,
+};
 use crate::error::{Error, ErrorCode};
-use crate::lookup::{LookupEntry, LookupKind, lookup};
+use crate::knowledge::{Catalog, Entries, Kind, PackInfo, catalog, lookup};
 use crate::pack::{PackRef, PackStore};
-use crate::slice::{Slice, read};
-use crate::topic::{Topic, parse_palace_key};
+
+/// 单次查询最多的标识个数。
+pub const MAX_LOOKUP_KEYS: usize = 20;
 
 /// 进程内共享状态。无用户、无命盘库。
 #[derive(Clone)]
@@ -21,151 +25,218 @@ pub struct App {
 
 /// `ziwei_chart` / `POST /v1/chart` 入参。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ChartRequest {
     /// 生辰。
-    #[serde(flatten)]
     pub birth: BirthRequest,
-    /// 运限目标公历日期 `YYYY-M-D`。给出则同时返回运限文本。
+    /// 事实详略：`full`（默认）或 `overview`。
     #[serde(default)]
-    pub target_date: Option<String>,
-    /// 运限时辰序号 0–12。缺省用出生时辰。与 `target_clock` 规则同出生时辰。
+    pub detail: Detail,
+    /// 是否在事实后附知识包释义：`summary` 或 `full`。省略则只返回事实。
     #[serde(default)]
-    pub target_time_index: Option<u8>,
-    /// 运限钟点 `HH:MM`。
-    #[serde(default)]
-    pub target_clock: Option<String>,
-}
-
-/// `ziwei_read` / `POST /v1/read` 入参。
-#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
-pub struct ReadRequest {
-    /// 生辰。
-    #[serde(flatten)]
-    pub birth: BirthRequest,
-    /// 封闭主题。问事业用 `career`，问财用 `wealth`，问流年用 `year`（必须带 `target_date`）。
-    pub topic: Topic,
-    /// 额外宫位标识（如 `propertyPalace`），与 topic 切片取并集。
-    #[serde(default)]
-    pub palaces: Vec<String>,
-    /// 知识包。缺省或 `builtin` 为内嵌包；`file:…` 与 `https://…` 须在进程白名单内。
+    pub knowledge: Option<Depth>,
+    /// 知识包。省略或 `builtin` 为默认包；`file:…` 与 `https://…` 须在服务的白名单内，公网服务只有默认包。
     #[serde(default)]
     pub pack: Option<String>,
-    /// 运限目标公历日期。`topic=year` 时必填；其他主题给出则把该年流曜/行运格并进切片。
+}
+
+/// `ziwei_horoscope` / `POST /v1/horoscope` 入参。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HoroscopeRequest {
+    /// 生辰。
+    pub birth: BirthRequest,
+    /// 运限目标：公历日期与时辰。
+    pub target: TargetRequest,
+    /// 事实详略：`full`（默认）或 `overview`。
     #[serde(default)]
-    pub target_date: Option<String>,
-    /// 运限时辰序号。缺省用出生时辰。
+    pub detail: Detail,
+    /// 是否附流耀与行运格局的知识包释义：`summary` 或 `full`。省略则只返回事实。
     #[serde(default)]
-    pub target_time_index: Option<u8>,
-    /// 运限钟点 `HH:MM`。
+    pub knowledge: Option<Depth>,
+    /// 知识包，规则同 `ziwei_chart`。
     #[serde(default)]
-    pub target_clock: Option<String>,
+    pub pack: Option<String>,
+}
+
+/// `ziwei_topic` / `POST /v1/topic` 入参。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TopicRequest {
+    /// 生辰。
+    pub birth: BirthRequest,
+    /// 主题 slug，取自知识包目录里 `kind=topic` 的条目，如默认包的 `romance`、`career`、`wealth`。
+    pub topic: String,
+    /// 事实详略：`full`（默认）或 `overview`。
+    #[serde(default)]
+    pub detail: Detail,
+    /// 释义深度：`summary`（默认）或 `full`。
+    #[serde(default = "default_topic_depth")]
+    pub knowledge: Depth,
+    /// 知识包，规则同 `ziwei_chart`。主题的选宫定义与释义都取自它。
+    #[serde(default)]
+    pub pack: Option<String>,
+}
+
+fn default_topic_depth() -> Depth {
+    Depth::Summary
 }
 
 /// `ziwei_lookup` / `POST /v1/lookup` 入参。
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct LookupRequest {
-    /// 条目种类：`star` / `pattern` / `palace` / `mutagen` / `concept`。
-    pub kind: LookupKind,
-    /// 语言无关标识，如 `ziweiMaj`、`soulPalace`、`sihuaLu`。
-    pub key: String,
-    /// 知识包。缺省为内嵌包。
+    /// 条目段：`star` / `pattern` / `palace` / `mutagen` / `concept` / `topic`。
+    pub kind: Kind,
+    /// 语言无关标识，1 到 20 个，取自 `ziwei_catalog`；不接受译名。
+    #[schemars(length(min = 1, max = 20))]
+    pub keys: Vec<String>,
+    /// 知识包，规则同 `ziwei_chart`。
     #[serde(default)]
     pub pack: Option<String>,
 }
 
+/// `ziwei_catalog` / `POST /v1/catalog` 入参。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CatalogRequest {
+    /// 只列某一段；省略则列全部。
+    #[serde(default)]
+    pub kind: Option<Kind>,
+    /// 知识包，规则同 `ziwei_chart`。
+    #[serde(default)]
+    pub pack: Option<String>,
+}
+
+/// 文本类工具的结果。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct TextView {
+    /// Markdown 正文。
+    pub text: String,
+    /// 正文语言码。
+    pub language: String,
+    /// 正文里的释义与主题定义所依据的知识包；只有事实时为 `None`。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pack: Option<PackInfo>,
+}
+
 impl App {
-    /// 排盘（可选运限）。
-    pub async fn chart(&self, req: ChartRequest) -> Result<ChartView, Error> {
+    /// 本命盘事实，可选附释义。
+    pub async fn chart(&self, req: ChartRequest) -> Result<TextView, Error> {
         let birth = req.birth.parse()?;
-        let horo = horoscope_query(
-            req.target_date.as_deref(),
-            req.target_time_index,
-            req.target_clock.as_deref(),
-            birth.time_index,
-            false,
-        )?;
-        tracing::info!(tool = "ziwei_chart", language = %birth.language.as_key(), has_horoscope = horo.is_some(), "chart");
-        cast(&birth, horo.as_ref())
-    }
-
-    /// 按问题取材。
-    pub async fn read(&self, req: ReadRequest) -> Result<Slice, Error> {
-        let birth = req.birth.parse()?;
-        let extra = req
-            .palaces
-            .iter()
-            .map(|k| parse_palace_key(k))
-            .collect::<Result<Vec<_>, _>>()?;
-        let required = req.topic.requires_horoscope();
-        let horo = horoscope_query(
-            req.target_date.as_deref(),
-            req.target_time_index,
-            req.target_clock.as_deref(),
-            birth.time_index,
-            required,
-        )?;
-        let pack_ref = PackRef::parse(req.pack.as_deref())?;
-        let pack = self.packs.load(pack_ref).await?;
-        let (chart, horo_data) = cast_raw(&birth, horo.as_ref())?;
-        tracing::info!(
-            tool = "ziwei_read",
-            topic = ?req.topic,
-            pack_id = %pack.id,
-            language = %birth.language.as_key(),
-            "read"
-        );
-        read(
+        let pack = self.pack_for(req.knowledge, req.pack.as_deref()).await?;
+        let chart = cast(&birth)?;
+        tracing::info!(tool = "ziwei_chart", language = %birth.language.as_key(), "chart");
+        let text = natal_text(
             &chart,
-            horo_data.as_ref(),
-            pack.as_ref(),
-            req.topic,
-            &extra,
-            birth.language,
-        )
+            Projection {
+                detail: req.detail,
+                depth: req.knowledge,
+                pack: pack.as_deref(),
+            },
+        )?;
+        Ok(view(text, &birth.language, pack.as_deref()))
     }
 
-    /// 查知识包一条。
-    pub async fn lookup(&self, req: LookupRequest) -> Result<LookupEntry, Error> {
-        if req.key.trim().is_empty() {
-            return Err(Error::invalid_argument("key must not be empty"));
+    /// 目标日期与时辰的运限事实，可选附释义。
+    pub async fn horoscope(&self, req: HoroscopeRequest) -> Result<TextView, Error> {
+        let birth = req.birth.parse()?;
+        let target = req.target.parse()?;
+        let pack = self.pack_for(req.knowledge, req.pack.as_deref()).await?;
+        let chart = cast(&birth)?;
+        let horoscope = cast_horoscope(&chart, &target)?;
+        tracing::info!(tool = "ziwei_horoscope", language = %birth.language.as_key(), "horoscope");
+        let text = horoscope_text(
+            &chart,
+            &horoscope,
+            Projection {
+                detail: req.detail,
+                depth: req.knowledge,
+                pack: pack.as_deref(),
+            },
+        )?;
+        Ok(view(text, &birth.language, pack.as_deref()))
+    }
+
+    /// 按知识包的主题定义取本命宫位事实与释义。
+    pub async fn topic(&self, req: TopicRequest) -> Result<TextView, Error> {
+        let birth = req.birth.parse()?;
+        let pack = self
+            .packs
+            .load(PackRef::parse(req.pack.as_deref())?)
+            .await?;
+        if pack.topic(&req.topic).is_none() {
+            let known: Vec<&str> = pack.topics.keys().map(String::as_str).collect();
+            return Err(Error::new(
+                ErrorCode::UnknownTopic,
+                format!(
+                    "pack `{}` has no topic `{}`; it defines: {}",
+                    pack.id,
+                    req.topic,
+                    known.join(", ")
+                ),
+            ));
         }
-        let pack_ref = PackRef::parse(req.pack.as_deref())?;
-        let pack = self.packs.load(pack_ref).await?;
+        let chart = cast(&birth)?;
+        tracing::info!(tool = "ziwei_topic", topic = %req.topic, pack_id = %pack.id, "topic");
+        let text = topic_text(
+            &chart,
+            &req.topic,
+            Projection {
+                detail: req.detail,
+                depth: Some(req.knowledge),
+                pack: Some(pack.as_ref()),
+            },
+        )?;
+        Ok(view(text, &birth.language, Some(pack.as_ref())))
+    }
+
+    /// 按标识查知识包条目。
+    pub async fn lookup(&self, req: LookupRequest) -> Result<Entries, Error> {
+        if req.keys.is_empty() || req.keys.len() > MAX_LOOKUP_KEYS {
+            return Err(Error::invalid_argument(format!(
+                "keys must hold 1 to {MAX_LOOKUP_KEYS} items, got {}",
+                req.keys.len()
+            )));
+        }
+        let pack = self
+            .packs
+            .load(PackRef::parse(req.pack.as_deref())?)
+            .await?;
         tracing::info!(tool = "ziwei_lookup", kind = ?req.kind, pack_id = %pack.id, "lookup");
-        lookup(pack.as_ref(), req.kind, req.key.trim())
+        lookup(pack.as_ref(), req.kind, &req.keys)
+    }
+
+    /// 列出知识包里可查的条目。
+    pub async fn catalog(&self, req: CatalogRequest) -> Result<Catalog, Error> {
+        let pack = self
+            .packs
+            .load(PackRef::parse(req.pack.as_deref())?)
+            .await?;
+        tracing::info!(tool = "ziwei_catalog", kind = ?req.kind, pack_id = %pack.id, "catalog");
+        Ok(catalog(pack.as_ref(), req.kind))
+    }
+
+    /// 只在要附释义时加载包；只要事实却指定了包属于入参矛盾。
+    async fn pack_for(
+        &self,
+        depth: Option<Depth>,
+        pack: Option<&str>,
+    ) -> Result<Option<Arc<KnowledgePack>>, Error> {
+        match depth {
+            Some(_) => Ok(Some(self.packs.load(PackRef::parse(pack)?).await?)),
+            None if pack.is_some() => Err(Error::invalid_argument(
+                "pack is only used together with knowledge",
+            )),
+            None => Ok(None),
+        }
     }
 }
 
-fn horoscope_query(
-    target_date: Option<&str>,
-    time_index: Option<u8>,
-    clock: Option<&str>,
-    birth_time_index: u8,
-    required: bool,
-) -> Result<Option<HoroscopeQuery>, Error> {
-    match target_date.map(str::trim).filter(|s| !s.is_empty()) {
-        None if required => Err(Error::new(
-            ErrorCode::MissingHoroscopeDate,
-            "topic `year` (or explicit horoscope) requires target_date",
-        )),
-        None => {
-            if time_index.is_some() || clock.is_some() {
-                return Err(Error::new(
-                    ErrorCode::MissingHoroscopeDate,
-                    "target_time_index/target_clock given without target_date",
-                ));
-            }
-            Ok(None)
-        }
-        Some(date) => {
-            let time_index = match (time_index, clock) {
-                (None, None) => birth_time_index,
-                _ => resolve_time_index(time_index, clock)?,
-            };
-            Ok(Some(HoroscopeQuery {
-                target_date: date.to_string(),
-                time_index,
-            }))
-        }
+fn view(text: String, language: &x_iztro::Language, pack: Option<&KnowledgePack>) -> TextView {
+    TextView {
+        text,
+        language: language.as_key().to_string(),
+        pack: pack.map(PackInfo::of),
     }
 }

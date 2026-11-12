@@ -1,7 +1,7 @@
 {
   "name": "ziwei",
   "version": "0.1.0",
-  "description": "Zi Wei Dou Shu charting and question-scoped readings. Charts from x-iztro; quotes from the knowledge pack only.",
+  "description": "Zi Wei Dou Shu chart facts, an open knowledge pack and a reading skill. Charts are computed by x-iztro; the interpretation is left to your model.",
   "author": {
     "name": "x-haose",
     "url": "https://github.com/x-haose"
@@ -14,7 +14,7 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Ziwei",
-    "shortDescription": "紫微斗数排盘与按问题取材",
+    "shortDescription": "紫微斗数排盘与开放知识包",
     "developerName": "x-haose",
     "category": "Productivity",
     "websiteURL": "https://ziwei.x-haose.com"

@@ -1,48 +1,38 @@
 ---
 name: ziwei
-description: Use when the user asks about Zi Wei Dou Shu (紫微斗数), natal charts, palaces, stars, patterns, decades, or yearly luck, or wants a fate reading from a birth date.
+description: Use when the user asks about Zi Wei Dou Shu (紫微斗数), natal charts, palaces, stars, patterns, decades, or yearly luck, or wants a reading from a birth date.
 ---
 
 # 紫微斗数
 
-盘由工具算；句子由你写。先调工具，再写给用户看的话。
+盘由工具算，解读由你做。本插件带的 MCP 服务器 `ziwei` 只提供三样公开材料：盘面事实、知识包、主题取材。怎么解读没有内置规定，这份 Skill 是默认做法；用户给了自己的方法或资料时，按用户的来。
 
-本插件已带上 MCP 服务器 `ziwei`（`https://ziwei.x-haose.com/mcp`）。不要手抄这份 Skill。
+## 先确认生辰
+
+需要历法（公历或农历）、日期、性别、出生钟点或时辰。缺哪项问哪项，不猜。
+
+- 钟点传 `birth.clock`（`HH:MM`）；只知道时辰传 `birth.time_index`（0 早子 00:00–00:59，1 丑 … 11 亥，12 晚子 23:00–23:59）。23 点是 12，不是 0。
+- 农历要确认是否闰月：`birth.leap` 为 `not_leap` / `leap` / `leap_fixed`（闰月十五之后算下月）。不要自己换算公历农历。
+- 工具按钟表时间排盘，不做真太阳时校正。出生地经度偏离时区中线较多、钟点又贴近时辰交界时，告诉用户时辰可能有出入。
 
 ## 工具
 
-1. **`ziwei_read`**（主路径）— 生辰 + `topic` → 切片事实、知识包原文 `quotes`、缺口 `missing`。
-2. **`ziwei_chart`** — 只要整盘事实时才用。返回 `to_text`，不含断语。
-3. **`ziwei_lookup`** — 核对包里某一条。键不存在会失败。
-
-时辰：0 早子（00:00–00:59）… 12 晚子（23:00–23:59）。23 点是 12，不是 0。优先传 `clock=HH:MM`。
-
-给工具中文盘（默认 `zh-CN`）。用户要英文就用中文盘、英文回答。
-
-## topic
-
-| 用户在问 | topic |
+| 要什么 | 工具 |
 |---|---|
-| 性格、命主、总论 | `self` 或 `overall` |
-| 财运 | `wealth` |
-| 事业、官运、工作 | `career` |
-| 婚姻、配偶 | `spouse` |
-| 健康 | `health` |
-| 子女 | `children` |
-| 父母 | `parents` |
-| 兄弟 | `siblings` |
-| 朋友、人际 | `friends` |
-| 房产、田宅 | `property` |
-| 迁移、外出 | `surface` |
-| 福德、精神 | `spirit` |
-| 某一年运势 | `year`（必须 `target_date`） |
+| 完整本命盘 | `ziwei_chart`（`detail=overview` 只要总览；`knowledge=summary` 顺带附释义摘要） |
+| 某个日期的大限、流年、流月、流日、流时 | `ziwei_horoscope`（`target` 的日期和时辰都要明确，用户只说年份时先问清） |
+| 知识包对某类问题的取材（婚恋、事业、财运等） | `ziwei_topic` |
+| 知识包里有哪些星、格局、术语、主题，名称对应什么标识 | `ziwei_catalog` |
+| 某条释义的全文、格局的古籍引文与成立条件、主题的选宫定义 | `ziwei_lookup` |
 
-可再传 `palaces` 追加宫位标识（如 `propertyPalace`）。
+`ziwei_topic` 选哪些宫是知识包的观点，不是唯一看法。想按别的方法看（夹宫、飞化、本命与运限合参等），直接取 `ziwei_chart` / `ziwei_horoscope` 的完整事实自己组织。
 
-## 禁令
+排盘语言默认 `zh-CN`。用户用别的语言时仍取中文盘，用用户的语言回答。
 
-- 返回里没有的星、宫、格局、四化，不准写。
-- 断语只用 `quotes` 里的原文；可以改顺序、加连接，不许改含义，不许另编一句「古语」。
-- `missing` 里的条目：可以说「包里没有这条释义」，不许补写释义。
-- 不要根据训练数据「补」紫微、天府落宫或亮度。算错了看起来也像那么回事。
-- 不要把模型写的段落当成盘面事实存下来或再喂给下一步。
+## 回答时
+
+- 结论在前，依据在后。依据指到具体的宫、星、四化、格局。
+- 分清三种来源并让用户看得出来：盘面事实（工具算出的）、知识包释义（一种资料观点，文末注明了是哪份包）、你自己的分析。
+- 工具没返回的星、宫、四化、格局不写；不凭记忆补落宫、亮度或格局。
+- 工具报错时说明错误：参数错就改参数，`retryable` 为真可以稍后重试，不编结果。
+- 不断言寿命、疾病诊断、灾祸的确定发生；命盘说的是倾向，不是定论。

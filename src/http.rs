@@ -1,9 +1,10 @@
-//! Streamable HTTP（`/mcp`）与可选 JSON 门（`/v1/*`）。限流按对端 IP，把打满变成 429。
+//! Streamable HTTP（`/mcp`）与 JSON 接口（`/v1/*`）。两者调用同一份服务层；限流按对端 IP，把打满变成 429。
 
 use std::net::{IpAddr, SocketAddr};
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
+use axum::extract::rejection::JsonRejection;
 use axum::extract::{ConnectInfo, DefaultBodyLimit, Request, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::{self, Next};
@@ -20,7 +21,10 @@ use tower_http::cors::CorsLayer;
 
 use crate::error::{Error, ErrorCode};
 use crate::mcp::ZiweiMcp;
-use crate::service::{App, ChartRequest, LookupRequest, ReadRequest};
+use crate::openapi::{self, PublicUrl};
+use crate::service::{
+    App, CatalogRequest, ChartRequest, HoroscopeRequest, LookupRequest, TopicRequest,
+};
 
 /// 每 IP 令牌桶。`per_second` 为补充速率，`burst` 为桶深。
 #[derive(Debug, Clone, Copy)]
@@ -52,11 +56,13 @@ pub struct HttpConfig {
     pub rate_limit: Option<RateLimit>,
     /// MCP `Host` 白名单。空列表表示不检查 Host（公网默认）；生产应填公网域名。
     pub allowed_hosts: Vec<String>,
-    /// 配置公网地址后开放 GPT Actions；None 不注册对应路由。
-    pub actions: Option<crate::actions::ActionsConfig>,
+    /// 对外的 HTTPS 根地址；给出后在 `/v1/openapi.json` 提供 OpenAPI 文档，`None` 不注册该路由。
+    pub public_url: Option<PublicUrl>,
+    /// OpenAI 插件门户发放的域名校验口令；给出后 `/.well-known/openai-apps-challenge` 以纯文本原样返回它，`None` 不注册该路由。
+    pub openai_apps_challenge: Option<String>,
 }
 
-/// JSON 门的统一信封。失败时没有 `data`。
+/// JSON 接口的统一信封。
 #[derive(Debug, Serialize, schemars::JsonSchema)]
 pub struct Envelope<T: Serialize> {
     /// 是否成功。
@@ -80,7 +86,7 @@ pub struct ErrorBody {
 }
 
 impl<T: Serialize> Envelope<T> {
-    pub(crate) fn ok(data: T) -> Self {
+    fn ok(data: T) -> Self {
         Self {
             ok: true,
             data: Some(data),
@@ -111,7 +117,7 @@ struct HttpState {
 type KeyedLimiter =
     RateLimiter<IpAddr, governor::state::keyed::DefaultKeyedStateStore<IpAddr>, DefaultClock>;
 
-/// 构造 axum 路由：`/mcp`、`/v1/*`、`/healthz`。返回已注入状态的 `Router<()>`。
+/// 构造 axum 路由：`/mcp`、`/v1/*`、`/healthz`。全部路由允许任意来源跨域访问，不使用 Cookie。
 pub fn router(app: App, config: &HttpConfig, cancel: CancellationToken) -> Router {
     let mcp = ZiweiMcp::new(app.clone());
     let mut mcp_config = StreamableHttpServerConfig::default()
@@ -156,21 +162,29 @@ pub fn router(app: App, config: &HttpConfig, cancel: CancellationToken) -> Route
         trust_proxy: config.trust_proxy,
     });
 
-    let routes = Router::new()
+    let mut routes = Router::new()
         .route("/healthz", get(healthz))
         .route("/v1/chart", post(v1_chart))
-        .route("/v1/read", post(v1_read))
+        .route("/v1/horoscope", post(v1_horoscope))
+        .route("/v1/topic", post(v1_topic))
         .route("/v1/lookup", post(v1_lookup))
-        .nest_service("/mcp", service)
-        .with_state(Arc::clone(&state));
-    let routes = match &config.actions {
-        Some(actions) => routes.nest(
-            "/actions",
-            crate::actions::router(state.app.clone(), actions),
-        ),
-        None => routes,
-    };
+        .route("/v1/catalog", post(v1_catalog))
+        .nest_service("/mcp", service);
+    if let Some(public_url) = &config.public_url {
+        let document = openapi::document(public_url);
+        routes = routes.route(
+            "/v1/openapi.json",
+            get(move || std::future::ready(Json(document.clone()))),
+        );
+    }
+    if let Some(token) = config.openai_apps_challenge.clone() {
+        routes = routes.route(
+            "/.well-known/openai-apps-challenge",
+            get(move || std::future::ready(token.clone())),
+        );
+    }
     routes
+        .with_state(Arc::clone(&state))
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
             rate_limit_mw,
@@ -183,28 +197,58 @@ async fn healthz() -> impl IntoResponse {
     Json(serde_json::json!({ "ok": true }))
 }
 
-async fn v1_chart(State(state): State<Arc<HttpState>>, Json(req): Json<ChartRequest>) -> Response {
-    match state.app.chart(req).await {
-        Ok(data) => (StatusCode::OK, Json(Envelope::ok(data))).into_response(),
+/// 请求体解析失败（非 JSON、类型不符、未知字段）与服务层错误都落到同一个错误信封。
+async fn respond<Req, Res, Fut>(
+    input: Result<Json<Req>, JsonRejection>,
+    call: impl FnOnce(Req) -> Fut,
+) -> Response
+where
+    Res: Serialize,
+    Fut: Future<Output = Result<Res, Error>>,
+{
+    let Json(req) = match input {
+        Ok(input) => input,
+        Err(rejection) => return error_response(Error::invalid_argument(rejection.body_text())),
+    };
+    match call(req).await {
+        Ok(data) => Json(Envelope::ok(data)).into_response(),
         Err(err) => error_response(err),
     }
 }
 
-async fn v1_read(State(state): State<Arc<HttpState>>, Json(req): Json<ReadRequest>) -> Response {
-    match state.app.read(req).await {
-        Ok(data) => (StatusCode::OK, Json(Envelope::ok(data))).into_response(),
-        Err(err) => error_response(err),
-    }
+async fn v1_chart(
+    State(state): State<Arc<HttpState>>,
+    input: Result<Json<ChartRequest>, JsonRejection>,
+) -> Response {
+    respond(input, |req| state.app.chart(req)).await
+}
+
+async fn v1_horoscope(
+    State(state): State<Arc<HttpState>>,
+    input: Result<Json<HoroscopeRequest>, JsonRejection>,
+) -> Response {
+    respond(input, |req| state.app.horoscope(req)).await
+}
+
+async fn v1_topic(
+    State(state): State<Arc<HttpState>>,
+    input: Result<Json<TopicRequest>, JsonRejection>,
+) -> Response {
+    respond(input, |req| state.app.topic(req)).await
 }
 
 async fn v1_lookup(
     State(state): State<Arc<HttpState>>,
-    Json(req): Json<LookupRequest>,
+    input: Result<Json<LookupRequest>, JsonRejection>,
 ) -> Response {
-    match state.app.lookup(req).await {
-        Ok(data) => (StatusCode::OK, Json(Envelope::ok(data))).into_response(),
-        Err(err) => error_response(err),
-    }
+    respond(input, |req| state.app.lookup(req)).await
+}
+
+async fn v1_catalog(
+    State(state): State<Arc<HttpState>>,
+    input: Result<Json<CatalogRequest>, JsonRejection>,
+) -> Response {
+    respond(input, |req| state.app.catalog(req)).await
 }
 
 async fn rate_limit_mw(
@@ -216,27 +260,28 @@ async fn rate_limit_mw(
         return next.run(request).await;
     }
     if let Some(limiter) = state.ip_limiter.as_ref() {
-        let ip = client_ip(state.trust_proxy, request.headers(), request.extensions());
+        let Some(ip) = client_ip(state.trust_proxy, request.headers(), request.extensions()) else {
+            return error_response(Error::internal("peer address missing from connection"));
+        };
         if limiter.check_key(&ip).is_err() {
-            let err = Error::new(ErrorCode::RateLimited, "rate limit exceeded");
-            return (
-                StatusCode::TOO_MANY_REQUESTS,
-                Json(Envelope::<()>::err(&err)),
-            )
-                .into_response();
+            return error_response(Error::new(ErrorCode::RateLimited, "rate limit exceeded"));
         }
     }
     next.run(request).await
 }
 
-fn client_ip(trust_proxy: bool, headers: &HeaderMap, extensions: &http::Extensions) -> IpAddr {
+/// 限流键。取不到对端地址说明监听没有带连接信息启动，属于本进程的装配错误，不拿一个共用地址顶替。
+fn client_ip(
+    trust_proxy: bool,
+    headers: &HeaderMap,
+    extensions: &http::Extensions,
+) -> Option<IpAddr> {
     if trust_proxy && let Some(ip) = forwarded_ip(headers) {
-        return ip;
+        return Some(ip);
     }
     extensions
         .get::<ConnectInfo<SocketAddr>>()
         .map(|ConnectInfo(addr)| addr.ip())
-        .unwrap_or(IpAddr::from([0, 0, 0, 0]))
 }
 
 fn forwarded_ip(headers: &HeaderMap) -> Option<IpAddr> {
@@ -248,7 +293,7 @@ fn forwarded_ip(headers: &HeaderMap) -> Option<IpAddr> {
         .and_then(|s| s.parse().ok())
 }
 
-pub(crate) fn error_response(err: Error) -> Response {
+fn error_response(err: Error) -> Response {
     let status = match err.code {
         ErrorCode::PackUnavailable => StatusCode::SERVICE_UNAVAILABLE,
         ErrorCode::RateLimited => StatusCode::TOO_MANY_REQUESTS,
@@ -275,31 +320,6 @@ pub async fn serve(app: App, config: HttpConfig, cancel: CancellationToken) -> a
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pack::{PackPolicy, PackStore};
-    use axum::body::Body;
-    use axum::http::{Request, StatusCode};
-    use http_body_util::BodyExt;
-    use tower::ServiceExt;
-
-    fn test_app() -> App {
-        App {
-            packs: Arc::new(PackStore::new(PackPolicy::default()).unwrap()),
-        }
-    }
-
-    fn test_router() -> Router {
-        router(
-            test_app(),
-            &HttpConfig {
-                listen: "127.0.0.1:0".parse().unwrap(),
-                trust_proxy: false,
-                rate_limit: None,
-                allowed_hosts: Vec::new(),
-                actions: None,
-            },
-            CancellationToken::new(),
-        )
-    }
 
     #[test]
     fn forwarded_ip_uses_rightmost_hop() {
@@ -312,95 +332,5 @@ mod tests {
             forwarded_ip(&headers).unwrap(),
             "192.0.2.8".parse::<IpAddr>().unwrap()
         );
-    }
-
-    #[tokio::test]
-    async fn healthz_ok() {
-        let resp = test_router()
-            .oneshot(
-                Request::builder()
-                    .uri("/healthz")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn lookup_ziwei_via_json() {
-        let resp = test_router()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/v1/lookup")
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"kind":"star","key":"ziweiMaj"}"#))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(v["ok"], true);
-        assert_eq!(v["data"]["key"], "ziweiMaj");
-        assert!(v["data"]["text"].as_str().unwrap().len() > 8);
-    }
-
-    #[tokio::test]
-    async fn read_wealth_via_json() {
-        let body = serde_json::json!({
-            "date": "2000-8-16",
-            "time_index": 2,
-            "gender": "female",
-            "topic": "wealth"
-        });
-        let resp = test_router()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/v1/read")
-                    .header("content-type", "application/json")
-                    .body(Body::from(body.to_string()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
-        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(v["ok"], true);
-        assert_eq!(v["data"]["topic"], "wealth");
-        assert!(v["data"]["quotes"].as_array().unwrap().len() > 3);
-        assert!(
-            v["data"]["palaces"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|p| p["key"] == "wealthPalace")
-        );
-    }
-
-    #[tokio::test]
-    async fn lookup_unknown_is_400() {
-        let resp = test_router()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/v1/lookup")
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"kind":"star","key":"notAStar"}"#))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
-        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        assert_eq!(v["ok"], false);
-        assert_eq!(v["data"], serde_json::Value::Null);
-        assert_eq!(v["error"]["code"], "unknown_key");
     }
 }

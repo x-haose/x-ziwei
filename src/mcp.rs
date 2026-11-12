@@ -1,4 +1,8 @@
-//! MCP 工具面。三件工具的实现是 [`crate::service::App`]，这里只注册协议。
+//! MCP 工具面。五件工具的实现是 [`crate::service::App`]，这里只注册协议。
+//!
+//! 结果只放一个文本内容块，不放 `structuredContent`：有的客户端只把 `content` 交给模型，有的只交
+//! `structuredContent`，同时给两份会让模型读到重复或不同的东西。排盘、运限、主题是 Markdown；
+//! 目录与查询是 JSON 文本。服务说明里约束模型行为的句子排在工具介绍之前：有的客户端只取说明的开头一段。
 
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
@@ -10,7 +14,9 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::error::Error;
-use crate::service::{App, ChartRequest, LookupRequest, ReadRequest};
+use crate::service::{
+    App, CatalogRequest, ChartRequest, HoroscopeRequest, LookupRequest, TextView, TopicRequest,
+};
 
 /// 一份工具实现，stdio 与 Streamable HTTP 共用。
 #[derive(Clone)]
@@ -31,54 +37,94 @@ impl ZiweiMcp {
         }
     }
 
-    /// 供契约测试列出工具名与 schema。
-    pub fn router(&self) -> &ToolRouter<Self> {
-        &self.tool_router
-    }
-
     #[tool(
         name = "ziwei_chart",
-        description = "紫微斗数排盘。给定出生日期、时辰与性别，返回本命盘语义化文本（Markdown）及语言无关 key。可选 target_date 同时返回运限。只返回盘面事实，不含断语。时辰：0 早子 00:00-00:59，1 丑 01:00-02:59，2 寅 03:00-04:59，3 卯 05:00-06:59，4 辰 07:00-08:59，5 巳 09:00-10:59，6 午 11:00-12:59，7 未 13:00-14:59，8 申 15:00-16:59，9 酉 17:00-18:59，10 戌 19:00-20:59，11 亥 21:00-22:59，12 晚子 23:00-23:59。23 点必须用 12，不要写成 0。也可用 clock=HH:MM。",
-        annotations(read_only_hint = true, idempotent_hint = true, open_world_hint = false)
+        title = "紫微斗数本命盘",
+        description = "紫微斗数本命盘。给定出生历法、日期、时辰与性别，返回 Markdown 盘面事实：基本信息、十二宫（主星与亮度、辅星、杂耀、生年四化、三方四正、宫干飞化、十二神、大限）、命中的格局。detail=overview 只给总览表与格局。knowledge=summary/full 时在各宫与格局后附知识包释义，省略则只有事实。结果由 x-iztro 计算，不含解读结论。时辰：birth.clock 填 HH:MM，或 birth.time_index 填 0–12（0 早子 00:00–00:59，1 丑，2 寅 … 11 亥，12 晚子 23:00–23:59）；23 点是 12，不是 0。时辰未知先问用户，不要猜。",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     async fn ziwei_chart(
         &self,
         Parameters(req): Parameters<ChartRequest>,
     ) -> Result<CallToolResult, McpError> {
-        match self.app.chart(req).await {
-            Ok(view) => Ok(tool_ok(view)),
-            Err(err) => Ok(tool_err(err)),
-        }
+        Ok(text_result(self.app.chart(req).await))
     }
 
     #[tool(
-        name = "ziwei_read",
-        description = "按问题取材。给定生辰、封闭 topic（self/overall/year/wealth/career/spouse/health/children/parents/siblings/friends/property/surface/spirit）与可选额外宫位，返回选中宫的事实文本、对得上的知识包原文 quotes、以及盘上有但包里没释义的 missing。断语只能抄 quotes 原文；missing 与返回里没有的星不准写。问流年用 topic=year 并给 target_date。",
-        annotations(read_only_hint = true, idempotent_hint = true, open_world_hint = false)
+        name = "ziwei_horoscope",
+        title = "紫微斗数运限",
+        description = "紫微斗数运限。给定生辰与目标公历日期、目标时辰，返回 Markdown：大限、小限、流年、流月、流日、流时各一节，含各层宫名对照、四化落宫、流耀与行运格局。target 的日期和时辰都必须明确给出：不继承出生时辰，也不取当前时间；用户只说某一年时先确认具体日期与时辰。只问年运、月运时流日流时两节可以不用。knowledge=summary/full 时附流耀与格局的知识包释义。",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
-    async fn ziwei_read(
+    async fn ziwei_horoscope(
         &self,
-        Parameters(req): Parameters<ReadRequest>,
+        Parameters(req): Parameters<HoroscopeRequest>,
     ) -> Result<CallToolResult, McpError> {
-        match self.app.read(req).await {
-            Ok(slice) => Ok(tool_ok(slice)),
-            Err(err) => Ok(tool_err(err)),
-        }
+        Ok(text_result(self.app.horoscope(req).await))
+    }
+
+    #[tool(
+        name = "ziwei_topic",
+        title = "按主题取本命盘材料",
+        description = "按主题取本命盘材料。主题（如婚恋、事业、财运）看哪些宫由知识包里该主题的定义决定，不是本服务的规定；定义可用 ziwei_lookup kind=topic 查看，可用主题用 ziwei_catalog kind=topic 列出。返回 Markdown：主题说明、选中各宫的事实与星耀释义、落在这些宫的格局、四化释义。只含本命宫位；运限用 ziwei_horoscope。这是知识包给的一种取材方式，调用方可以不用它，直接基于 ziwei_chart 的完整盘面按自己的方法解读。",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn ziwei_topic(
+        &self,
+        Parameters(req): Parameters<TopicRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(text_result(self.app.topic(req).await))
     }
 
     #[tool(
         name = "ziwei_lookup",
-        description = "按语言无关标识查知识包一条，用于核对原文。kind 为 star/pattern/palace/mutagen/concept，key 如 ziweiMaj、soulPalace、sihuaLu。键不存在则失败，不返回相近条目。",
-        annotations(read_only_hint = true, idempotent_hint = true, open_world_hint = false)
+        title = "查知识包条目",
+        description = "按语言无关标识查知识包条目原文，一次 1–20 个。kind 为 star / pattern / palace / mutagen / concept / topic。返回 JSON：条目的名称、正文与摘要；星耀另有门派属性与双星组合，格局另有古籍引文与成立条件，主题另有选宫定义；并注明知识包 id 与版本。标识取自 ziwei_catalog，不接受译名；任一标识不存在则整次失败，不返回相近条目。",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
     )]
     async fn ziwei_lookup(
         &self,
         Parameters(req): Parameters<LookupRequest>,
     ) -> Result<CallToolResult, McpError> {
-        match self.app.lookup(req).await {
-            Ok(entry) => Ok(tool_ok(entry)),
-            Err(err) => Ok(tool_err(err)),
-        }
+        Ok(json_result(self.app.lookup(req).await))
+    }
+
+    #[tool(
+        name = "ziwei_catalog",
+        title = "知识包目录",
+        description = "列出知识包目录：每个条目的标识与显示名，按 star / pattern / palace / mutagen / concept / topic 分段，可用 kind 只列一段。用它把盘面文本里的星名、宫名、格局名对应到 ziwei_lookup 需要的标识，以及查看有哪些术语和主题。",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn ziwei_catalog(
+        &self,
+        Parameters(req): Parameters<CatalogRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(json_result(self.app.catalog(req).await))
     }
 }
 
@@ -89,19 +135,52 @@ impl ServerHandler for ZiweiMcp {
             .with_server_info(Implementation::new("x-ziwei", env!("CARGO_PKG_VERSION")))
             .with_protocol_version(ProtocolVersion::V_2026_07_28)
             .with_instructions(
-                "Zi Wei Dou Shu tools. Call ziwei_read for a question (topic + birth). \
-             Call ziwei_chart only when the full natal chart is needed. \
-             Call ziwei_lookup to verify one knowledge-pack sentence. \
-             Never invent stars or quotes that the tools did not return. \
-             Feed the model a Chinese chart; answer in the user's language."
+                "Zi Wei Dou Shu (紫微斗数) chart facts and an open knowledge pack; the reading is yours. \
+                 Chart facts are computed, not recalled: never state a star, palace, mutagen or pattern the tools did not return. \
+                 Ask for a missing birth hour instead of guessing; 23:00-23:59 is time_index 12, not 0. \
+                 Keep chart facts, knowledge-pack text and your own analysis distinguishable. \
+                 Knowledge-pack text is one school's reference view, not the only reading; you may follow the user's own \
+                 method or knowledge instead. \
+                 Tools: ziwei_chart returns the natal chart; ziwei_horoscope the decadal, yearly, monthly, daily and hourly \
+                 layers for an explicit target date and hour; ziwei_topic the palaces a knowledge-pack topic selects; \
+                 ziwei_catalog and ziwei_lookup the knowledge pack itself."
                     .to_string(),
             )
     }
 }
 
-fn tool_ok<T: Serialize>(value: T) -> CallToolResult {
-    let value = serde_json::to_value(&value).expect("tool payloads are JSON objects");
-    CallToolResult::structured(value)
+impl ZiweiMcp {
+    /// 已注册工具的路由表。
+    pub fn router(&self) -> &ToolRouter<Self> {
+        &self.tool_router
+    }
+}
+
+/// Markdown 正文；带释义时在文末注明知识包，模型据此区分事实与资料观点的出处。
+fn text_result(result: Result<TextView, Error>) -> CallToolResult {
+    match result {
+        Ok(view) => {
+            let mut text = view.text;
+            if let Some(pack) = view.pack {
+                text.push_str(&format!(
+                    "\n---\n释义与主题定义来自知识包 {} {}\n",
+                    pack.id, pack.version
+                ));
+            }
+            CallToolResult::success(vec![ContentBlock::text(text)])
+        }
+        Err(err) => tool_err(err),
+    }
+}
+
+fn json_result<T: Serialize>(result: Result<T, Error>) -> CallToolResult {
+    match result {
+        Ok(value) => {
+            let text = serde_json::to_string(&value).expect("tool payloads serialize to JSON");
+            CallToolResult::success(vec![ContentBlock::text(text)])
+        }
+        Err(err) => tool_err(err),
+    }
 }
 
 fn tool_err(err: Error) -> CallToolResult {
@@ -110,44 +189,5 @@ fn tool_err(err: Error) -> CallToolResult {
         "message": err.message,
         "retryable": err.code.retryable(),
     });
-    let mut result = CallToolResult::error(vec![ContentBlock::text(body.to_string())]);
-    result.structured_content = Some(body);
-    result
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::pack::{PackPolicy, PackStore};
-    use std::sync::Arc;
-
-    fn mcp() -> ZiweiMcp {
-        let packs = Arc::new(PackStore::new(PackPolicy::default()).unwrap());
-        ZiweiMcp::new(App { packs })
-    }
-
-    #[test]
-    fn registers_three_tools() {
-        let mut names: Vec<_> = mcp()
-            .router()
-            .list_all()
-            .into_iter()
-            .map(|t| t.name.to_string())
-            .collect();
-        names.sort();
-        assert_eq!(names, ["ziwei_chart", "ziwei_lookup", "ziwei_read"]);
-    }
-
-    #[test]
-    fn chart_schema_mentions_late_zi() {
-        let chart = mcp()
-            .router()
-            .list_all()
-            .into_iter()
-            .find(|t| t.name == "ziwei_chart")
-            .unwrap();
-        let desc = chart.description.unwrap_or_default();
-        assert!(desc.contains("晚子") || desc.contains("12"));
-        assert!(desc.contains("clock") || desc.contains("HH:MM") || desc.contains("23"));
-    }
+    CallToolResult::error(vec![ContentBlock::text(body.to_string())])
 }

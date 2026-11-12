@@ -5,13 +5,13 @@
     "url": "https://github.com/x-haose"
   },
   "metadata": {
-    "description": "紫微斗数 MCP 与论法 Skill"
+    "description": "紫微斗数 MCP 与解读 Skill"
   },
   "plugins": [
     {
       "name": "ziwei",
       "source": "./plugin",
-      "description": "紫微斗数：排盘与按问题取材。盘由 x-iztro 计算，断语只用知识包原文。",
+      "description": "紫微斗数：公开的盘面事实、知识包与解读 Skill。盘由 x-iztro 计算，解读交给你的模型。",
       "version": "0.1.0"
     }
   ]

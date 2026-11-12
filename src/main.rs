@@ -4,7 +4,6 @@ use std::net::SocketAddr;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 use tokio_util::sync::CancellationToken;
@@ -27,7 +26,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Streamable HTTP（`/mcp`）+ JSON 门（`/v1/*`）。
+    /// Streamable HTTP（`/mcp`）+ JSON 接口（`/v1/*`）。
     Serve {
         /// 监听地址。
         #[arg(long, default_value = "0.0.0.0:8080")]
@@ -44,9 +43,12 @@ enum Command {
         /// MCP 允许的 `Host`（可重复，如 `ziwei.x-haose.com`）。省略则不检查 Host，便于公网反代。
         #[arg(long = "allowed-host")]
         allowed_host: Vec<String>,
-        /// GPT Actions 的公网 HTTPS 根地址；设置后开放公开接口和 OpenAPI。
-        #[arg(long, env = "X_ZIWEI_ACTIONS_PUBLIC_URL")]
-        actions_public_url: Option<String>,
+        /// 对外的 HTTPS 根地址（如 `https://ziwei.example.com`）；设置后在 `/v1/openapi.json` 提供 OpenAPI 文档。
+        #[arg(long, env = "X_ZIWEI_PUBLIC_URL")]
+        public_url: Option<String>,
+        /// OpenAI 插件门户发放的域名校验口令；设置后 `/.well-known/openai-apps-challenge` 原样返回它。
+        #[arg(long, env = "X_ZIWEI_OPENAI_APPS_CHALLENGE")]
+        openai_apps_challenge: Option<String>,
         /// 知识包白名单。
         #[command(flatten)]
         packs: PackArgs,
@@ -80,7 +82,8 @@ async fn main() -> anyhow::Result<()> {
             rate_per_second,
             rate_burst,
             allowed_host,
-            actions_public_url,
+            public_url,
+            openai_apps_challenge,
             packs,
         } => {
             init_tracing(false);
@@ -89,16 +92,17 @@ async fn main() -> anyhow::Result<()> {
                 .ok_or_else(|| anyhow::anyhow!("rate-per-second must be >= 1"))?;
             let burst = NonZeroU32::new(rate_burst)
                 .ok_or_else(|| anyhow::anyhow!("rate-burst must be >= 1"))?;
-            let cancel = shutdown_token();
+            let cancel = shutdown_token()?;
             let config = HttpConfig {
                 listen,
                 trust_proxy,
                 rate_limit: Some(RateLimit { per_second, burst }),
                 allowed_hosts: allowed_host,
-                actions: actions_public_url
+                public_url: public_url
                     .as_deref()
-                    .map(x_ziwei::actions::ActionsConfig::new)
+                    .map(x_ziwei::openapi::PublicUrl::new)
                     .transpose()?,
+                openai_apps_challenge,
             };
             http::serve(app, config, cancel).await?;
         }
@@ -147,13 +151,19 @@ fn init_tracing(stdio: bool) {
     }
 }
 
-fn shutdown_token() -> CancellationToken {
+/// 收到 SIGINT 或 SIGTERM 时取消；容器编排用 SIGTERM 停服务。
+fn shutdown_token() -> anyhow::Result<CancellationToken> {
+    use tokio::signal::unix::{SignalKind, signal};
+    let mut interrupt = signal(SignalKind::interrupt())?;
+    let mut terminate = signal(SignalKind::terminate())?;
     let token = CancellationToken::new();
     let child = token.clone();
     tokio::spawn(async move {
-        let _ = tokio::signal::ctrl_c().await;
+        tokio::select! {
+            _ = interrupt.recv() => {}
+            _ = terminate.recv() => {}
+        }
         child.cancel();
-        tokio::time::sleep(Duration::from_secs(5)).await;
     });
-    token
+    Ok(token)
 }
