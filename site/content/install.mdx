@@ -126,7 +126,7 @@ Cascade（Windsurf / Devin Desktop）的远程 HTTP 条目用 `serverUrl`：
 
 工具：
 - ziwei_get_natal_chart：完整本命盘。
-- ziwei_get_horoscope：运限。问某一年只传 target.year（农历年，如 2027），返回大限、小限、流年和各月一览；问某个月传 target.year 加 target.month（农历月）；问到具体某一天才传 target.date，问到时辰才再加 target.clock。用户问到哪一层就答到哪一层，知道当前日期时「今年」「这个月」直接填、不追问，用户没给的日期和时辰不替他编。
+- ziwei_get_horoscope：运限。问某一年只传 target.year（农历年，如 2027），返回大限、小限、流年和各月一览；问农历几月传 target.year 加 target.month；问「这个月」或公历几月传 target.date 为那个月里的一天（这个月用今天），按结果里的流月作答，不要把公历月号当农历月填；问到时辰才再加 target.clock。用户问到哪一层就答到哪一层，知道当前日期时「今年」「这个月」直接填、不追问，用户没给的日期和时辰不替他编。
 - ziwei_get_topic_palaces：知识包对某类问题（婚恋、事业、财运等）的取材。
 - ziwei_list_knowledge / ziwei_lookup_knowledge：查知识包目录与条目原文。
 

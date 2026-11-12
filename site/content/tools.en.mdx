@@ -72,7 +72,7 @@ Besides `birth`, `target` is required. Give it the way the user asks:
 Give the target at the level the question is asked, no finer.
 
 - `year` is a lunar year written as a Gregorian year number: 2027 means the Dingwei year that starts on the first day of the first lunar month of 2027. The days from 1 January up to the Spring Festival still belong to the previous lunar year, so ask about a year with `year`, not with that year's 1 January.
-- `month` is a lunar month, 1–12, and only goes with `year`. The month-by-month table has one row per monthly layer with its solar start and end dates; when the user names a Gregorian month, map it to a lunar month from those dates. A leap month is not a month of its own: its first half shares the monthly layer of the month before it, its second half that of the month after.
+- `month` is a lunar month, 1–12, and only goes with `year`. Monthly layers start on lunar months, three to seven weeks behind Gregorian ones, so a Gregorian month number cannot be used as `month`: for "this month" or a Gregorian month, give `date` as a day in that month and read the monthly layer of that day. A leap month is not a month of its own: its first half shares the monthly layer of the month before it, its second half that of the month after.
 - `date` is always a solar date without a clock time; give either `year` or `date`. The hour is `clock` or `time_index` and only goes with `date`.
 - With `year` alone, the date in the heading is the first day of the sixth lunar month of that year; with `year` and `month`, the first day of that month. The layers are taken from that day. The service never reads the current time, and the target hour is not inherited from the birth hour.
 
