@@ -31,7 +31,7 @@ thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "io-std", "net", "fs"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["trace", "cors"] }
+tower-http = { version = "0.6", features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 x-iztro = { version = "0.6.1", git = "https://github.com/x-haose/x-iztro", rev = "1b73cbcc01e550cb2c2e9dc90f45baaa7a421c04" }
