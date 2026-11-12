@@ -46,7 +46,7 @@ codex plugin marketplace add x-haose/x-ziwei
 codex plugin add ziwei@x-ziwei
 ```
 
-**只接 MCP**：在客户端里填远程 MCP 地址 `https://ziwei.x-haose.com/mcp`，无鉴权。这样没有 Skill，可以把 [`plugin/skills/ziwei/SKILL.md`](plugin/skills/ziwei/SKILL.md) 的正文贴进自定义说明。
+**只接 MCP**：在客户端里填远程 MCP 地址 `https://ziwei-mcp.x-haose.com/mcp`，无鉴权。这样没有 Skill，可以把 [`plugin/skills/ziwei/SKILL.md`](plugin/skills/ziwei/SKILL.md) 的正文贴进自定义说明。
 
 ## 自己部署
 

@@ -61,6 +61,13 @@ x-ziwei：紫微斗数的托管服务层。排盘、运限、格局判定由 [x-
 
 公网 API 不要求 API Key 或登录；限流只用于控制调用频率。
 
+## 线上部署
+
+- 地址：`https://ziwei-mcp.x-haose.com`（`/mcp`、`/v1/*`、`/healthz`）。请求经 Cloudflare 代理到 Dokploy 的 Traefik，再到容器的 8080 端口。
+- Dokploy 对 `main` 开着自动部署：推送即构建并替换线上，约 6 分钟。
+- 启动参数在 Dokploy 的 Advanced → Run Command → Arguments 里：`serve --client-ip-header=cf-connecting-ip --allowed-host=… --public-url=https://ziwei-mcp.x-haose.com`。
+- 限流键取 Cloudflare 写入的 `CF-Connecting-IP`。不经 Cloudflare 直连源站的请求可以伪造这个头，源站应只接受 Cloudflare 的连接。
+
 ## 注释规范
 
 - 只解释「当前代码在当前项目的含义」，必须自包含。

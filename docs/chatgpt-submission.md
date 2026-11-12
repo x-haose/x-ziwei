@@ -26,7 +26,7 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 
 ## 上架后不能再改的两件事
 
-**MCP 地址。** 上架后协议、主机名、端口不能改，要改只能新建插件。`plugin/.mcp.json` 现在写的是 `https://ziwei.x-haose.com/mcp`，这个地址靠 x-iztro 文档站反代到源站；x-iztro 的 `dev` 分支已撤掉这段反代。提交前要把 MCP 放到一个长期不变的主机名上，并同步改 `plugin/.mcp.json`。
+**MCP 地址。** `https://ziwei-mcp.x-haose.com/mcp`，写在 `plugin/.mcp.json` 里。上架后协议、主机名、端口不能改，要改只能新建插件。
 
 **工具名。** 准则要求工具名用平实的动词式写法（官方例子 `get_order_status`），现在的五个名字都是「`ziwei_` + 动词 + 对象」。上架后改名等于删掉旧工具再加新工具，提交之后不再改。
 

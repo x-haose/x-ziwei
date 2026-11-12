@@ -41,7 +41,7 @@ enum Command {
         /// 每 IP 突发上限。
         #[arg(long, default_value_t = 30)]
         rate_burst: u32,
-        /// MCP 允许的 `Host`（可重复，如 `ziwei.x-haose.com`）。省略则不检查 Host，便于公网反代。
+        /// MCP 允许的 `Host`（可重复，如 `ziwei.example.com`）。省略则不检查 Host，便于公网反代。
         #[arg(long = "allowed-host")]
         allowed_host: Vec<String>,
         /// 对外的 HTTPS 根地址（如 `https://ziwei.example.com`）；设置后在 `/v1/openapi.json` 提供 OpenAPI 文档。
