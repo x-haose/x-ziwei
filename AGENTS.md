@@ -64,14 +64,14 @@ x-ziwei：紫微斗数的托管服务层。排盘、运限、格局判定由 [x-
 ## 线上部署
 
 - 地址：`https://ziwei-mcp.x-haose.com`（`/mcp`、`/v1/*`、`/healthz`）。请求经 Cloudflare 代理到 Dokploy 的 Traefik，再到容器的 8080 端口。
-- Dokploy 对 `main` 开着自动部署：推送即构建并替换线上，约 6 分钟。
+- Dokploy 对 `main` 开着自动部署，约 6 分钟。Watch Paths 设为 `src/**`、`Cargo.toml`、`Cargo.lock`、`Dockerfile`：只有这些路径有改动的推送才会重建服务，只改站点或文档的推送不触发。新增会进镜像的路径时要同步加进 Watch Paths，否则改了不会部署，也没有任何提示。
 - 启动参数在 Dokploy 的 Advanced → Run Command → Arguments 里：`serve --client-ip-header=cf-connecting-ip --allowed-host=ziwei-mcp.x-haose.com --public-url=https://ziwei-mcp.x-haose.com`。
 - 限流键取 Cloudflare 写入的 `CF-Connecting-IP`。这个头只有经 Cloudflare 才可信，靠 Traefik 中间件 `cloudflare-only@file` 保证：`ipAllowList` 只放行 Cloudflare 的地址段，绕过 Cloudflare 直连源站返回 403。它定义在 Dokploy 该应用的 Advanced → Traefik 配置里，在 Domains 里挂在 `ziwei-mcp.x-haose.com` 上。地址段取自 <https://www.cloudflare.com/ips/>（2026-11-12），Cloudflare 增减地址段时要同步更新，否则新节点来的请求会被拒。
-- 服务只有 `ziwei-mcp.x-haose.com` 这一个域名。文档站 `ziwei.x-haose.com`（仓库 `x-haose/ziwei-docs`）只有介绍 MCP 的一页，不反代本服务。
+- 服务只有 `ziwei-mcp.x-haose.com` 这一个域名，没有任何站点反代它。
 
 ## 站点
 
-`site/` 是面向使用者的站点，部署在 `https://ziwei.x-haose.com`（Vercel，Root Directory 设为 `site`）。它与服务分开部署，改站点不需要重新构建服务。
+`site/` 是面向使用者的站点，部署在 `https://ziwei.x-haose.com`：Vercel 项目 `x-ziwei`，Root Directory 为 `site`，推到 `main` 即发布。它与服务分开部署，改站点不需要重新构建服务。排盘库的文档站是另一个 Vercel 项目 `x-iztro`（仓库 `x-haose/x-iztro`，目录 `docs`，域名 `x-iztro.x-haose.com`）。
 
 - 技术栈照抄 x-iztro 文档站：Next.js + Fumadocs + Tailwind，版本见 `site/package.json`。中文是默认语言，`content/` 里无后缀为中文，`.en.mdx` 为英文，两种语言成对维护。
 - 页面直接挂在语言段之下（`/zh/install`），不带 `/docs`。`/{lang}/docs/*` 是排盘库文档的旧地址，永久跳转到 `https://x-iztro.x-haose.com`；旧的 MCP 说明页跳到本站安装页。
