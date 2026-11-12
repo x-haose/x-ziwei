@@ -66,7 +66,10 @@ x-ziwei：紫微斗数的托管服务层。排盘、运限、格局判定由 [x-
 - 地址：`https://ziwei-mcp.x-haose.com`（`/mcp`、`/v1/*`、`/healthz`）。请求经 Cloudflare 代理到 Dokploy 的 Traefik，再到容器的 8080 端口。
 - Dokploy 对 `main` 开着自动部署：推送即构建并替换线上，约 6 分钟。
 - 启动参数在 Dokploy 的 Advanced → Run Command → Arguments 里：`serve --client-ip-header=cf-connecting-ip --allowed-host=… --public-url=https://ziwei-mcp.x-haose.com`。
-- 限流键取 Cloudflare 写入的 `CF-Connecting-IP`。不经 Cloudflare 直连源站的请求可以伪造这个头，源站应只接受 Cloudflare 的连接。
+- 限流键取 Cloudflare 写入的 `CF-Connecting-IP`。这个头只有经 Cloudflare 才可信，靠两条 Traefik 中间件保证，定义在 Dokploy 该应用的 Advanced → Traefik 配置里，在 Domains 里按域名挂载：
+  - `cloudflare-only@file`（挂在 `ziwei-mcp.x-haose.com`）：`ipAllowList` 只放行 Cloudflare 的地址段，绕过 Cloudflare 直连源站返回 403。地址段取自 <https://www.cloudflare.com/ips/>（2026-11-12），Cloudflare 增减地址段时要同步更新，否则新节点来的请求会被拒。
+  - `strip-client-ip-header@file`（挂在 sslip 域名）：去掉请求里的 `CF-Connecting-IP`，该域名上的请求按对端地址限流，即共用一个额度。
+- sslip 域名只为 x-iztro 文档站的 `/mcp` 反代保留；文档站撤掉反代后删除它。
 
 ## 注释规范
 
