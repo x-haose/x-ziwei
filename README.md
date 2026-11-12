@@ -43,8 +43,9 @@
 
 ```bash
 codex plugin marketplace add x-haose/x-ziwei
-codex plugin add ziwei@x-ziwei
 ```
+
+添加市场后，在 Codex 的插件列表里安装 `ziwei`。
 
 **只接 MCP**：在客户端里填远程 MCP 地址 `https://ziwei-mcp.x-haose.com/mcp`，无鉴权。这样没有 Skill，可以把 [`plugin/skills/ziwei/SKILL.md`](plugin/skills/ziwei/SKILL.md) 的正文贴进自定义说明。
 
