@@ -72,7 +72,7 @@ fn check_refs(value: &Value, root: &Value) {
 }
 
 #[tokio::test]
-async fn mcp_lists_five_tools_and_returns_one_text_block() {
+async fn mcp_lists_tools_and_returns_one_text_block() {
     let base = spawn(None).await;
     let client = client();
     let rpc = |method: &str, params: Value| {
@@ -94,9 +94,12 @@ async fn mcp_lists_five_tools_and_returns_one_text_block() {
     assert_eq!(
         names,
         [
+            "ziwei_find_birth_by_bazi",
+            "ziwei_get_decadal_overview",
             "ziwei_get_horoscope",
             "ziwei_get_natal_chart",
             "ziwei_get_topic_palaces",
+            "ziwei_get_yearly_overview",
             "ziwei_list_knowledge",
             "ziwei_lookup_knowledge"
         ]
@@ -158,7 +161,7 @@ async fn v1_api_over_http() {
         .await
         .unwrap();
     check_refs(&schema, &schema);
-    assert_eq!(schema["paths"].as_object().unwrap().len(), 5);
+    assert_eq!(schema["paths"].as_object().unwrap().len(), 8);
     assert_eq!(schema["security"], json!([]));
     assert_eq!(schema["servers"][0]["url"], "https://ziwei.example.com");
     assert_eq!(
@@ -238,6 +241,53 @@ async fn v1_api_over_http() {
             assert!(!text.contains(absent), "{target} has {absent}");
         }
     }
+
+    let decades = post("decades", json!({"birth": birth()}))
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    let text = decades["data"]["text"].as_str().unwrap();
+    assert!(text.starts_with("# 大限一览"), "{text}");
+    assert_eq!(
+        text.lines()
+            .filter(|l| l.starts_with("| ") && !l.starts_with("| 序"))
+            .count(),
+        12
+    );
+
+    let years = post(
+        "years",
+        json!({"birth": birth(), "from_year": 2026, "to_year": 2030, "knowledge": "summary"}),
+    )
+    .await
+    .unwrap()
+    .error_for_status()
+    .unwrap()
+    .json::<Value>()
+    .await
+    .unwrap();
+    let text = years["data"]["text"].as_str().unwrap();
+    assert!(text.starts_with("# 流年一览 2026-2030"), "{text}");
+    assert!(text.contains("| 2027 | 丁未 |"), "{text}");
+    assert_eq!(years["data"]["pack"]["id"], "iztro-docs");
+
+    let bazi = post("bazi", json!({"bazi": "丁丑 壬寅 乙巳 丁丑"}))
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    let candidates = bazi["data"]["candidates"].as_array().unwrap();
+    assert!(
+        candidates.contains(&json!({"date": "1997-3-4", "time_index": 1})),
+        "{bazi}"
+    );
 
     let topic = post("topic", json!({"birth": birth(), "topic": "career"}))
         .await
@@ -325,6 +375,16 @@ async fn v1_api_over_http() {
             json!({"birth": birth(), "target": {"date": "2026-11-11 23:15", "time_index": 0}}),
         ),
         ("topic", json!({"birth": birth(), "topic": "spouse"})),
+        (
+            "years",
+            json!({"birth": birth(), "from_year": 2026, "to_year": 2046}),
+        ),
+        (
+            "years",
+            json!({"birth": birth(), "from_year": 2030, "to_year": 2026}),
+        ),
+        ("bazi", json!({"bazi": "甲丑 壬寅 乙巳 丁丑"})),
+        ("bazi", json!({"bazi": "丁丑 壬寅 乙巳"})),
         ("lookup", json!({"kind": "star", "keys": []})),
         ("lookup", json!({"kind": "star", "keys": ["nope"]})),
         (

@@ -35,6 +35,9 @@ description: Use when the user asks about Zi Wei Dou Shu (紫微斗数), fortune
 | 某一年的大限、小限、流年，连同全年各流月一览 | `ziwei_get_horoscope`，只给 `target.year`（农历年，如 2027） |
 | 某个月的流月 | `ziwei_get_horoscope`，`target.year` 加 `target.month`（农历月 1–12） |
 | 某一天的流日、某个时辰的流时 | `ziwei_get_horoscope`，`target.date`，要流时再加 `target.clock` |
+| 一生的大限走势：哪段运好、三四十岁怎样 | `ziwei_get_decadal_overview` |
+| 连续几年的流年：接下来几年、哪年适合结婚或换工作 | `ziwei_get_yearly_overview`（`from_year`、`to_year` 是农历年，最多 20 年；一次取完，不要逐年调运限） |
+| 用户只给了八字 | `ziwei_find_birth_by_bazi` 反推候选生辰，按他的年龄挑出那个，问清性别再排盘 |
 | 知识包对某类问题的取材（婚恋、事业、财运等） | `ziwei_get_topic_palaces` |
 | 知识包里有哪些星、格局、术语、主题，名称对应什么标识 | `ziwei_list_knowledge` |
 | 某条释义的全文、格局的古籍引文与成立条件、主题的选宫定义 | `ziwei_lookup_knowledge` |

@@ -1,7 +1,7 @@
 //! 生辰与运限目标入参：历法、日期、时辰、性别；运限目标另可只给农历年。时辰同时收序号与钟点，晚子必须是 12。
 
 use serde::{Deserialize, Serialize};
-use x_iztro::{Config, Gender, Language, LeapMonth};
+use x_iztro::{Config, EarthlyBranch, Gender, HeavenlyStem, Language, LeapMonth};
 
 use crate::error::{Error, ErrorCode};
 
@@ -175,6 +175,82 @@ impl TargetRequest {
                 }
             }
         }
+    }
+}
+
+/// 八字反推的公历年范围默认值，覆盖在世者的出生年份。
+pub const BAZI_DEFAULT_YEARS: (i64, i64) = (1900, 2100);
+/// 八字反推一次最多查的年数。
+pub const BAZI_MAX_YEARS: i64 = 400;
+
+/// 八字反推入参。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BaziRequest {
+    /// 年、月、日、时四柱干支，按这个顺序，如 `丁丑 壬寅 乙巳 丁丑`；空格可有可无，简繁体都行。
+    pub bazi: String,
+    /// 查找的公历起始年（含），默认 1900。
+    #[serde(default)]
+    #[schemars(range(min = 1, max = 9999))]
+    pub from_year: Option<i64>,
+    /// 查找的公历截止年（含），默认 2100；与起始年相差最多 400 年。
+    #[serde(default)]
+    #[schemars(range(min = 1, max = 9999))]
+    pub to_year: Option<i64>,
+}
+
+/// 一柱干支。
+pub type Pillar = (HeavenlyStem, EarthlyBranch);
+
+/// 已校验的八字反推入参。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Bazi {
+    /// 年、月、日、时四柱。
+    pub pillars: [Pillar; 4],
+    /// 公历年闭区间。
+    pub years: (i64, i64),
+}
+
+impl BaziRequest {
+    /// 解析四柱与年份范围。干支用内核的译名反查，不认识的字、柱数不对、范围过大都是入参错误；
+    /// 阴阳不配（如甲丑）与年份越界由内核报。
+    pub fn parse(&self) -> Result<Bazi, Error> {
+        let chars: Vec<char> = self
+            .bazi
+            .chars()
+            .filter(|c| !c.is_whitespace() && !matches!(c, ',' | '，' | '、' | '|' | '/'))
+            .collect();
+        if chars.len() != 8 {
+            return Err(Error::invalid_argument(format!(
+                "bazi must be four stem-branch pillars like `丁丑 壬寅 乙巳 丁丑`, got `{}`",
+                self.bazi
+            )));
+        }
+        let unknown = |c: char| {
+            Error::invalid_argument(format!(
+                "`{c}` in bazi is not a heavenly stem or earthly branch where one is expected"
+            ))
+        };
+        let mut pillars = [(HeavenlyStem::Jia, EarthlyBranch::Zi); 4];
+        for (pillar, pair) in pillars.iter_mut().zip(chars.chunks(2)) {
+            let stem = x_iztro::key_of_in(&pair[0].to_string(), "Heavenly")
+                .and_then(HeavenlyStem::from_key)
+                .ok_or_else(|| unknown(pair[0]))?;
+            let branch = x_iztro::key_of_in(&pair[1].to_string(), "Earthly")
+                .and_then(EarthlyBranch::from_key)
+                .ok_or_else(|| unknown(pair[1]))?;
+            *pillar = (stem, branch);
+        }
+        let years = (
+            self.from_year.unwrap_or(BAZI_DEFAULT_YEARS.0),
+            self.to_year.unwrap_or(BAZI_DEFAULT_YEARS.1),
+        );
+        if years.1 - years.0 >= BAZI_MAX_YEARS {
+            return Err(Error::invalid_argument(format!(
+                "from_year to to_year spans more than {BAZI_MAX_YEARS} years"
+            )));
+        }
+        Ok(Bazi { pillars, years })
     }
 }
 
@@ -420,6 +496,42 @@ mod tests {
             solar_leap.parse().unwrap_err().code,
             ErrorCode::InvalidArgument
         );
+    }
+
+    #[test]
+    fn bazi_accepts_spacing_and_traditional_characters() {
+        let bazi = |text: &str| BaziRequest {
+            bazi: text.into(),
+            from_year: None,
+            to_year: None,
+        };
+        let parsed = bazi("丁丑 壬寅 乙巳 丁丑").parse().unwrap();
+        assert_eq!(parsed.years, BAZI_DEFAULT_YEARS);
+        assert_eq!(parsed.pillars[2], (HeavenlyStem::Yi, EarthlyBranch::Si));
+        assert_eq!(bazi("丁丑壬寅乙巳丁丑").parse().unwrap(), parsed);
+        assert_eq!(bazi("丁丑，壬寅，乙巳，丁丑").parse().unwrap(), parsed);
+        assert_eq!(
+            bazi("庚子 戊寅 甲辰 壬申").parse().unwrap().pillars[0],
+            (HeavenlyStem::Geng, EarthlyBranch::Zi)
+        );
+        for bad in [
+            "丁丑 壬寅 乙巳",
+            "丁丑 壬寅 乙巳 丁丑 甲子",
+            "丁丑 壬寅 乙巳 丑丁",
+            "AB CD EF GH",
+        ] {
+            assert_eq!(
+                bazi(bad).parse().unwrap_err().code,
+                ErrorCode::InvalidArgument,
+                "{bad}"
+            );
+        }
+        let wide = BaziRequest {
+            bazi: "丁丑 壬寅 乙巳 丁丑".into(),
+            from_year: Some(1500),
+            to_year: Some(2100),
+        };
+        assert_eq!(wide.parse().unwrap_err().code, ErrorCode::InvalidArgument);
     }
 
     #[test]

@@ -20,6 +20,9 @@
 |---|---|
 | `ziwei_get_natal_chart` | 本命盘事实（Markdown），可选附知识包释义 |
 | `ziwei_get_horoscope` | 运限：问某一年返回大限、小限、流年与各月一览，问某个月到流月，问某一天到流日，问时辰到流时 |
+| `ziwei_get_decadal_overview` | 一生的大限一览：十二个大限各一行，写所在宫、虚岁与年份区间、干支与四化 |
+| `ziwei_get_yearly_overview` | 连续若干年的流年一览：每年一行，最多 20 年，回答「接下来几年」「哪年适合」 |
+| `ziwei_find_birth_by_bazi` | 由八字四柱反推候选公历生辰，只知道八字时用 |
 | `ziwei_get_topic_palaces` | 按知识包里的主题定义（婚恋、事业、财运等）取本命宫位事实与释义 |
 | `ziwei_lookup_knowledge` | 按标识查知识包条目原文：释义、古籍引文、成立条件、主题的选宫定义 |
 | `ziwei_list_knowledge` | 知识包目录：有哪些条目，名称对应什么标识 |

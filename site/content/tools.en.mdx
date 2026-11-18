@@ -1,15 +1,18 @@
 ---
 title: Tools
-description: "Five read-only tools: natal chart, horoscope layers, topic palaces, knowledge-pack entries and catalog."
+description: "Read-only tools: natal chart, horoscope layers, life and multi-year timelines, birth from bazi, topic palaces, knowledge-pack entries and catalog."
 icon: Wrench
 ---
 
-All five tools are read-only and store nothing. The first three compute charts; the last two read the knowledge pack.
+All the tools are read-only and store nothing. The first six compute charts; the last two read the knowledge pack.
 
 | Tool | Returns |
 | --- | --- |
 | `ziwei_get_natal_chart` | Natal chart facts (Markdown): basic info, the twelve palaces, patterns. Optionally overview only; optionally with knowledge-pack notes |
 | `ziwei_get_horoscope` | Horoscope layers: decadal, age and yearly with a month-by-month table for a year; down to monthly for a month, daily for a day, hourly for an hour |
+| `ziwei_get_decadal_overview` | The twelve decades of a life, one row each: palace, age and year range, stem-branch and mutagens |
+| `ziwei_get_yearly_overview` | A run of up to 20 years, one row each, for "the next few years" or "which year suits" |
+| `ziwei_find_birth_by_bazi` | Candidate solar birth dates for a bazi (four pillars), when that is all the user has |
 | `ziwei_get_topic_palaces` | Natal palace facts and notes selected by a topic defined in the knowledge pack. Which palaces is the pack's decision |
 | `ziwei_lookup_knowledge` | Knowledge-pack entries as written: notes, classical quotes, conditions, a topic's palace selection |
 | `ziwei_list_knowledge` | The knowledge pack's catalog: which entries exist and which key each name maps to |
@@ -77,6 +80,28 @@ Give the target at the level the question is asked, no finer.
 - With `year` alone, the date in the heading is the first day of the sixth lunar month of that year; with `year` and `month`, the first day of that month. The layers are taken from that day. The service never reads the current time, and the target hour is not inherited from the birth hour.
 
 `detail` and `knowledge` work as above.
+
+### `ziwei_get_decadal_overview`
+
+Only `birth`. Returns a table of the twelve decades in order, one row each. It answers questions that span decades, such as how life unfolds or which stretch is strongest; for a year inside a decade, use `ziwei_get_horoscope` with `target.year`. With `knowledge` set to `summary` or `full`, notes on the mutagen stars follow the table.
+
+### `ziwei_get_yearly_overview`
+
+| Field | Value |
+| --- | --- |
+| `from_year` / `to_year` | Lunar years written as Gregorian year numbers, both included, at most 20 years |
+| `knowledge` | As above |
+
+One row per year: stem-branch, the solar date of the Lunar New Year, nominal age, the palaces of the decadal and age layers, the palace of the yearly layer, and the yearly mutagens. It answers "the next few years" or "which year suits a marriage or a job change" in one call instead of one horoscope per year.
+
+### `ziwei_find_birth_by_bazi`
+
+| Field | Value |
+| --- | --- |
+| `bazi` | The year, month, day and hour pillars, such as `丁丑 壬寅 乙巳 丁丑`; spaces optional, simplified or traditional characters |
+| `from_year` / `to_year` | The solar year range to search, 1900–2100 by default, at most 400 years |
+
+Returns candidate births (solar date and hour index). A set of pillars recurs about every 60 years; pick the one that fits the user's age, ask for the gender, then cast with `ziwei_get_natal_chart`.
 
 ### `ziwei_get_topic_palaces`
 

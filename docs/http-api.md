@@ -1,6 +1,6 @@
 # HTTP JSON 接口
 
-`/v1` 与 MCP 工具是同一份实现的两种协议：五个操作一一对应、入参相同。给不接 MCP 的程序、低代码平台和 GPT Actions 用。
+`/v1` 与 MCP 工具是同一份实现的两种协议：操作一一对应、入参相同。给不接 MCP 的程序、低代码平台和 GPT Actions 用。
 
 接口公开、免费，无需 API Key、账号或登录。允许第三方直接调用并集成到免费或收费产品，本服务不因此收费。
 
@@ -12,6 +12,9 @@
 |---|---|---|
 | `/v1/chart` | `ziwei_get_natal_chart` | 本命盘事实，可选附释义 |
 | `/v1/horoscope` | `ziwei_get_horoscope` | 运限事实，层数随目标精度 |
+| `/v1/decades` | `ziwei_get_decadal_overview` | 一生的大限一览 |
+| `/v1/years` | `ziwei_get_yearly_overview` | 连续若干年的流年一览 |
+| `/v1/bazi` | `ziwei_find_birth_by_bazi` | 由八字反推候选公历生辰 |
 | `/v1/topic` | `ziwei_get_topic_palaces` | 按知识包的主题定义取本命宫位事实与释义 |
 | `/v1/lookup` | `ziwei_lookup_knowledge` | 按标识查知识包条目 |
 | `/v1/catalog` | `ziwei_list_knowledge` | 知识包目录 |
@@ -65,6 +68,35 @@
 - `date` 恒为公历，不含钟点；`year` 与 `date` 二选一。时辰用 `clock` 或 `time_index`，只能跟着 `date`。
 - 只给 `year` 时标题里的日期是该农历年六月初一，给 `year` 加 `month` 时是该月初一，各层取自那一天。服务不读取当前时间，目标时辰也不继承出生时辰。
 - `detail`、`knowledge`、`pack` 同 `/v1/chart`。
+
+### `/v1/decades`
+
+```json
+{"birth": {…}}
+```
+
+- 返回 Markdown 表：十二个大限按起运先后各一行，写序号、大限命宫所在的本命宫、虚岁区间、年份区间、大限干支与四化落宫。
+- `knowledge`：`summary` 或 `full`，在表后附四化星释义；省略只返回事实。`pack` 同上。
+
+### `/v1/years`
+
+```json
+{"birth": {…}, "from_year": 2026, "to_year": 2030}
+```
+
+- `from_year`、`to_year`：农历年（用公历年份数字表示），含两端，合计最多 20 年。
+- 返回 Markdown 表：每年一行，写干支、正月初一的阳历日期、虚岁、大限与小限所在的本命宫、流年命宫所在的本命宫、流年四化落宫。各年与 `/v1/horoscope` 只给 `target.year` 时同一口径。
+- `knowledge`、`pack` 同 `/v1/decades`。
+
+### `/v1/bazi`
+
+```json
+{"bazi": "丁丑 壬寅 乙巳 丁丑"}
+```
+
+- `bazi`：年月日时四柱干支，按顺序；空格可有可无，简繁体都行。阴阳不配（如甲丑）报 `invalid_argument`。
+- `from_year`、`to_year`：查找的公历年范围，默认 1900–2100，最多 400 年。
+- 返回 `data.candidates`：`[{"date": "1997-3-4", "time_index": 1}, …]`，可直接作为 `birth.date` 与 `birth.time_index`。同一组八字大约每 60 年出现一次；子时可能同时给出早子 0 与晚子 12。范围内没有时为空数组。四柱按默认排盘配置的分界口径解释。
 
 ### `/v1/topic`
 
@@ -130,7 +162,7 @@
 
 也可用环境变量 `X_ZIWEI_PUBLIC_URL`。HTTPS 由反向代理提供；反代不得记录请求体。在反代之后用 `--client-ip-header` 指明带客户端地址的请求头（Cloudflare 为 `cf-connecting-ip`），反代必须覆盖该头，否则客户端可以伪造限流地址。
 
-自定义 GPT 正在退役、Actions 不随之迁移（见 [ChatGPT 上架](chatgpt-submission.md)），ChatGPT 侧的公开分发改走插件目录。仍在使用的 GPT 编辑器可导入 `<公网根地址>/v1/openapi.json`，Authentication 选 **None**。五个操作都标了 `x-openai-isConsequential: false`。GPT 的指令可直接用 [`plugin/skills/ziwei/SKILL.md`](../plugin/skills/ziwei/SKILL.md) 的正文。
+自定义 GPT 正在退役、Actions 不随之迁移（见 [ChatGPT 上架](chatgpt-submission.md)），ChatGPT 侧的公开分发改走插件目录。仍在使用的 GPT 编辑器可导入 `<公网根地址>/v1/openapi.json`，Authentication 选 **None**。全部操作都标了 `x-openai-isConsequential: false`。GPT 的指令可直接用 [`plugin/skills/ziwei/SKILL.md`](../plugin/skills/ziwei/SKILL.md) 的正文。
 
 本机验证，路径与公网一致：
 

@@ -54,12 +54,12 @@ const COPY = {
       },
       {
         title: '解读方法',
-        body: '一份 Markdown 写成的 Skill：先问清生辰、调哪些工具、怎么把事实和观点分开说。它只是默认做法。',
+        body: '一份 Markdown 写成的 Skill：像朋友聊天那样解读，缺生辰一句话问全，工具自己调。它只是默认做法。',
         swap: '可以改，也可以不用',
       },
     ],
     stats: [
-      { value: '5', label: '个工具' },
+      { value: '8', label: '个工具' },
       { value: '162', label: '颗星耀的释义' },
       { value: '64', label: '条格局' },
       { value: '13', label: '个解读主题' },
@@ -67,7 +67,7 @@ const COPY = {
     sampleTitle: '你的模型拿到的是这样一段文字',
     sampleCaption:
       '这是工具返回的原文节选。它是盘面事实，不是结论；怎么读是模型的事。要完整十二宫、运限或知识包释义，模型会再调对应的工具。',
-    sampleLink: '五个工具分别返回什么 →',
+    sampleLink: '各个工具分别返回什么 →',
     clientsTitle: '在哪里用',
     clients: [
       { name: 'Claude Code', how: '装插件，Skill 与 MCP 一起进来' },
@@ -123,12 +123,12 @@ const COPY = {
       },
       {
         title: 'Reading method',
-        body: 'A Skill written in Markdown: confirm the birth data first, which tools to call, how to keep facts and opinions apart. It is only the default.',
+        body: 'A Skill written in Markdown: read the chart like a friend in a chat, ask for missing birth data in one question, call the tools on its own. It is only the default.',
         swap: 'Edit it, or do without it',
       },
     ],
     stats: [
-      { value: '5', label: 'tools' },
+      { value: '8', label: 'tools' },
       { value: '162', label: 'stars with notes' },
       { value: '64', label: 'patterns' },
       { value: '13', label: 'reading topics' },
@@ -136,7 +136,7 @@ const COPY = {
     sampleTitle: 'This is the text your model receives',
     sampleCaption:
       'An excerpt of what the tool returns, as is. The chart text is Chinese by default because models read a Chinese chart more reliably than translated star names. It is chart facts, not a conclusion; reading it is the model\'s job. For all twelve palaces, the horoscope layers or knowledge-pack notes, the model calls the matching tool.',
-    sampleLink: 'What each of the five tools returns →',
+    sampleLink: 'What each tool returns →',
     clientsTitle: 'Where to use it',
     clients: [
       { name: 'Claude Code', how: 'Install the plugin; the Skill and MCP arrive together' },

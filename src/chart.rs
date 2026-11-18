@@ -2,12 +2,13 @@
 
 use serde::{Deserialize, Serialize};
 use x_iztro::{
-    Astrolabe, HoroscopeData, KnowledgePack, Scope, TextDetail, TextOptions,
-    astrolabe_to_text_with, by_lunar, by_solar, get_horoscope, horoscope_to_text_with,
-    monthly_list_to_text_with, topic_to_text,
+    Astrolabe, BirthCandidate, HoroscopeData, KnowledgePack, Scope, TextDetail, TextOptions,
+    astrolabe_to_text_with, by_lunar, by_solar, decadal_list_to_text_with, get_horoscope,
+    horoscope_to_text_with, monthly_list_to_text_with, solar_dates_by_bazi, topic_to_text,
+    yearly_overview_to_text_with,
 };
 
-use crate::birth::{Birth, Calendar, Target};
+use crate::birth::{Bazi, Birth, Calendar, Target};
 use crate::error::Error;
 
 /// 事实写到多细。
@@ -159,6 +160,44 @@ pub fn horoscope_text(
         )?);
     }
     Ok(text)
+}
+
+/// 一生的大限一览 Markdown：十二个大限各一行。
+pub fn decadal_overview_text(chart: &Astrolabe, projection: Projection) -> Result<String, Error> {
+    Ok(decadal_list_to_text_with(
+        chart,
+        &projection.options()?,
+        chart.language,
+    ))
+}
+
+/// 农历 `from` 年到 `to` 年（含两端）的流年一览 Markdown：每年一行。
+pub fn yearly_overview_text(
+    chart: &Astrolabe,
+    from: i64,
+    to: i64,
+    projection: Projection,
+) -> Result<String, Error> {
+    Ok(yearly_overview_to_text_with(
+        chart,
+        from,
+        to,
+        &projection.options()?,
+        chart.language,
+    )?)
+}
+
+/// 由八字四柱反推候选公历生辰，按默认排盘配置的分界口径解释四柱。
+pub fn births_by_bazi(bazi: &Bazi) -> Result<Vec<BirthCandidate>, Error> {
+    let [yearly, monthly, daily, hourly] = bazi.pillars;
+    Ok(solar_dates_by_bazi(
+        yearly,
+        monthly,
+        daily,
+        hourly,
+        bazi.years,
+        &x_iztro::Config::default(),
+    )?)
 }
 
 /// 主题 Markdown：选哪些宫由知识包里该主题的定义决定，本进程不参与。只取本命宫位。

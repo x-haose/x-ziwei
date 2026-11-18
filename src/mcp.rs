@@ -1,4 +1,4 @@
-//! MCP 工具面。五件工具的实现是 [`crate::service::App`]，这里只注册协议。
+//! MCP 工具面。工具的实现是 [`crate::service::App`]，这里只注册协议。
 //!
 //! 结果只放一个文本内容块，不放 `structuredContent`：有的客户端只把 `content` 交给模型，有的只交
 //! `structuredContent`，同时给两份会让模型读到重复或不同的东西。排盘、运限、主题是 Markdown；
@@ -13,9 +13,11 @@ use rmcp::{ErrorData as McpError, ServerHandler, tool, tool_handler, tool_router
 use serde::Serialize;
 use serde_json::json;
 
+use crate::birth::BaziRequest;
 use crate::error::Error;
 use crate::service::{
-    App, CatalogRequest, ChartRequest, HoroscopeRequest, LookupRequest, TextView, TopicRequest,
+    App, CatalogRequest, ChartRequest, DecadalOverviewRequest, HoroscopeRequest, LookupRequest,
+    TextView, TopicRequest, YearlyOverviewRequest,
 };
 
 /// 一份工具实现，stdio 与 Streamable HTTP 共用。
@@ -71,6 +73,60 @@ impl ZiweiMcp {
         Parameters(req): Parameters<HoroscopeRequest>,
     ) -> Result<CallToolResult, McpError> {
         Ok(text_result(self.app.horoscope(req).await))
+    }
+
+    #[tool(
+        name = "ziwei_get_decadal_overview",
+        title = "紫微斗数一生大限",
+        description = "一生的大限一览：十二个大限（每段十年）各一行，写大限命宫所在的本命宫、虚岁与年份区间、大限干支与四化落宫。用于「这辈子运势走势」「哪段运最好」「三四十岁怎么样」这类跨十年的问题。要看某段里某一年的细节，再用 ziwei_get_horoscope 的 target.year。knowledge=summary/full 时表后附四化星的知识包释义。",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn ziwei_get_decadal_overview(
+        &self,
+        Parameters(req): Parameters<DecadalOverviewRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(text_result(self.app.decadal_overview(req).await))
+    }
+
+    #[tool(
+        name = "ziwei_get_yearly_overview",
+        title = "紫微斗数流年一览",
+        description = "连续若干年的流年一览：每个农历年一行，写干支、正月初一的阳历日期、虚岁、大限与小限所在的本命宫、流年命宫所在的本命宫与流年四化落宫。用于「接下来几年怎么样」「哪年适合结婚、换工作」「三十岁前后几年」这类跨年份的问题，一次调用拿到，不要逐年调 ziwei_get_horoscope。from_year、to_year 是农历年，用公历年份数字表示（2027 指 2027 年正月初一起的丁未年），最多 20 年；问「接下来几年」时从今年开始。要某一年的细节再用 ziwei_get_horoscope 的 target.year。knowledge=summary/full 时表后附四化星的知识包释义。",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn ziwei_get_yearly_overview(
+        &self,
+        Parameters(req): Parameters<YearlyOverviewRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(text_result(self.app.yearly_overview(req).await))
+    }
+
+    #[tool(
+        name = "ziwei_find_birth_by_bazi",
+        title = "八字反推生辰",
+        description = "由八字（年月日时四柱干支，如「丁丑 壬寅 乙巳 丁丑」）反推候选公历生辰。用户只给了八字、没给出生日期时用。返回 JSON：候选的公历日期与时辰序号；同一组八字大约每 60 年出现一次，子时可能同时给出早子与晚子两个候选。按用户的年龄挑出对应的那个，问清性别后用 ziwei_get_natal_chart 排盘，不要自己从八字推算星盘。from_year、to_year 为公历年范围，默认 1900–2100，最多 400 年。四柱阴阳不配（如甲丑）会报参数错误。",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn ziwei_find_birth_by_bazi(
+        &self,
+        Parameters(req): Parameters<BaziRequest>,
+    ) -> Result<CallToolResult, McpError> {
+        Ok(json_result(self.app.bazi(req).await))
     }
 
     #[tool(
@@ -143,7 +199,8 @@ impl ServerHandler for ZiweiMcp {
                  no disclaimers about entertainment or science; name stars and palaces when they help, and lay out the basis when asked. \
                  Knowledge-pack text is one school's view; follow the user's own method if they bring one. \
                  Tools: ziwei_get_natal_chart returns the natal chart; ziwei_get_horoscope the decadal and yearly layers with a month-by-month table for a target year, \
-                 down to the monthly layer for a year and month, the daily layer for a date, the hourly layer for an hour; ziwei_get_topic_palaces the palaces a knowledge-pack topic selects; \
+                 down to the monthly layer for a year and month, the daily layer for a date, the hourly layer for an hour; ziwei_get_decadal_overview the twelve decades of a life; ziwei_get_yearly_overview a run of years, one row each; \
+                 ziwei_find_birth_by_bazi candidate birth dates for a bazi; ziwei_get_topic_palaces the palaces a knowledge-pack topic selects; \
                  ziwei_list_knowledge and ziwei_lookup_knowledge the knowledge pack itself."
                     .to_string(),
             )

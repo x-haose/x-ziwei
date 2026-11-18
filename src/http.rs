@@ -20,11 +20,13 @@ use serde::Serialize;
 use tokio_util::sync::CancellationToken;
 use tower_http::cors::CorsLayer;
 
+use crate::birth::BaziRequest;
 use crate::error::{Error, ErrorCode};
 use crate::mcp::ZiweiMcp;
 use crate::openapi::{self, PublicUrl};
 use crate::service::{
-    App, CatalogRequest, ChartRequest, HoroscopeRequest, LookupRequest, TopicRequest,
+    App, CatalogRequest, ChartRequest, DecadalOverviewRequest, HoroscopeRequest, LookupRequest,
+    TopicRequest, YearlyOverviewRequest,
 };
 
 /// 请求体上限，字节。全部入口的请求都是小段 JSON。
@@ -173,6 +175,9 @@ pub fn router(app: App, config: &HttpConfig, cancel: CancellationToken) -> Route
         .route("/v1/chart", post(v1_chart))
         .route("/v1/horoscope", post(v1_horoscope))
         .route("/v1/topic", post(v1_topic))
+        .route("/v1/decades", post(v1_decades))
+        .route("/v1/years", post(v1_years))
+        .route("/v1/bazi", post(v1_bazi))
         .route("/v1/lookup", post(v1_lookup))
         .route("/v1/catalog", post(v1_catalog))
         .nest_service("/mcp", service);
@@ -234,6 +239,27 @@ async fn v1_horoscope(
     input: Result<Json<HoroscopeRequest>, JsonRejection>,
 ) -> Response {
     respond(input, |req| state.app.horoscope(req)).await
+}
+
+async fn v1_decades(
+    State(state): State<Arc<HttpState>>,
+    input: Result<Json<DecadalOverviewRequest>, JsonRejection>,
+) -> Response {
+    respond(input, |req| state.app.decadal_overview(req)).await
+}
+
+async fn v1_years(
+    State(state): State<Arc<HttpState>>,
+    input: Result<Json<YearlyOverviewRequest>, JsonRejection>,
+) -> Response {
+    respond(input, |req| state.app.yearly_overview(req)).await
+}
+
+async fn v1_bazi(
+    State(state): State<Arc<HttpState>>,
+    input: Result<Json<BaziRequest>, JsonRejection>,
+) -> Response {
+    respond(input, |req| state.app.bazi(req)).await
 }
 
 async fn v1_topic(

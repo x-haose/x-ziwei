@@ -132,6 +132,9 @@ For a lunar date, confirm whether the month is a leap month and pass birth.leap.
 Tools:
 - ziwei_get_natal_chart: the full natal chart.
 - ziwei_get_horoscope: horoscope layers. For a year pass only target.year (a lunar year, e.g. 2027) and get the decadal, age and yearly layers with a month-by-month table; for a lunar month pass target.year and target.month; for "this month" or a Gregorian month pass target.date as a day in that month (today for this month) and answer from the monthly layer, never put a Gregorian month number in target.month; add target.clock only for a specific hour. When you know the current date, fill in "this year" or "this month" without asking; never invent a date or hour the user did not give.
+- ziwei_get_decadal_overview: the twelve decades of a life, for "how does my life unfold" or "which stretch is best".
+- ziwei_get_yearly_overview: a run of up to 20 years, for "the next few years" or "which year suits"; do not call the horoscope once per year.
+- ziwei_find_birth_by_bazi: when the user only gives a bazi, find the candidate births, pick the one that fits their age, then cast.
 - ziwei_get_topic_palaces: what the knowledge pack selects for a kind of question (romance, career, wealth and so on).
 - ziwei_list_knowledge / ziwei_lookup_knowledge: the knowledge pack's catalog and entry text.
 
@@ -146,6 +149,9 @@ You do not need to memorise parameter names. Say it in plain words and the model
 | --- | --- |
 | "Cast my chart: solar 2000-8-16, 3:30am, female" | `ziwei_get_natal_chart` |
 | "How does this year look for me?" / "And the third lunar month next year?" | `ziwei_get_horoscope` |
+| "Which stretch of my life is the strongest?" | `ziwei_get_decadal_overview` |
+| "Which of the next five years suits a job change?" | `ziwei_get_yearly_overview` |
+| "My bazi is 丁丑 壬寅 乙巳 丁丑" | `ziwei_find_birth_by_bazi` |
 | "How do my relationships look?" | `ziwei_get_topic_palaces` |
 | "What does Ziwei with Tianfu in the same palace mean?" | `ziwei_list_knowledge`, `ziwei_lookup_knowledge` |
 

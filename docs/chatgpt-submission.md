@@ -12,7 +12,7 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 
 上架前从插件市场（`x-haose/x-ziwei`）安装的插件，在两种对话里表现不同（2026-11-12 实测，ChatGPT 桌面应用自带的 codex-cli 0.163.0-alpha.11.1）：
 
-- Codex 线程：`.mcp.json` 里的服务器由本机 Codex 运行时连接，五个工具可调用，Skill 也在。
+- Codex 线程：`.mcp.json` 里的服务器由本机 Codex 运行时连接，工具都可调用，Skill 也在。
 - ChatGPT 普通对话：模型在云端，看得到插件和 Skill，看不到 `.mcp.json` 里的服务器。这里的 MCP 工具只来自在 ChatGPT 里登记过的服务器（「Add custom MCP server」，或上架时由门户登记），插件用 `.app.json` 指向登记后的 `plugin_asdk_app…` 标识。这个标识属于登记它的账号，不能写进公开仓库给所有人用。
 
 项目级的 `.codex/config.toml` 里如果有同名的 `[mcp_servers.ziwei]`，在该目录下开的 Codex 线程会用它，而不是插件里的那一个。
@@ -35,7 +35,7 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 
 **MCP 地址。** `https://ziwei-mcp.x-haose.com/mcp`，写在 `plugin/.mcp.json` 里。上架后协议、主机名、端口不能改，要改只能新建插件。
 
-**工具名。** 准则要求工具名用平实的动词式写法（官方例子 `get_order_status`），现在的五个名字都是「`ziwei_` + 动词 + 对象」。上架后改名等于删掉旧工具再加新工具，提交之后不再改。
+**工具名。** 准则要求工具名用平实的动词式写法（官方例子 `get_order_status`），现在的名字都是「`ziwei_` + 动词 + 对象」。上架后改名等于删掉旧工具再加新工具，提交之后不再改。
 
 ## 提交包
 

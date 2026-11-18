@@ -3,10 +3,12 @@
 use schemars::JsonSchema;
 use serde_json::{Map, Value, json};
 
+use crate::birth::BaziRequest;
 use crate::http::Envelope;
 use crate::knowledge::{Catalog, Entries};
 use crate::service::{
-    CatalogRequest, ChartRequest, HoroscopeRequest, LookupRequest, TextView, TopicRequest,
+    BaziCandidates, CatalogRequest, ChartRequest, DecadalOverviewRequest, HoroscopeRequest,
+    LookupRequest, TextView, TopicRequest, YearlyOverviewRequest,
 };
 
 /// 服务对外的 HTTPS 根地址，写进 OpenAPI 的 `servers`。
@@ -41,7 +43,7 @@ struct Operation {
     response: &'static str,
 }
 
-const OPERATIONS: [Operation; 5] = [
+const OPERATIONS: [Operation; 8] = [
     Operation {
         path: "/v1/chart",
         id: "ziwei_get_natal_chart",
@@ -55,6 +57,27 @@ const OPERATIONS: [Operation; 5] = [
         summary: "运限事实：目标给农历年返回大限、小限、流年与流月一览，加月份到流月，给日期到流日，再给时辰到流时。",
         request: "HoroscopeRequest",
         response: "TextResponse",
+    },
+    Operation {
+        path: "/v1/decades",
+        id: "ziwei_get_decadal_overview",
+        summary: "一生的大限一览：十二个大限各一行。",
+        request: "DecadalOverviewRequest",
+        response: "TextResponse",
+    },
+    Operation {
+        path: "/v1/years",
+        id: "ziwei_get_yearly_overview",
+        summary: "连续若干农历年的流年一览：每年一行，最多 20 年。",
+        request: "YearlyOverviewRequest",
+        response: "TextResponse",
+    },
+    Operation {
+        path: "/v1/bazi",
+        id: "ziwei_find_birth_by_bazi",
+        summary: "由八字四柱反推候选公历生辰。",
+        request: "BaziRequest",
+        response: "BaziResponse",
     },
     Operation {
         path: "/v1/topic",
@@ -117,10 +140,14 @@ pub fn document(public_url: &PublicUrl) -> Value {
     add_schema::<ChartRequest>(&mut schemas, "ChartRequest");
     add_schema::<HoroscopeRequest>(&mut schemas, "HoroscopeRequest");
     add_schema::<TopicRequest>(&mut schemas, "TopicRequest");
+    add_schema::<DecadalOverviewRequest>(&mut schemas, "DecadalOverviewRequest");
+    add_schema::<YearlyOverviewRequest>(&mut schemas, "YearlyOverviewRequest");
+    add_schema::<BaziRequest>(&mut schemas, "BaziRequest");
     add_schema::<LookupRequest>(&mut schemas, "LookupRequest");
     add_schema::<CatalogRequest>(&mut schemas, "CatalogRequest");
     add_schema::<Envelope<TextView>>(&mut schemas, "TextResponse");
     add_schema::<Envelope<Entries>>(&mut schemas, "LookupResponse");
+    add_schema::<Envelope<BaziCandidates>>(&mut schemas, "BaziResponse");
     add_schema::<Envelope<Catalog>>(&mut schemas, "CatalogResponse");
     add_schema::<Envelope<()>>(&mut schemas, "ErrorResponse");
 

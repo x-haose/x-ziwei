@@ -1,13 +1,14 @@
-//! 五件工具的共用编排：适配器只做协议翻译，排盘、文本与知识查询都走这里。
+//! 各工具的共用编排：适配器只做协议翻译，排盘、文本与知识查询都走这里。
 
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use x_iztro::KnowledgePack;
 
-use crate::birth::{BirthRequest, TargetRequest};
+use crate::birth::{BaziRequest, BirthRequest, TargetRequest};
 use crate::chart::{
-    Depth, Detail, Projection, cast, cast_horoscope, horoscope_text, natal_text, topic_text,
+    Depth, Detail, Projection, births_by_bazi, cast, cast_horoscope, decadal_overview_text,
+    horoscope_text, natal_text, topic_text, yearly_overview_text,
 };
 use crate::error::{Error, ErrorCode};
 use crate::knowledge::{Catalog, Entries, Kind, PackInfo, catalog, lookup};
@@ -15,6 +16,8 @@ use crate::pack::{PackRef, PackStore};
 
 /// 单次查询最多的标识个数。
 pub const MAX_LOOKUP_KEYS: usize = 20;
+/// 流年一览一次最多的年数。
+pub const MAX_OVERVIEW_YEARS: i64 = 20;
 
 /// 进程内共享状态。无用户、无命盘库。
 #[derive(Clone)]
@@ -57,6 +60,56 @@ pub struct HoroscopeRequest {
     /// 知识包，规则同 `ziwei_get_natal_chart`。
     #[serde(default)]
     pub pack: Option<String>,
+}
+
+/// `ziwei_get_decadal_overview` / `POST /v1/decades` 入参。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DecadalOverviewRequest {
+    /// 生辰。
+    pub birth: BirthRequest,
+    /// 是否在表后附各大限四化星的知识包释义：`summary` 或 `full`。省略则只返回事实。
+    #[serde(default)]
+    pub knowledge: Option<Depth>,
+    /// 知识包，规则同 `ziwei_get_natal_chart`。
+    #[serde(default)]
+    pub pack: Option<String>,
+}
+
+/// `ziwei_get_yearly_overview` / `POST /v1/years` 入参。
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct YearlyOverviewRequest {
+    /// 生辰。
+    pub birth: BirthRequest,
+    /// 起始农历年（含），用公历年份数字表示：2027 指 2027 年正月初一起的那个农历年。
+    #[schemars(range(min = 1, max = 9999))]
+    pub from_year: i64,
+    /// 截止农历年（含），与起始年合计最多 20 年。
+    #[schemars(range(min = 1, max = 9999))]
+    pub to_year: i64,
+    /// 是否在表后附流年四化星的知识包释义：`summary` 或 `full`。省略则只返回事实。
+    #[serde(default)]
+    pub knowledge: Option<Depth>,
+    /// 知识包，规则同 `ziwei_get_natal_chart`。
+    #[serde(default)]
+    pub pack: Option<String>,
+}
+
+/// `ziwei_find_birth_by_bazi` / `POST /v1/bazi` 的结果。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct BaziCandidates {
+    /// 能排出这组八字的公历生辰，按日期先后；范围内没有时为空。
+    pub candidates: Vec<BaziCandidate>,
+}
+
+/// 一个候选生辰，可直接作为 `birth.date` 与 `birth.time_index`。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct BaziCandidate {
+    /// 公历日期 `YYYY-M-D`。
+    pub date: String,
+    /// 时辰序号 0–12；子时可能同时给出早子 0 与晚子 12 两个候选。
+    pub time_index: u8,
 }
 
 /// `ziwei_get_topic_palaces` / `POST /v1/topic` 入参。
@@ -156,6 +209,62 @@ impl App {
             },
         )?;
         Ok(view(text, &birth.language, pack.as_deref()))
+    }
+
+    /// 一生的大限一览，可选附四化星释义。
+    pub async fn decadal_overview(&self, req: DecadalOverviewRequest) -> Result<TextView, Error> {
+        let birth = req.birth.parse()?;
+        let pack = self.pack_for(req.knowledge, req.pack.as_deref()).await?;
+        let chart = cast(&birth)?;
+        tracing::info!(tool = "ziwei_get_decadal_overview", language = %birth.language.as_key(), "decades");
+        let text = decadal_overview_text(
+            &chart,
+            Projection {
+                detail: Detail::default(),
+                depth: req.knowledge,
+                pack: pack.as_deref(),
+            },
+        )?;
+        Ok(view(text, &birth.language, pack.as_deref()))
+    }
+
+    /// 连续若干农历年的流年一览，可选附四化星释义。
+    pub async fn yearly_overview(&self, req: YearlyOverviewRequest) -> Result<TextView, Error> {
+        if req.to_year - req.from_year >= MAX_OVERVIEW_YEARS {
+            return Err(Error::invalid_argument(format!(
+                "from_year to to_year covers at most {MAX_OVERVIEW_YEARS} years"
+            )));
+        }
+        let birth = req.birth.parse()?;
+        let pack = self.pack_for(req.knowledge, req.pack.as_deref()).await?;
+        let chart = cast(&birth)?;
+        tracing::info!(tool = "ziwei_get_yearly_overview", language = %birth.language.as_key(), "years");
+        let text = yearly_overview_text(
+            &chart,
+            req.from_year,
+            req.to_year,
+            Projection {
+                detail: Detail::default(),
+                depth: req.knowledge,
+                pack: pack.as_deref(),
+            },
+        )?;
+        Ok(view(text, &birth.language, pack.as_deref()))
+    }
+
+    /// 由八字反推候选公历生辰。
+    pub async fn bazi(&self, req: BaziRequest) -> Result<BaziCandidates, Error> {
+        let bazi = req.parse()?;
+        tracing::info!(tool = "ziwei_find_birth_by_bazi", "bazi");
+        Ok(BaziCandidates {
+            candidates: births_by_bazi(&bazi)?
+                .into_iter()
+                .map(|c| BaziCandidate {
+                    date: c.solar_date,
+                    time_index: c.time_index,
+                })
+                .collect(),
+        })
     }
 
     /// 按知识包的主题定义取本命宫位事实与释义。

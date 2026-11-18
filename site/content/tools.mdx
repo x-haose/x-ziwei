@@ -1,15 +1,18 @@
 ---
 title: 工具
-description: 五个只读工具：本命盘、运限、按主题取材、知识包条目与目录。
+description: 只读工具：本命盘、运限、一生大限与多年流年一览、八字反推、按主题取材、知识包条目与目录。
 icon: Wrench
 ---
 
-五个工具都只读，不保存任何东西。前三个算盘，后两个查知识包。
+工具都只读，不保存任何东西。前六个算盘，后两个查知识包。
 
 | 工具 | 返回 |
 | --- | --- |
 | `ziwei_get_natal_chart` | 本命盘事实（Markdown）：基本信息、十二宫、格局。可选只要总览，可选附知识包释义 |
 | `ziwei_get_horoscope` | 运限：问某一年返回大限、小限、流年与各月一览，问某个月到流月，问某一天到流日，问时辰到流时 |
+| `ziwei_get_decadal_overview` | 一生的大限一览：十二个大限各一行，写所在宫、虚岁与年份区间、干支与四化 |
+| `ziwei_get_yearly_overview` | 连续若干年的流年一览：每年一行，最多 20 年，回答「接下来几年」「哪年适合」 |
+| `ziwei_find_birth_by_bazi` | 由八字四柱反推候选公历生辰，只知道八字时用 |
 | `ziwei_get_topic_palaces` | 按知识包里的主题定义取本命宫位事实与释义。看哪些宫由知识包决定 |
 | `ziwei_lookup_knowledge` | 知识包条目原文：释义、古籍引文、成立条件、主题的选宫定义 |
 | `ziwei_list_knowledge` | 知识包目录：有哪些条目，名称对应什么标识 |
@@ -77,6 +80,28 @@ icon: Wrench
 - 只给 `year` 时标题里的日期是该农历年六月初一，给 `year` 加 `month` 时是该月初一，各层取自那一天。服务不读取当前时间，目标时辰也不继承出生时辰。
 
 `detail` 与 `knowledge` 同上。
+
+### `ziwei_get_decadal_overview`
+
+只要 `birth`。返回一张表，十二个大限按起运先后各一行。回答「这辈子走势」「哪段运最好」这类跨十年的问题；要看某段里某一年，再用 `ziwei_get_horoscope` 的 `target.year`。`knowledge` 给 `summary` 或 `full` 时表后附四化星释义。
+
+### `ziwei_get_yearly_overview`
+
+| 字段 | 取值 |
+| --- | --- |
+| `from_year` / `to_year` | 农历年，用公历年份数字表示，含两端，合计最多 20 年 |
+| `knowledge` | 同上 |
+
+每年一行：干支、正月初一的阳历日期、虚岁、大限与小限所在宫、流年命宫所在宫、流年四化。回答「接下来几年」「哪年适合结婚、换工作」，一次调用拿到，不必逐年取运限。
+
+### `ziwei_find_birth_by_bazi`
+
+| 字段 | 取值 |
+| --- | --- |
+| `bazi` | 年月日时四柱干支，如 `丁丑 壬寅 乙巳 丁丑`；空格可有可无，简繁体都行 |
+| `from_year` / `to_year` | 查找的公历年范围，默认 1900–2100，最多 400 年 |
+
+返回候选生辰（公历日期与时辰序号）。同一组八字大约每 60 年出现一次，按年龄挑出对应的那个，问清性别后用 `ziwei_get_natal_chart` 排盘。
 
 ### `ziwei_get_topic_palaces`
 
