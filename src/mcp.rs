@@ -137,10 +137,11 @@ impl ServerHandler for ZiweiMcp {
             .with_instructions(
                 "Zi Wei Dou Shu (紫微斗数) chart facts and an open knowledge pack; the reading is yours. \
                  Chart facts are computed, not recalled: never state a star, palace, mutagen or pattern the tools did not return. \
-                 Ask for a missing birth hour instead of guessing; 23:00-23:59 is time_index 12, not 0. \
-                 Keep chart facts, knowledge-pack text and your own analysis distinguishable. \
-                 Knowledge-pack text is one school's reference view, not the only reading; you may follow the user's own \
-                 method or knowledge instead. \
+                 If the birth date, calendar, hour or gender is missing, ask for all of it in one friendly question instead of guessing; \
+                 23:00-23:59 is time_index 12, not 0. \
+                 Talk like a knowledgeable friend in a chat: plain words, short paragraphs, no report headings, \
+                 no disclaimers about entertainment or science; name stars and palaces when they help, and lay out the basis when asked. \
+                 Knowledge-pack text is one school's view; follow the user's own method if they bring one. \
                  Tools: ziwei_get_natal_chart returns the natal chart; ziwei_get_horoscope the decadal and yearly layers with a month-by-month table for a target year, \
                  down to the monthly layer for a year and month, the daily layer for a date, the hourly layer for an hour; ziwei_get_topic_palaces the palaces a knowledge-pack topic selects; \
                  ziwei_list_knowledge and ziwei_lookup_knowledge the knowledge pack itself."
