@@ -50,7 +50,7 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 
 审核用的两项也写在 `.codex-plugin/plugin.json` 的 `extensions.com.openai` 下：
 
-- `review.test_cases`：恰好 5 条正面用例（`description`、`prompt`、`tools_triggered`、`expected_behavior`）、3 条反面用例（`description`、`prompt`），已填，覆盖本命盘、按年取运限、流年一览、大限一览、知识包查询。`review.demo_recording_url` 未填，录好后补上；上传 ZIP 时可以先缺，提交审核时必须有
+- `review.test_cases`：恰好 5 条正面用例（`description`、`prompt`、`tools_triggered`、`expected_behavior`）、3 条反面用例（`description`、`prompt`），已填，覆盖本命盘、按年取运限、流年一览、大限一览、知识包查询。`review.demo_recording_url` 已填，是放在 Google Drive 上、知道链接即可观看的录像（2026-11-21 录制，网页版 ChatGPT 暂存对话里逐条跑这 8 条用例）
 - `publication.release_notes`：已填。`publication.countries` 为 `[]`，即不限上架国家
 
 门户以包里的用例为准，不能在门户里改，要改就重新上传 ZIP。测试账号之类的审核信息不进包，在门户的 Review details 表单里填。
@@ -67,7 +67,7 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 2. 在组织设置里完成个人或企业身份核验；目录里显示的开发者名取自核验结果。
 3. 四个公开页面在 `site/` 里：官网 `https://ziwei.x-haose.com`、支持 `/support`、隐私政策 `/privacy`、服务条款 `/terms`，各有 `/zh` 与 `/en` 两个版本。隐私政策与条款是按服务的实际行为起草的，提交前要由发布者本人过一遍。
 4. 确认图标（`plugin/assets/`）。
-5. 演示录像：演示这些用例与主要功能，给一个审核人员能打开的地址。官方没写格式、托管位置和是否要分桌面与移动端。
+5. 演示录像：已录并填入 `demo_recording_url`。改了用例或插件行为后要重录。官方没写格式、托管位置和是否要分桌面与移动端。
 6. 真机跑一遍 `plugin.json` 里的 8 条用例：网页、桌面、移动端的 ChatGPT，以及 Codex。
 7. 门户操作：上传 ZIP、连接 MCP、取域名校验口令并配置到服务、Verify Domain、提交、通过后手动点 Publish（批准不会自动上架）。
 8. 决定上架国家、分类、发布名称（现为「x-ziwei 紫微斗数」）。
