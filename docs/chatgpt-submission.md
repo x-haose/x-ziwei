@@ -39,7 +39,7 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 
 ## 提交包
 
-提交的是一个 ZIP，根目录即 `plugin/` 的内容。展示信息写在 `.codex-plugin/plugin.json` 的 `interface` 里，Skill 自己的名称与图标写在 `skills/ziwei/agents/openai.yaml`，图标在 `assets/`（`logo.png` 由 `icon.svg` 渲染）。官方目录里已上架的插件用的也是这种 `.codex-plugin/plugin.json` 写法；[打包格式](https://developers.openai.com/plugins/build/plugins)另外描述了把同样的内容放在根目录 `plugin.json` 的 `extensions.com.openai` 下的写法，两者并存时后者整体生效。
+提交的是一个 ZIP，根目录即 `plugin/` 的内容。展示信息写在 `.codex-plugin/plugin.json` 的 `interface` 里，Skill 自己的名称与图标写在 `skills/ziwei/agents/openai.yaml`，图标在 `assets/`（`logo.png` 由 `icon.svg` 渲染）。官方目录里已上架的插件用的也是这种 `.codex-plugin/plugin.json` 写法；[打包格式](https://developers.openai.com/plugins/build/plugins)另外描述了把同样的内容放在根目录 `plugin.json` 的 `extensions.com.openai` 下的写法，两者并存时后者整体生效。本仓库不用根目录写法：包里同时有根目录 `plugin.json`、`mcp.json` 与 `.codex-plugin/plugin.json`、`.mcp.json` 时，ChatGPT 的「上傳外掛程式封存檔」报 `Plugin-level test_cases require exactly one MCP server` 拒收（2026-11-21 实测），只留 `.codex-plugin` 这一套即可上传。
 
 `interface` 的要求与现状：
 
@@ -51,9 +51,9 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 审核用的两项也写在 `.codex-plugin/plugin.json` 的 `extensions.com.openai` 下：
 
 - `review.test_cases`：恰好 5 条正面用例（`description`、`prompt`、`tools_triggered`、`expected_behavior`）、3 条反面用例（`description`、`prompt`），已填，覆盖本命盘、按年取运限、流年一览、大限一览、知识包查询。`review.demo_recording_url` 未填，录好后补上；上传 ZIP 时可以先缺，提交审核时必须有
-- `publication.release_notes`：已填。`publication.countries` 未填，由发布者决定
+- `publication.release_notes`：已填。`publication.countries` 为 `[]`，即不限上架国家
 
-门户以包里的用例为准，不能在门户里改，要改就重新上传 ZIP。测试账号之类的审核信息不进包，在门户的 Review details 表单里填。根目录 `plugin.json` 里只要出现 `extensions.com.openai`，就会整体取代 `.codex-plugin/plugin.json` 里的这一块，两边不合并。本仓库两处都写了同一份 `extensions.com.openai`，以根目录 `plugin.json` 为准，改用例或发布说明时两处一起改。
+门户以包里的用例为准，不能在门户里改，要改就重新上传 ZIP。测试账号之类的审核信息不进包，在门户的 Review details 表单里填。
 
 插件版本号写在 `.codex-plugin/plugin.json`、`.claude-plugin/plugin.json` 与 `.claude-plugin/marketplace.json` 三处，客户端按版本号缓存已安装的插件，改了插件内容要一起加版本号。
 
