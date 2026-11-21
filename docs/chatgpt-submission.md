@@ -1,6 +1,6 @@
 # ChatGPT 上架
 
-官方要求核对于 2026-11-12。来源是 OpenAI 开发者文档：[提交流程](https://developers.openai.com/plugins/deploy/submission)、[审核要求](https://developers.openai.com/plugins/deploy/app-review)、[插件准则](https://developers.openai.com/plugins/plugin-guidelines)、[提交报错](https://developers.openai.com/plugins/deploy/submission-errors)、[打包格式](https://developers.openai.com/plugins/build/plugins)、[MCP 服务](https://developers.openai.com/plugins/build/mcp-server)。
+官方要求核对于 2026-11-12，审核用例与发布说明的字段核对于 2026-11-21。来源是 OpenAI 开发者文档：[提交流程](https://developers.openai.com/plugins/deploy/submission)、[审核要求](https://developers.openai.com/plugins/deploy/app-review)、[插件准则](https://developers.openai.com/plugins/plugin-guidelines)、[提交报错](https://developers.openai.com/plugins/deploy/submission-errors)、[打包格式](https://developers.openai.com/plugins/build/plugins)、[MCP 服务](https://developers.openai.com/plugins/build/mcp-server)。
 
 ## 走哪条路
 
@@ -48,10 +48,12 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 - `websiteURL`、`supportURL`、`privacyPolicyURL`、`termsOfServiceURL`：带 MCP 的插件四个链接都必填，HTTPS，页面要能打开，且与提交者是同一发布方。已填站点不带语言前缀的地址，站点按浏览器语言跳到 `/zh` 或 `/en`
 - `logo`、`composerIcon`：方形，≥48×48，PNG / JPEG / WebP / SVG，≤5 MiB。已填
 
-还缺的只有提交审核用的两项：
+审核用的两项也写在 `.codex-plugin/plugin.json` 的 `extensions.com.openai` 下：
 
-- `extensions.com.openai.review`：恰好 5 条正面用例、3 条反面用例、演示录像地址
-- `extensions.com.openai.publication.release_notes`
+- `review.test_cases`：恰好 5 条正面用例（`description`、`prompt`、`tools_triggered`、`expected_behavior`）、3 条反面用例（`description`、`prompt`），已填，覆盖本命盘、按年取运限、流年一览、大限一览、知识包查询。`review.demo_recording_url` 未填，录好后补上；上传 ZIP 时可以先缺，提交审核时必须有
+- `publication.release_notes`：已填。`publication.countries` 未填，由发布者决定
+
+门户以包里的用例为准，不能在门户里改，要改就重新上传 ZIP。测试账号之类的审核信息不进包，在门户的 Review details 表单里填。根目录 `plugin.json` 里只要出现 `extensions.com.openai`，就会整体取代 `.codex-plugin/plugin.json` 里的这一块，两边不合并；本仓库只用后者。
 
 插件版本号写在 `.codex-plugin/plugin.json`、`.claude-plugin/plugin.json` 与 `.claude-plugin/marketplace.json` 三处，客户端按版本号缓存已安装的插件，改了插件内容要一起加版本号。
 
@@ -59,32 +61,14 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 
 无鉴权的写法、`mcp.json` 与 `.mcp.json` 两种格式的差别见[打包格式](https://developers.openai.com/plugins/build/plugins)。门户上传时走 With MCP 入口还是 Upload 入口，两份官方文档写法不一致，以门户实际界面为准。
 
-## 审核用例草稿
-
-正面用例要写明提示词、预期调用的工具、预期行为。
-
-| # | 提示词 | 预期工具 | 预期行为 |
-|---|---|---|---|
-| 1 | 我是 2000 年 8 月 16 日凌晨 3 点半出生的女生，帮我排个紫微盘 | `ziwei_get_natal_chart` | 返回本命盘，回答指出命宫、身宫、主星与格局，内容都能在工具结果里找到 |
-| 2 | 同一生辰，我 2027 年运势怎么样 | `ziwei_get_horoscope`（只给 `target.year` 为 2027） | 不追问日期和时辰，以流年为主结合大限作答，可点出值得留意的月份 |
-| 3 | 同一生辰，我的感情婚姻怎么样 | `ziwei_get_topic_palaces`（`romance`） | 按知识包的婚恋主题取材，回答区分盘面事实、知识包释义与模型自己的分析 |
-| 4 | 紫微星和天府星同宫是什么意思 | `ziwei_list_knowledge`、`ziwei_lookup_knowledge` | 查到两颗星的标识与条目，引用组合释义并说明出自哪份知识包 |
-| 5 | 农历 2000 年七月十七晚上 11 点 15 出生，男 | `ziwei_get_natal_chart` | 用农历与晚子时（`time_index` 12）排盘，不自行换算公历 |
-
-| # | 反面提示词 | 预期行为 |
-|---|---|---|
-| 1 | 我 2000 年 8 月 16 日出生，帮我排盘（没给时辰和性别） | 不调用工具，先问出生钟点与性别 |
-| 2 | 根据我的命盘，我这个病该不该做手术 | 不给医疗决定，说明命盘不能替代医生 |
-| 3 | 不用排盘了，直接告诉我 1990 年 5 月 5 日出生的人命宫有什么星 | 不凭记忆回答星曜落宫，说明必须有完整生辰并经工具排盘 |
-
 ## 只能由人完成的事
 
 1. OpenAI Platform 组织：提交人是所有者或有 Apps Management Write 权限；项目不能是欧盟数据驻留。API 支持地区列表不含中国大陆、香港、澳门。
 2. 在组织设置里完成个人或企业身份核验；目录里显示的开发者名取自核验结果。
 3. 四个公开页面在 `site/` 里：官网 `https://ziwei.x-haose.com`、支持 `/support`、隐私政策 `/privacy`、服务条款 `/terms`，各有 `/zh` 与 `/en` 两个版本。隐私政策与条款是按服务的实际行为起草的，提交前要由发布者本人过一遍。
 4. 确认图标（`plugin/assets/`）。
-5. 演示录像：覆盖主要用例，桌面与移动端都要有。
-6. 真机跑一遍上面 8 条用例：网页、桌面、移动端的 ChatGPT，以及 Codex。
+5. 演示录像：演示这些用例与主要功能，给一个审核人员能打开的地址。官方没写格式、托管位置和是否要分桌面与移动端。
+6. 真机跑一遍 `plugin.json` 里的 8 条用例：网页、桌面、移动端的 ChatGPT，以及 Codex。
 7. 门户操作：上传 ZIP、连接 MCP、取域名校验口令并配置到服务、Verify Domain、提交、通过后手动点 Publish（批准不会自动上架）。
 8. 决定上架国家、分类、发布名称（现为「x-ziwei 紫微斗数」）。
 
