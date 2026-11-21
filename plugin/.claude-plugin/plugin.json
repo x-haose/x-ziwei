@@ -4,11 +4,16 @@
   "version": "0.3.0",
   "description": "紫微斗数：公开的盘面事实、知识包与解读 Skill。盘由 x-iztro 计算，解读交给你的模型。",
   "author": {
-    "name": "x-haose",
+    "name": "昊色居士",
     "url": "https://github.com/x-haose"
   },
   "homepage": "https://ziwei.x-haose.com",
   "repository": "https://github.com/x-haose/x-ziwei",
   "license": "MIT",
-  "keywords": ["ziwei", "iztro", "astrology", "mcp"]
+  "keywords": [
+    "ziwei",
+    "iztro",
+    "astrology",
+    "mcp"
+  ]
 }
