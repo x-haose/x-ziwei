@@ -1,0 +1,8 @@
+/node_modules/
+/build/
+/.react-router/
+# 字体切片由 scripts/fonts 在构建时生成
+/public/fonts/
+/test-results/
+/playwright-report/
+/e2e/shots/

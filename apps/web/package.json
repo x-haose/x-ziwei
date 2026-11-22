@@ -1,0 +1,43 @@
+{
+  "name": "x-ziwei-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "scripts": {
+    "dev": "react-router dev",
+    "build": "react-router build",
+    "typecheck": "react-router typegen && tsc",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "check": "pnpm typecheck && pnpm test && pnpm build && pnpm e2e"
+  },
+  "dependencies": {
+    "@vanilla-extract/css": "1.21.3",
+    "@vanilla-extract/dynamic": "2.1.5",
+    "react": "19.3.1",
+    "react-aria-components": "1.22.1",
+    "react-dom": "19.3.1",
+    "react-markdown": "10.1.0",
+    "react-router": "8.5.2",
+    "remark-cjk-friendly": "2.3.4",
+    "remark-gfm": "4.0.1",
+    "remend": "1.5.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1",
+    "@react-router/dev": "8.5.2",
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vanilla-extract/vite-plugin": "5.2.6",
+    "harfbuzzjs": "1.6.4",
+    "subset-font": "2.9.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.8",
+    "vitest": "5.1.1"
+  }
+}

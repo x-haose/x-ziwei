@@ -1,0 +1,123 @@
+import { expect, test } from '@playwright/test';
+
+test.beforeEach(async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/zh/chart');
+  await page.waitForLoadState('networkidle');
+});
+
+test('年份：回车打开、焦点落在第一项、直接键入跳到该年、回车选中并把焦点还给触发钮', async ({ page }) => {
+  const trigger = page.getByRole('button', { name: '出生年份' });
+  await expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  const dialog = page.getByRole('dialog', { name: '出生年份' });
+  await expect(dialog).toBeVisible();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await expect(dialog.getByRole('listbox', { name: '1990 年代的年份' })).toBeVisible();
+  await expect(dialog.getByRole('option', { name: '1990' })).toBeFocused();
+  await page.keyboard.type('198');
+  await expect(dialog.getByText('键入：198_')).toBeVisible();
+  await expect(dialog.getByRole('listbox', { name: '1980 年代的年份' })).toBeVisible();
+  await page.keyboard.type('7');
+  await expect(dialog.getByRole('option', { name: '1987' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toHaveText('1987');
+  await expect(trigger).toBeFocused();
+});
+
+test('年份：PageDown 翻年代，页头切到年代总览再选回', async ({ page }) => {
+  await page.getByRole('button', { name: '出生年份' }).click();
+  const dialog = page.getByRole('dialog', { name: '出生年份' });
+  await page.keyboard.press('PageDown');
+  await expect(dialog.getByRole('listbox', { name: '2000 年代的年份' })).toBeVisible();
+  await dialog.getByRole('button', { name: '2000 年代，点选切到年代总览' }).click();
+  await dialog.getByRole('option', { name: '1950–1959' }).click();
+  await expect(dialog.getByRole('listbox', { name: '1950 年代的年份' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('button', { name: '出生年份' })).toBeFocused();
+});
+
+test('日：年月没选时不可用；月历按星期排，方向键按网格移动', async ({ page }) => {
+  const day = page.getByRole('button', { name: '出生日' });
+  await expect(day).toBeDisabled();
+  await page.getByRole('button', { name: '出生年份' }).click();
+  await page.getByRole('option', { name: '1990' }).click();
+  await page.getByRole('button', { name: '出生月份' }).click();
+  await expect(page.getByRole('option', { name: /^2 月/ })).toContainText('28 天');
+  await page.getByRole('option', { name: /^8 月/ }).click();
+  await expect(day).toBeEnabled();
+  await day.click();
+  const dialog = page.getByRole('dialog', { name: '1990 年 8 月' });
+  // 1990-08-01 是星期三：第一项从第 3 列起
+  await expect(dialog.getByRole('option', { name: '1', exact: true })).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(dialog.getByRole('option', { name: '8', exact: true })).toBeFocused();
+  await page.keyboard.press('End');
+  await expect(dialog.getByRole('option', { name: '31', exact: true })).toBeFocused();
+  await page.keyboard.press(' ');
+  await expect(day).toHaveText('31');
+});
+
+test('提交空表单：各字段报错并把焦点移到第一个出错的字段', async ({ page }) => {
+  await page.getByRole('button', { name: '排盘', exact: true }).click();
+  const year = page.getByRole('button', { name: '出生年份' });
+  await expect(year).toBeFocused();
+  await expect(year).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByText('选出生年份')).toBeVisible();
+  await expect(page.getByText('选时辰；不确定就选下方的大概时段')).toBeVisible();
+  await expect(page.getByText('选性别')).toBeVisible();
+});
+
+test('改月份让已选的日失效时，立即报出', async ({ page }) => {
+  await page.getByRole('button', { name: '出生年份' }).click();
+  await page.keyboard.type('2001');
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: '出生月份' }).click();
+  await page.getByRole('option', { name: /^1 月/ }).click();
+  await page.getByRole('button', { name: '出生日' }).click();
+  await page.getByRole('option', { name: '31', exact: true }).click();
+  await page.getByRole('button', { name: '出生月份' }).click();
+  await page.getByRole('option', { name: /^2 月/ }).click();
+  await expect(page.getByText('2001 年 2 月只有 28 天')).toBeVisible();
+  await expect(page.getByRole('button', { name: '出生日' })).toHaveAttribute('aria-invalid', 'true');
+});
+
+test('填好提交：生辰写进地址 # 之后并记进最近排过；带生辰的链接打开即预填', async ({ page }) => {
+  await page.getByRole('button', { name: '出生年份' }).click();
+  await page.keyboard.type('2000');
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: '出生月份' }).click();
+  await page.getByRole('option', { name: /^8 月/ }).click();
+  await page.getByRole('button', { name: '出生日' }).click();
+  await page.getByRole('option', { name: '16', exact: true }).click();
+  await page.getByRole('button', { name: '出生时辰' }).click();
+  await page.getByRole('option', { name: /^夜里/ }).click();
+  await expect(page.getByText('时辰未定，排出 早子、丑、寅 三张候选盘')).toBeVisible();
+  await page.getByRole('radio', { name: '女' }).click();
+  await page.getByRole('button', { name: '排盘', exact: true }).click();
+  await expect(page).toHaveURL('/zh/chart#cal=solar&d=2000-8-16&p=night&g=f');
+  await expect(page.getByRole('button', { name: /2000-8-16 夜里（时辰未定）/ })).toBeVisible();
+
+  await page.goto('/zh/chart#cal=solar&d=1987-2-3&t=12&g=m');
+  await expect(page.getByRole('button', { name: '出生年份' })).toHaveText('1987');
+  await expect(page.getByRole('button', { name: '出生时辰' })).toContainText('晚子时');
+  await expect(page.getByRole('radio', { name: '男' })).toBeChecked();
+});
+
+test('地址里的生辰不合法时明确提示', async ({ page }) => {
+  await page.goto('/zh/chart#cal=solar&d=2001-2-30&t=2&g=f');
+  await expect(page.getByRole('status').filter({ hasText: '链接里的生辰不完整，请重新填写' })).toBeVisible();
+});
+
+test('手机上选择器是底部面板', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.getByRole('button', { name: '出生时辰' }).click();
+  const dialog = page.getByRole('dialog', { name: '出生时辰' });
+  await expect(dialog).toBeVisible();
+  const box = await dialog.boundingBox();
+  expect(box && Math.round(box.y + box.height)).toBeGreaterThanOrEqual(800);
+  expect(box && Math.round(box.width)).toBe(375);
+});
