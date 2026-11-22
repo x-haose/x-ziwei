@@ -37,8 +37,7 @@
       "紫微和天府同宫是什么意思"
     ],
     "composerIcon": "./assets/logo.png",
-    "logo": "./assets/logo.png",
-    "screenshots": []
+    "logo": "./assets/logo.png"
   },
   "extensions": {
     "com.openai": {

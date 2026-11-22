@@ -47,6 +47,7 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 - `category`：只能从 Productivity、Creativity、Developer Tools、Business & Operations、Data & Analytics、Communication、Education & Research、Security、Finance、Healthcare、Travel、Entertainment、Other 里选。现为 Entertainment（可选项里没有命理或生活方式类）
 - `websiteURL`、`supportURL`、`privacyPolicyURL`、`termsOfServiceURL`：带 MCP 的插件四个链接都必填，HTTPS，页面要能打开，且与提交者是同一发布方。已填站点不带语言前缀的地址，站点按浏览器语言跳到 `/zh` 或 `/en`
 - `logo`、`composerIcon`：方形，≥48×48，PNG / JPEG / WebP / SVG，≤5 MiB。已填
+- 不写 `screenshots`：哪怕是空数组，门户上传也报 `Invalid plugin package`，要求删掉（2026-11-22 实测）
 
 审核用的两项也写在 `.codex-plugin/plugin.json` 的 `extensions.com.openai` 下：
 
