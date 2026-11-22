@@ -28,8 +28,8 @@ x-ziwei：让 AI 解读紫微斗数的产品。排盘、运限、格局判定由
 |---|---|---|
 | AI 插件 | 公网远程 MCP + Skill，装进 ChatGPT、Claude、Codex、Cursor 等客户端；另有 stdio 供本机调试 | 客户端自带 |
 | HTTP 接口 | `/v1/*` 与 OpenAPI，契约见 `docs/http-api.md` | 调用方自己的 |
-| 网页 | `site/` 里排盘、生成提示词复制到任意聊天 AI（含不支持插件的 DeepSeek、豆包、Kimi）、填自己的 API Key 直接对话 | 用户的聊天 AI 或 API Key |
-| 桌面 | Tauri 应用，界面与网页同一套，作为 ACP 客户端启动用户已装的 Claude Code、Codex、Cursor 等 agent，挂上本机 MCP | 用户已有的订阅 |
+| 网页 | 独立的网页应用 `apps/web`（与文档站分开）：排盘、生成提示词复制到任意聊天 AI（含不支持插件的 DeepSeek、豆包、Kimi）、填自己的 API Key 直接对话 | 用户的聊天 AI 或 API Key |
+| 桌面 | Tauri 应用，直接打包网页应用的静态产物，作为 ACP 客户端启动用户已装的 Claude Code、Codex、Cursor 等 agent，挂上本机 MCP | 用户已有的订阅 |
 
 各渠道的建设顺序与进度见 `docs/roadmap.md`。
 
@@ -68,8 +68,8 @@ x-ziwei：让 AI 解读紫微斗数的产品。排盘、运限、格局判定由
 - 传输：Streamable HTTP（公网主路径）与 stdio（本机）；工具实现一份
 - 分发：一个二进制；对外安装故事是 Agent Plugin（`plugin/`：Claude `.claude-plugin/` + Codex `.codex-plugin/` + `.mcp.json` + `skills/ziwei/SKILL.md`）。Skill 与 MCP 一起安装，不手抄 SKILL.md。MCP 指向公网 URL
 - 知识包：服务进程读默认包或本地/白名单 URL 的 JSON；不接任意 URL（SSRF）
-- 网页：`site/` 的 Next.js 应用，排盘在浏览器里调 x-iztro 的 WASM，不调 `/v1`
-- 桌面：Tauri 2，界面用与网页共用的 React 组件包，Rust 后端与服务共用本仓库的库代码，用 ACP 与 agent 通信
+- 网页：`apps/web`，React Router 8（`ssr:false` 加 `prerender`，Vite 构建）产出纯静态站，排盘在浏览器里调 x-iztro 的 WASM，不调 `/v1`。各项选型与理由见 `docs/roadmap.md`「选型」
+- 桌面：`apps/desktop`，Tauri 2，前端就是 `apps/web` 的同一份静态产物，平台差异集中在网页应用的平台层；Rust 外壳是独立的 Cargo 项目，不并入服务端 crate；用 ACP 与 agent 通信
 - 设计：网页与桌面共用一套设计规范，方向未定不写界面代码；流程与禁忌见 `docs/roadmap.md`「设计」
 - 仓库独立 git；`Cargo.toml` 的完整 `rev` 与 `Cargo.lock` 固定 x-iztro 源码，部署不依赖本机目录布局
 
@@ -85,7 +85,7 @@ x-ziwei：让 AI 解读紫微斗数的产品。排盘、运限、格局判定由
 
 ## 站点
 
-`site/` 是面向使用者的站点，也是网页渠道的应用（排盘与提示词等工具页），部署在 `https://ziwei.x-haose.com`：Vercel 项目 `x-ziwei`，Root Directory 为 `site`，推到 `main` 即发布。它与服务分开部署，改站点不需要重新构建服务。排盘库的文档站是另一个 Vercel 项目 `x-iztro`（仓库 `x-haose/x-iztro`，目录 `docs`，域名 `x-iztro.x-haose.com`）。
+`site/` 是文档站（安装、工具、知识包、接口、隐私与条款等说明），与网页应用 `apps/web` 分开，部署在 `https://ziwei.x-haose.com`：Vercel 项目 `x-ziwei`，Root Directory 为 `site`，推到 `main` 即发布。它与服务分开部署，改站点不需要重新构建服务。排盘库的文档站是另一个 Vercel 项目 `x-iztro`（仓库 `x-haose/x-iztro`，目录 `docs`，域名 `x-iztro.x-haose.com`）。
 
 - 技术栈照抄 x-iztro 文档站：Next.js + Fumadocs + Tailwind，版本见 `site/package.json`。中文是默认语言，`content/` 里无后缀为中文，`.en.mdx` 为英文，两种语言成对维护。
 - 页面直接挂在语言段之下（`/zh/install`），不带 `/docs`。`/{lang}/docs/*` 是排盘库文档的旧地址，永久跳转到 `https://x-iztro.x-haose.com`；旧的 MCP 说明页跳到本站安装页。

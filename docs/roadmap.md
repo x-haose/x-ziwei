@@ -4,15 +4,33 @@
 
 ## 选型
 
-版本为 2026-11-23 查 npm 与 crates.io 所得。
+版本为 2026-11-23 查 npm、crates.io 与官方文档所得。网页框架一项用同一个假 WASM 包（包内 `new URL('./x.wasm', import.meta.url)` 加 `instantiateStreaming`，主线程与模块 Worker 各加载一次）把各候选实际构建，在 Chromium、WebKit 与 macOS 上的 Tauri 2.12.7 里跑通。
 
-| 问题 | 候选 | 选择与理由 |
+| 问题 | 选择 | 比较过的候选与判据 |
 |---|---|---|
-| 网页放哪 | 现有 `site/`（Next.js 16.4.6）；独立 Vite 8.3.8 单页应用 | `site/`：排盘页要有静态 HTML 供搜索引擎收录，与文档共用导航和设计，一处部署 |
-| 盘在哪算 | 浏览器里跑 x-iztro 的 WASM；服务端 `/v1` | 浏览器：`/v1` 只出 Markdown，画不了宫格、做不了点宫联动；生辰不经服务端；用户的知识包在浏览器里直接用。代价是首次加载约 500 KB（gzip），并且要先有 x-iztro 的 JS 包 |
-| 本地存储 | localStorage；IndexedDB | 命盘与知识包用 IndexedDB（localStorage 约 5 MB，放不下知识包）；主题等小设置用 localStorage |
-| 桌面框架 | gpui 0.2.2；Tauri 2.12.7 | Tauri：界面与网页同一套，桌面只多 Rust 后端（ACP 调 agent、读写本机文件）。gpui 要把盘面、Markdown、对话界面再写一遍，每个功能永远做两份，且 0.x 接口不稳 |
-| 网页与桌面共用界面 | 共用 React 组件包；桌面直接打包 Next 站点 | 共用组件包（盘面、生辰表单、提示词、知识包编辑）：站点用到服务端能力（中间件、路由处理器、搜索接口），不能整站静态导出给 Tauri |
+| 网页放哪 | 独立应用 `apps/web`，与文档站 `site/`（Next + Fumadocs）分开 | 维护者定：网页工具不与文档站放在一起 |
+| 网页框架 | React Router 8.5.2 framework mode，`ssr:false` 加 `prerender` | Next 16.4.6 静态导出（框架底座首页 JS 133.8 KB gz，Tauri 指南停在 14.2.3，Turbopack Worker 有回归史）；TanStack Start 1.169.7（稳定版 6 周，开 SPA 模式后未产出路由正文 HTML）；Vite + TanStack Router 纯 SPA（无预渲染，SEO 要靠标为实验性的 API 自搭）；SvelteKit 3.4.0（首页 JS 34.8 KB，最强对手，但文档站是 React、组件不能直接复用）；SolidStart 2.2.3（不支持刚发布的 Solid 2.0）。RR8：「纯静态、部分预渲染、其余走 SPA 回退」是官方正式部署形态，需要服务端的写法构建期报错，与 Tauri 无 Node 服务端的约束一致；首页 JS 106.8 KB |
+| 前端库与构建 | React 19.3.1，Vite 8.3.8 | 见上；网页与桌面同一条构建链 |
+| 桌面 | Tauri 2（cli 2.12.6、crate 2.12.7），`frontendDist` 即 `apps/web` 的 `build/client` | gpui 0.2.2：界面要再写一遍且 0.x 接口不稳。平台差异放在网页应用的平台层：LLM 请求经 `@tauri-apps/plugin-http` 2.9.0 绕开 CORS、文件导入导出、系统浏览器打开外链；用 `TAURI_ENV_*` 在构建期区分，网页包不含 Tauri 代码 |
+| 交互组件 | React Aria Components 1.22.1 | Base UI 1.9.0（无 Tree、无拖放、无内置中文文案）；Radix（无 IME 处理，近一年基本一人维护、有约 10 个月未发版）；Ark UI。React Aria 自带 zh-CN 文案，有知识包编辑器要用的 Tree、GridList、拖放。四家都不支持农历，生辰表单用 Select、NumberField、RadioGroup、ToggleButtonGroup 自己组合 |
+| shadcn/ui | 不用，只参考接线写法 | 它的价值在默认类名串，正是要去掉的通用观感 |
+| 样式 | vanilla-extract（css 1.21.3、vite-plugin 5.2.6） | Tailwind 4.3.5（任意值可绕开令牌，暗色漏写静默沿用亮色）；CSS Modules（`var()` 拼错静默失效）；Panda 2.6.0（要 codegen、限动态值）；StyleX 0.19.2（要走 babel）。vanilla-extract 用 theme contract 管令牌，令牌写错或明暗漏写都编译报错，零运行时 |
+| 动效 | CSS 为主，Motion 14.14.0（LazyMotion）为辅，View Transitions 只作增强 | GSAP 3.15.1 是 Webflow 专有许可、可单方修改，不选。描线用 SVG `pathLength` 加 dashoffset；可打断的进出场用 Motion；尊重「减少动态效果」 |
+| 命盘绘制 | Grid 排格子与文字，SVG 只画连线 | Canvas、纯 SVG：中文清晰度、无障碍、按断点重排都不如 |
+| 保存图片 | modern-screenshot 4.7.0 | 先用子集字体在 Tauri macOS、Tauri Linux、iOS Safari 各导出一张；不通过就整体换 Takumi 2.22.1（网页 WASM、桌面 Rust crate） |
+| 图标 | 自绘约 30 个 | Lucide 是 shadcn 与 Fumadocs 的默认观感；Phosphor、Iconoir、Tabler 作缺漏时的改绘底稿 |
+| Markdown | react-markdown 10.1.0 + remend 1.5.0 + remark-gfm + remark-cjk-friendly 2.3.4（约 69 KB gz） | Streamdown 2.8.0 加 CJK 插件约 175 KB gz，大头是允许原始 HTML 的 parse5，模型输出不该允许；对话界面届时再评估 |
+| 本机存储 | idb 8.0.4 | idb-keyval 6.3.0 不支持迁移与索引；Dexie 4.4.7 体积大 20 倍 |
+| 状态 | 第一期不用库，之后视需要 Zustand 5.1.0 | Jotai、XState 对场景无额外收益 |
+| 分享链接 | 生辰放在 `#` 之后，自写 `useSyncExternalStore`；非法 hash 明确报错 | nuqs 不支持 hash |
+| 中文字体 | 只用 OFL 字体，自托管同源，构建时切片（cn-font-split），首屏预载盘面 384 字的子集；桌面复用同一份产物并附许可证 | 阿里普惠体、HarmonyOS Sans、MiSans、OPPO Sans 禁止转换或修改，方正、汉仪嵌入要书面授权；Google Fonts、jsDelivr 在大陆不可靠。具体字体随设计方向定 |
+| 包管理 | pnpm 12.21.0 workspaces 加 catalog，不用 Turborepo | npm（依赖提升致未声明依赖可用）；bun。共享包直接导出 TS 源码，没有可缓存的构建 |
+| 测试 | Vitest 5.1.1（含 browser mode 组件截图）、Playwright 1.65.1（跑静态产物）、`@wdio/tauri-service` 1.5.1（桌面冒烟） | Storybook 说不出专门防哪个问题，不加 |
+| 浏览器内对话 | AI SDK 7（ai 7.0.179、@ai-sdk/react 4.0.183） | 各厂商官方 SDK（工具循环要各写一遍）、直接 fetch |
+
+仓库结构：根目录加 pnpm workspace（成员 `site`、`apps/*`、`packages/*`）；`apps/web` 是第二个 Vercel 项目；`apps/desktop/src-tauri` 是独立的 Cargo 项目，不加入根 crate（Dockerfile 只拷根 crate，并入 workspace 会让服务端镜像构建失败）；`packages/*` 只放被两个以上应用用到的代码。
+
+动工前要实测的：Windows（WebView2）与 Linux（WebKitGTK）上的 Tauri；真实 x-iztro 包与 Worker 里的八字反推；React Router 8 静态产物在 Vercel 上的部署；中英文路径前缀的预渲染与 hash 水合；Tauri HTTP 插件配合 AI SDK 的流式输出；`tauri dev` 下的 Worker 与 WASM；React Aria 弹层里拼音组字按 Esc（Safari、WKWebView）；保存图片在 WebKit 上的字体内嵌。
 
 ## 设计
 
@@ -42,7 +60,7 @@
 
 - 输入：公历或农历（含闰月）、年月日、时辰（13 档，含早子、晚子）、性别。
 - 命盘：十二宫格，每宫主星（亮度、四化）、辅星杂耀、宫干支、大限岁数，标身宫与来因宫，中宫写基本信息；点宫高亮三方四正；选大限、流年、流月把运限叠上盘。
-- 提示词：勾选本命盘、释义、某年运限、大限一览、若干年流年一览，写问题，一键复制；附 DeepSeek、豆包、Kimi、ChatGPT 等入口。提示词 = 解读方法（`site/prompts/reading.<lang>.md`，没有工具可调的场合用的方法正文，与 Skill 并列维护）+ 盘面各段 + 问题。
+- 提示词：勾选本命盘、释义、某年运限、大限一览、若干年流年一览，写问题，一键复制；附 DeepSeek、豆包、Kimi、ChatGPT 等入口。提示词 = 解读方法（网页应用里的 `prompts/reading.<lang>.md`，没有工具可调的场合用的方法正文，与 Skill 并列维护）+ 盘面各段 + 问题。
 - 分享链接把生辰放在 `#` 之后，不发给服务器；最近排过的盘存在本机浏览器。
 - 隐私政策同步写明网页在浏览器里计算。
 
@@ -67,7 +85,7 @@
 
 ## 5. 桌面（Tauri）
 
-未开始。网页全部功能，加本机命盘档案（姓名、备注、标签）、本机知识包库、离线可用；作为 ACP 客户端启动用户已装的 Claude Code、Codex、Cursor 解盘，也可用自己的 API Key。ACP 的 Rust 库 agent-client-protocol 5.5.1；ACP 官方列表里 Claude、Codex 经适配器接入，Cursor 自带支持。届时服务端的库代码拆成 workspace 成员，Docker 只构建服务端。
+未开始。网页全部功能，加本机命盘档案（姓名、备注、标签）、本机知识包库、离线可用；作为 ACP 客户端启动用户已装的 Claude Code、Codex、Cursor 解盘，也可用自己的 API Key。ACP 的 Rust 库 agent-client-protocol 5.5.1；ACP 官方列表里 Claude、Codex 经适配器接入，Cursor 自带支持。Rust 外壳是独立的 Cargo 项目（`apps/desktop/src-tauri`），本机 MCP 按路径依赖根 crate 的库部分，不把两者并成一个 Cargo workspace。
 
 ## 暂缓
 
