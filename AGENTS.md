@@ -28,7 +28,7 @@ x-ziwei：让 AI 解读紫微斗数的产品。排盘、运限、格局判定由
 |---|---|---|
 | AI 插件 | 公网远程 MCP + Skill，装进 ChatGPT、Claude、Codex、Cursor 等客户端；另有 stdio 供本机调试 | 客户端自带 |
 | HTTP 接口 | `/v1/*` 与 OpenAPI，契约见 `docs/http-api.md` | 调用方自己的 |
-| 网页 | 独立的网页应用 `apps/web`（与文档站分开）：排盘、生成提示词复制到任意聊天 AI（含不支持插件的 DeepSeek、豆包、Kimi）、填自己的 API Key 直接对话 | 用户的聊天 AI 或 API Key |
+| 网页 | 产品站 `apps/web`：排盘、生成提示词复制到任意聊天 AI（含不支持插件的 DeepSeek、豆包、Kimi）、填自己的 API Key 直接对话 | 用户的聊天 AI 或 API Key |
 | 桌面 | Tauri 应用，直接打包网页应用的静态产物，作为 ACP 客户端启动用户已装的 Claude Code、Codex、Cursor 等 agent，挂上本机 MCP | 用户已有的订阅 |
 
 各渠道的建设顺序与进度见 `docs/roadmap.md`。
@@ -85,7 +85,7 @@ x-ziwei：让 AI 解读紫微斗数的产品。排盘、运限、格局判定由
 
 ## 站点
 
-`site/` 是文档站（安装、工具、知识包、接口、隐私与条款等说明），与网页应用 `apps/web` 分开，部署在 `https://ziwei.x-haose.com`：Vercel 项目 `x-ziwei`，Root Directory 为 `site`，推到 `main` 即发布。它与服务分开部署，改站点不需要重新构建服务。排盘库的文档站是另一个 Vercel 项目 `x-iztro`（仓库 `x-haose/x-iztro`，目录 `docs`，域名 `x-iztro.x-haose.com`）。
+`site/` 是现行的说明站（安装、工具、知识包、接口、隐私与条款等，属于产品帮助，不是开发文档），部署在 `https://ziwei.x-haose.com`：Vercel 项目 `x-ziwei`，Root Directory 为 `site`，推到 `main` 即发布。它与服务分开部署，改站点不需要重新构建服务。产品站 `apps/web` 上线时接管这个域名，`site/` 的内容迁入产品站后下线，所以 `site/` 不再加新功能，只维护内容的正确性。真正的开发文档是 x-iztro 的文档站。排盘库的文档站是另一个 Vercel 项目 `x-iztro`（仓库 `x-haose/x-iztro`，目录 `docs`，域名 `x-iztro.x-haose.com`）。
 
 - 技术栈照抄 x-iztro 文档站：Next.js + Fumadocs + Tailwind，版本见 `site/package.json`。中文是默认语言，`content/` 里无后缀为中文，`.en.mdx` 为英文，两种语言成对维护。
 - 页面直接挂在语言段之下（`/zh/install`），不带 `/docs`。`/{lang}/docs/*` 是排盘库文档的旧地址，永久跳转到 `https://x-iztro.x-haose.com`；旧的 MCP 说明页跳到本站安装页。

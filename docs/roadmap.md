@@ -8,8 +8,8 @@
 
 | 问题 | 选择 | 比较过的候选与判据 |
 |---|---|---|
-| 网页放哪 | 独立应用 `apps/web`，与文档站 `site/`（Next + Fumadocs）分开 | 维护者定：网页工具不与文档站放在一起 |
-| 网页框架 | React Router 8.5.2 framework mode，`ssr:false` 加 `prerender` | Next 16.4.6 静态导出（框架底座首页 JS 133.8 KB gz，Tauri 指南停在 14.2.3，Turbopack Worker 有回归史）；TanStack Start 1.169.7（稳定版 6 周，开 SPA 模式后未产出路由正文 HTML）；Vite + TanStack Router 纯 SPA（无预渲染，SEO 要靠标为实验性的 API 自搭）；SvelteKit 3.4.0（首页 JS 34.8 KB，最强对手，但文档站是 React、组件不能直接复用）；SolidStart 2.2.3（不支持刚发布的 Solid 2.0）。RR8：「纯静态、部分预渲染、其余走 SPA 回退」是官方正式部署形态，需要服务端的写法构建期报错，与 Tauri 无 Node 服务端的约束一致；首页 JS 106.8 KB |
+| 网页放哪 | 产品站 `apps/web`：排盘工具与帮助页（现 `site/` 的内容）同一个应用、同一套设计，上线时接管 `ziwei.x-haose.com`，`site/` 随之下线 | 维护者定：现 `site/` 属于产品帮助，真正的开发文档是 x-iztro 文档站；分成两站会让用户在两套设计间来回跳 |
+| 网页框架 | React Router 8.5.2 framework mode，`ssr:false` 加 `prerender` | Next 16.4.6 静态导出（框架底座首页 JS 133.8 KB gz，Tauri 指南停在 14.2.3，Turbopack Worker 有回归史）；TanStack Start 1.169.7（稳定版 6 周，开 SPA 模式后未产出路由正文 HTML）；Vite + TanStack Router 纯 SPA（无预渲染，SEO 要靠标为实验性的 API 自搭）；SvelteKit 3.4.0（首页 JS 34.8 KB，最强对手，但帮助页要用的 Fumadocs 只支持 React 框架）；SolidStart 2.2.3（不支持刚发布的 Solid 2.0）。RR8：「纯静态、部分预渲染、其余走 SPA 回退」是官方正式部署形态，需要服务端的写法构建期报错，与 Tauri 无 Node 服务端的约束一致；首页 JS 106.8 KB |
 | 前端库与构建 | React 19.3.1，Vite 8.3.8 | 见上；网页与桌面同一条构建链 |
 | 桌面 | Tauri 2（cli 2.12.6、crate 2.12.7），`frontendDist` 即 `apps/web` 的 `build/client` | gpui 0.2.2：界面要再写一遍且 0.x 接口不稳。平台差异放在网页应用的平台层：LLM 请求经 `@tauri-apps/plugin-http` 2.9.0 绕开 CORS、文件导入导出、系统浏览器打开外链；用 `TAURI_ENV_*` 在构建期区分，网页包不含 Tauri 代码 |
 | 交互组件 | React Aria Components 1.22.1 | Base UI 1.9.0（无 Tree、无拖放、无内置中文文案）；Radix（无 IME 处理，近一年基本一人维护、有约 10 个月未发版）；Ark UI。React Aria 自带 zh-CN 文案，有知识包编辑器要用的 Tree、GridList、拖放。四家都不支持农历，生辰表单用 Select、NumberField、RadioGroup、ToggleButtonGroup 自己组合 |
@@ -86,6 +86,16 @@
 ## 5. 桌面（Tauri）
 
 未开始。网页全部功能，加本机命盘档案（姓名、备注、标签）、本机知识包库、离线可用；作为 ACP 客户端启动用户已装的 Claude Code、Codex、Cursor 解盘，也可用自己的 API Key。ACP 的 Rust 库 agent-client-protocol 5.5.1；ACP 官方列表里 Claude、Codex 经适配器接入，Cursor 自带支持。Rust 外壳是独立的 Cargo 项目（`apps/desktop/src-tauri`），本机 MCP 按路径依赖根 crate 的库部分，不把两者并成一个 Cargo workspace。
+
+## 帮助页迁入产品站
+
+网页第一期上线时做，不提前。
+
+- 内容沿用 `site/content` 的 MDX，用 fumadocs-core 与 fumadocs-mdx 处理（2026-11-23 查：fumadocs-core 16.19.7 的 peer 依赖含 react-router 7.x 或 8.x，fumadocs-mdx 15.6.4 支持 Vite 7、8），界面按产品站的设计规范自己写，不用 fumadocs-ui。
+- 上架 OpenAI 时填的四个地址（网站、支持、隐私、条款）路径不变。
+- 给模型读的入口照旧：`llms.txt`、`llms-full.txt`、页面加 `.md` 取原文，以及按 `Accept: text/markdown` 返回原文。纯静态站在构建时生成这些文件，按请求头返回原文改用 Vercel 的条件改写，要实测。
+- 站内搜索改为在浏览器里查构建时生成的索引。
+- 迁完后 `site/` 与它的 Vercel 项目下线，AGENTS.md「站点」一节随之改写。
 
 ## 暂缓
 
