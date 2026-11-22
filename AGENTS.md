@@ -65,7 +65,7 @@ x-ziwei：紫微斗数的托管服务层。排盘、运限、格局判定由 [x-
 
 - 地址：`https://ziwei-mcp.x-haose.com`（`/mcp`、`/v1/*`、`/healthz`）。请求经 Cloudflare 代理到 Dokploy 的 Traefik，再到容器的 8080 端口。
 - Dokploy 对 `main` 开着自动部署，约 6 分钟。Watch Paths 设为 `src/**`、`Cargo.toml`、`Cargo.lock`、`Dockerfile`：只有这些路径有改动的推送才会重建服务，只改站点或文档的推送不触发。新增会进镜像的路径时要同步加进 Watch Paths，否则改了不会部署，也没有任何提示。
-- 启动参数在 Dokploy 的 Advanced → Run Command → Arguments 里：`serve --client-ip-header=cf-connecting-ip --allowed-host=ziwei-mcp.x-haose.com --public-url=https://ziwei-mcp.x-haose.com`。
+- 启动参数在 Dokploy 的 Advanced → Run Command → Arguments 里：`serve --client-ip-header=cf-connecting-ip --allowed-host=ziwei-mcp.x-haose.com --public-url=https://ziwei-mcp.x-haose.com --openai-apps-challenge=<口令>`。口令是 OpenAI 插件门户（MCPs → Connect → Domain verification）给的域名校验口令，`/.well-known/openai-apps-challenge` 原样返回；本来就公开，不是密钥。门户换发口令时要同步改这里并重新部署。面板地址 `https://admin.haose.love`。
 - 限流键取 Cloudflare 写入的 `CF-Connecting-IP`。这个头只有经 Cloudflare 才可信，靠 Traefik 中间件 `cloudflare-only@file` 保证：`ipAllowList` 只放行 Cloudflare 的地址段，绕过 Cloudflare 直连源站返回 403。它定义在 Dokploy 该应用的 Advanced → Traefik 配置里，在 Domains 里挂在 `ziwei-mcp.x-haose.com` 上。地址段取自 <https://www.cloudflare.com/ips/>（2026-11-12），Cloudflare 增减地址段时要同步更新，否则新节点来的请求会被拒。
 - 服务只有 `ziwei-mcp.x-haose.com` 这一个域名，没有任何站点反代它。
 

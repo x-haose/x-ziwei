@@ -27,7 +27,7 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 | 返回 `structuredContent` 的工具必须声明 `outputSchema` | 不适用：工具只返回文本内容块 |
 | 结果不带时间戳、请求或会话标识 | 满足 |
 | 入参只收功能必需的字段，不收位置、地址 | 满足：只有历法、日期、时辰、性别 |
-| 域名校验：`/.well-known/openai-apps-challenge` 以纯文本返回门户给的口令 | 已支持，启动参数 `--openai-apps-challenge` 或环境变量 `X_ZIWEI_OPENAI_APPS_CHALLENGE` |
+| 域名校验：`/.well-known/openai-apps-challenge` 以纯文本返回门户给的口令 | 满足：启动参数 `--openai-apps-challenge` 或环境变量 `X_ZIWEI_OPENAI_APPS_CHALLENGE`；线上用启动参数，见 AGENTS.md「线上部署」 |
 | 服务说明（`instructions`）的关键内容在前 512 字符 | 满足 |
 | 桌面与移动端都能用 | 待真机验证 |
 
