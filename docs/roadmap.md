@@ -23,12 +23,12 @@
 | 本机存储 | idb 8.0.4 | idb-keyval 6.3.0 不支持迁移与索引；Dexie 4.4.7 体积大 20 倍 |
 | 状态 | 第一期不用库，之后视需要 Zustand 5.1.0 | Jotai、XState 对场景无额外收益 |
 | 分享链接 | 生辰放在 `#` 之后，自写 `useSyncExternalStore`；非法 hash 明确报错 | nuqs 不支持 hash |
-| 中文字体 | 只用 OFL 字体，自托管同源，构建时切片（cn-font-split），首屏预载盘面 384 字的子集；桌面复用同一份产物并附许可证 | 阿里普惠体、HarmonyOS Sans、MiSans、OPPO Sans 禁止转换或修改，方正、汉仪嵌入要书面授权；Google Fonts、jsDelivr 在大陆不可靠。具体字体随设计方向定 |
-| 包管理 | pnpm 12.21.0 workspaces 加 catalog，不用 Turborepo | npm（依赖提升致未声明依赖可用）；bun。共享包直接导出 TS 源码，没有可缓存的构建 |
+| 中文字体 | 只用 OFL 字体（思源宋、思源黑、Geist、Geist Mono），自托管同源；原文件按固定提交的地址下载并校验 SHA-256，不进仓库；构建时用 HarfBuzz（subset-font 2.9.0、harfbuzzjs 1.6.4）按 Google Fonts 的简体中文切片策略（googlefonts/nam-files）切片，首屏预载界面文案与盘面用字的关键子集；思源黑的许可证保留了字体名「Source」，切片改名 XZW Sans SC，版权与许可证字段保留；桌面复用同一份产物并附许可证 | 阿里普惠体、HarmonyOS Sans、MiSans、OPPO Sans 禁止转换或修改，方正、汉仪嵌入要书面授权；Google Fonts、jsDelivr 在大陆不可靠。cn-font-split 7.4.3（2026-11-23 实测）：安装脚本从 GitHub Release 下载原生库、不校验且失败被吞掉（`\|\| node -v`），产物丢掉 nameID 7、13、14、16（商标、许可证描述与网址），改用可控的 HarfBuzz 子集 |
+| 包管理 | pnpm 12.21.0（`packageManager` 固定）。现阶段 `apps/web` 是独立的 pnpm 项目，自带锁文件，不建根目录工作区；出现第二个 JS 应用或 `packages/*` 时再加 workspaces 与 catalog，不用 Turborepo | npm（依赖提升致未声明依赖可用）；bun。不建根工作区的理由：`site/` 是线上 Vercel 项目，用 npm 与 package-lock 构建，又正被 OpenAI 审核引用，根目录出现 pnpm 工作区会改变它的安装与构建；它随帮助页迁入产品站下线。共享包直接导出 TS 源码，没有可缓存的构建 |
 | 测试 | Vitest 5.1.1（含 browser mode 组件截图）、Playwright 1.65.1（跑静态产物）、`@wdio/tauri-service` 1.5.1（桌面冒烟） | Storybook 说不出专门防哪个问题，不加 |
 | 浏览器内对话 | AI SDK 7（ai 7.0.179、@ai-sdk/react 4.0.183） | 各厂商官方 SDK（工具循环要各写一遍）、直接 fetch |
 
-仓库结构：根目录加 pnpm workspace（成员 `site`、`apps/*`、`packages/*`）；`apps/web` 是第二个 Vercel 项目；`apps/desktop/src-tauri` 是独立的 Cargo 项目，不加入根 crate（Dockerfile 只拷根 crate，并入 workspace 会让服务端镜像构建失败）；`packages/*` 只放被两个以上应用用到的代码。
+仓库结构：`apps/web` 独立安装（理由见上表包管理一行），`site/` 下线、出现共享包后根目录再加 pnpm workspace（成员 `apps/*`、`packages/*`）；`apps/web` 是第二个 Vercel 项目；`apps/desktop/src-tauri` 是独立的 Cargo 项目，不加入根 crate（Dockerfile 只拷根 crate，并入 workspace 会让服务端镜像构建失败）；`packages/*` 只放被两个以上应用用到的代码。
 
 动工前要实测的：Windows（WebView2）与 Linux（WebKitGTK）上的 Tauri；真实 x-iztro 包与 Worker 里的八字反推；React Router 8 静态产物在 Vercel 上的部署；中英文路径前缀的预渲染与 hash 水合；Tauri HTTP 插件配合 AI SDK 的流式输出；`tauri dev` 下的 Worker 与 WASM；React Aria 弹层里拼音组字按 Esc（Safari、WKWebView）；保存图片在 WebKit 上的字体内嵌。
 
@@ -58,7 +58,10 @@
 
 ## 2. 网页第一期：排盘与提示词
 
-设计已定，代码未开始。
+骨架与设计系统已在 `apps/web`：路由与语言前缀、设计令牌与明暗主题、字体管线、顶栏与页脚、首页、排盘页外壳与空状态、生辰表单（公历完整，农历接口留给内核）、Markdown 渲染、方法页（内容页模板）、提示词拼装的纯函数。盘面、运限、读数、提示词各段与农历待接 x-iztro 0.7.0 的 JS 包。
+
+- 根路径 `/`：纯静态站与桌面端都没有服务端读 `Accept-Language`，由预渲染页 `<head>` 里的脚本在绘制前按 `navigator.languages` 跳到 `/zh` 或 `/en`（找不到受支持的语言去中文），禁用脚本时页面上是两种语言的入口。比较过：托管平台按请求头改写（只在 Vercel 上有，桌面端没有）、一律去中文（忽略浏览器语言）。
+- 主题：`<head>` 最前面的内联脚本读本机选择，在样式与正文之前写好 `data-theme`，首帧不闪；主题按钮的图标由 CSS 按 `data-pref` 显示，不等水合。
 
 - 输入：公历或农历（含闰月）、年月日、时辰（13 档，含早子、晚子）、性别。
 - 命盘：十二宫格，每宫主星（亮度、四化）、辅星杂耀、宫干支、大限岁数，标身宫与来因宫，中宫写基本信息；点宫高亮三方四正；选大限、流年、流月把运限叠上盘。
