@@ -2,7 +2,7 @@
 
 ## 项目概述
 
-x-ziwei：紫微斗数的托管服务层。排盘、运限、格局判定由 [x-iztro](https://github.com/x-haose/x-iztro) 完成；本仓库把那份事实变成 AI 可调用的工具，并附带一份解读 Skill。
+x-ziwei：让 AI 解读紫微斗数的产品。排盘、运限、格局判定由 [x-iztro](https://github.com/x-haose/x-iztro) 完成；本仓库把那份事实连同知识包与解读方法交给模型，渠道有 AI 插件（远程 MCP + Skill）、HTTP 接口、网页和桌面应用。
 
 设计目标：多数 AI 命理产品把提示词与解读方式藏在产品里，用户只能提问和付费。本项目反过来，向主流大模型完整公开三层材料，让模型自行解读，使用者可以换成自己的知识库和解读方案：
 
@@ -10,7 +10,7 @@ x-ziwei：紫微斗数的托管服务层。排盘、运限、格局判定由 [x-
 - 知识包：释义、术语、主题看哪些宫，开放格式，可整包替换或逐条覆盖。
 - 解读方法：`plugin/skills/ziwei/SKILL.md`，一份公开的 Markdown，可改可不用。
 
-本仓库不重写安星，不微调模型，不保存用户命盘，不在服务代码里放解读方法。
+本仓库不重写安星，不微调模型，服务端不保存用户命盘，代码里不放解读方法。
 
 ## 决策标准
 
@@ -22,20 +22,31 @@ x-ziwei：紫微斗数的托管服务层。排盘、运限、格局判定由 [x-
 
 ## 产品形态
 
-主路径是公网远程 MCP：使用者在 Claude / Cursor 等客户端填一个 HTTPS URL 即可调用，不必安装二进制。同一套工具另有 stdio，供本机调试和生辰坚持不出网的人。
+一个核心，多个渠道。三层材料在每个渠道里相同，渠道只决定用什么方式交给哪个模型：
 
-本服务完全公开、免费，无需鉴权或账号。允许任何人直接调用，也允许集成到免费或收费 App；不因调用方收费而收取 API 使用费。限流只挡住单地址把机器打满，正常人问询无感。
+| 渠道 | 形态 | 模型 |
+|---|---|---|
+| AI 插件 | 公网远程 MCP + Skill，装进 ChatGPT、Claude、Codex、Cursor 等客户端；另有 stdio 供本机调试 | 客户端自带 |
+| HTTP 接口 | `/v1/*` 与 OpenAPI，契约见 `docs/http-api.md` | 调用方自己的 |
+| 网页 | `site/` 里排盘、生成提示词复制到任意聊天 AI（含不支持插件的 DeepSeek、豆包、Kimi）、填自己的 API Key 直接对话 | 用户的聊天 AI 或 API Key |
+| 桌面 | gpui 应用，作为 ACP 客户端启动用户已装的 Claude Code、Codex、Cursor 等 agent，挂上本机 MCP | 用户已有的订阅 |
 
-算完即弃：不建用户命盘库，不缓存排盘结果。随手传入的生辰不是资产；计算足够快，缓存键（时辰、配置、语言、知识包、问题切片）比计算更贵。日志不落完整出生日期。
+各渠道的建设顺序与进度见 `docs/roadmap.md`。
 
-第一版能力：
+公网服务与接口完全公开、免费，无需鉴权或账号。允许任何人直接调用，也允许集成到免费或收费 App；不因调用方收费而收取 API 使用费。限流只挡住单地址把机器打满，正常人问询无感。
+
+不做账号与用户体系：知识包靠文件与分享链接在渠道间流转，API Key 留在用户的浏览器或本机。真出现账号才能解决的需求（一个人管很多包、找回丢失的钥匙）再加。也不做管理后台、知识包市场、按人生成 Skill。
+
+服务端算完即弃：不建用户命盘库，不缓存排盘结果。随手传入的生辰不是资产；计算足够快，缓存键（时辰、配置、语言、知识包、问题切片）比计算更贵。日志不落完整出生日期。网页在浏览器里用 x-iztro 的 WASM 排盘，生辰不经服务端；API Key 只存在浏览器，直连模型厂商。桌面的命盘与知识包存在本机，由用户自己保管。
+
+知识包的正本是开放格式的 JSON 文件，归用户：桌面存本机，网页存浏览器并可导入导出。服务端托管的包是给 AI 插件渠道用和对外分享的副本，加密存放，不是唯一的一份。
+
+服务端现有能力：
 
 - 默认知识包（x-iztro 内嵌包）；自定义包经启动参数的白名单加载，`extends` 指向默认包时按覆盖包合并
 - MCP 工具：`ziwei_get_natal_chart` 本命盘事实；`ziwei_get_horoscope` 运限事实；`ziwei_get_decadal_overview` 一生大限一览；`ziwei_get_yearly_overview` 多年流年一览；`ziwei_find_birth_by_bazi` 八字反推生辰；`ziwei_get_topic_palaces` 按知识包的主题定义取材；`ziwei_lookup_knowledge` 查知识包条目；`ziwei_list_knowledge` 知识包目录
 - 一份 Skill（先确认生辰再调工具；工具没返回的星不写；盘面事实、知识包释义、模型分析三者分清）。用户的包是参数，不按人生成第二套用法
-- 与 MCP 同一套实现的 HTTPS JSON 接口 `/v1/*` 与 OpenAPI，给不接 MCP 的调用方，契约见 `docs/http-api.md`
-
-第一版不做：网页排盘、管理后台、用户体系、知识包市场、按人生成 Skill、用户上传包的匿名托管。自定义门派与账号一起出现。
+- 与 MCP 同一套实现的 HTTPS JSON 接口 `/v1/*` 与 OpenAPI
 
 有意义的例盘（名人、教学、格局正例）是编过的内容，不是用户历史记录。
 
@@ -43,12 +54,12 @@ x-ziwei：紫微斗数的托管服务层。排盘、运限、格局判定由 [x-
 
 | | x-iztro | x-ziwei |
 |---|---|---|
-| 是什么 | 排盘内核 crate | MCP / HTTP 服务 + Skill |
+| 是什么 | 排盘内核：Rust crate，Python、Go、JS（WASM）绑定 | 服务、网页、桌面与 Skill |
 | 质量契约 | 与 x-iztro 锁定的 iztro 版本金标零容忍；绑定能力同步 | 服务与工具面，发版节奏独立 |
 | 知识包 | 协议、合并、默认包、按标识查询、按包的主题定义选宫并渲染 | 加载与白名单、目录、把条目与出处交给模型 |
-| 依赖 | 无本仓库 | 依赖固定 Git 提交的 x-iztro crate |
+| 依赖 | 无本仓库 | 服务依赖固定 Git 提交的 x-iztro crate；网页依赖固定版本的 x-iztro JS 包 |
 
-看哪些宫、用哪些材料、按什么步骤解盘属于知识与方法，只能出现在知识包或 Skill 里：本仓库的代码不出现主题枚举、选宫规则、三方四正几何、安星、格局规则或农历换算。知识包表达不了的方法先写进 Skill 这类可读说明，不在服务里写死，也不因其能写成纯函数就下放到 x-iztro；缺少的通用计算能力才在 x-iztro 补。
+看哪些宫、用哪些材料、按什么步骤解盘属于知识与方法，只能出现在知识包或 Skill 这类 Markdown 文件里（网页生成的提示词也从这类文件取方法正文）：本仓库的代码不出现主题枚举、选宫规则、三方四正几何、安星、格局规则或农历换算。知识包表达不了的方法先写进 Skill 这类可读说明，不在服务里写死，也不因其能写成纯函数就下放到 x-iztro；缺少的通用计算能力才在 x-iztro 补。
 
 ## 技术
 
@@ -56,7 +67,9 @@ x-ziwei：紫微斗数的托管服务层。排盘、运限、格局判定由 [x-
 - MCP：官方 SDK [`rmcp`](https://crates.io/crates/rmcp) 3.x（Tier 1，规范 `2026-07-28`）
 - 传输：Streamable HTTP（公网主路径）与 stdio（本机）；工具实现一份
 - 分发：一个二进制；对外安装故事是 Agent Plugin（`plugin/`：Claude `.claude-plugin/` + Codex `.codex-plugin/` + `.mcp.json` + `skills/ziwei/SKILL.md`）。Skill 与 MCP 一起安装，不手抄 SKILL.md。MCP 指向公网 URL
-- 知识包：进程读默认包或本地/白名单 URL 的 JSON；不接任意 URL（SSRF）
+- 知识包：服务进程读默认包或本地/白名单 URL 的 JSON；不接任意 URL（SSRF）
+- 网页：`site/` 的 Next.js 应用，排盘在浏览器里调 x-iztro 的 WASM，不调 `/v1`
+- 桌面：Rust + gpui，与服务共用本仓库的库代码；用 ACP 与 agent 通信
 - 仓库独立 git；`Cargo.toml` 的完整 `rev` 与 `Cargo.lock` 固定 x-iztro 源码，部署不依赖本机目录布局
 
 公网 API 不要求 API Key 或登录；限流只用于控制调用频率。
@@ -71,7 +84,7 @@ x-ziwei：紫微斗数的托管服务层。排盘、运限、格局判定由 [x-
 
 ## 站点
 
-`site/` 是面向使用者的站点，部署在 `https://ziwei.x-haose.com`：Vercel 项目 `x-ziwei`，Root Directory 为 `site`，推到 `main` 即发布。它与服务分开部署，改站点不需要重新构建服务。排盘库的文档站是另一个 Vercel 项目 `x-iztro`（仓库 `x-haose/x-iztro`，目录 `docs`，域名 `x-iztro.x-haose.com`）。
+`site/` 是面向使用者的站点，也是网页渠道的应用（排盘与提示词等工具页），部署在 `https://ziwei.x-haose.com`：Vercel 项目 `x-ziwei`，Root Directory 为 `site`，推到 `main` 即发布。它与服务分开部署，改站点不需要重新构建服务。排盘库的文档站是另一个 Vercel 项目 `x-iztro`（仓库 `x-haose/x-iztro`，目录 `docs`，域名 `x-iztro.x-haose.com`）。
 
 - 技术栈照抄 x-iztro 文档站：Next.js + Fumadocs + Tailwind，版本见 `site/package.json`。中文是默认语言，`content/` 里无后缀为中文，`.en.mdx` 为英文，两种语言成对维护。
 - 页面直接挂在语言段之下（`/zh/install`），不带 `/docs`。`/{lang}/docs/*` 是排盘库文档的旧地址，永久跳转到 `https://x-iztro.x-haose.com`；旧的 MCP 说明页跳到本站安装页。
