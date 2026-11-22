@@ -39,6 +39,34 @@ jobs:
       - run: npm run types:check
       - run: npm run build
 
+  # 产品站 apps/web：独立的 pnpm 项目，自带锁文件；pnpm 版本取自它的 packageManager。
+  # 字体原文件按 scripts/fonts/sources.ts 里的固定地址下载并校验，缓存键随该文件变化。
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: apps/web/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/cache@v6
+        with:
+          path: apps/web/node_modules/.cache/xzw-fonts
+          key: xzw-fonts-${{ hashFiles('apps/web/scripts/fonts/sources.ts') }}
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e
+
   # 推到 main 即发布：插件市场直接读 main，服务由 Dokploy 从 main 部署。
   # 版本号取 plugin/.codex-plugin/plugin.json（三处一致由 tests/plugin_manifest.rs 保证）。
   # 标签 v<版本> 不存在就发版：建 GitHub Release 并打标签，附上架 OpenAI 插件目录用的 ZIP，
@@ -46,7 +74,7 @@ jobs:
   # 标签已存在而 plugin/ 相对它有改动，就是改了插件没加版本号：客户端按版本号缓存，
   # 已安装的用户拿不到这次改动，作业失败。
   release:
-    needs: [check, msrv, site]
+    needs: [check, msrv, site, web]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
