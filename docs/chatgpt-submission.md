@@ -39,7 +39,7 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 
 ## 提交包
 
-提交的是一个 ZIP，根目录即 `plugin/` 的内容。展示信息写在 `.codex-plugin/plugin.json` 的 `interface` 里，Skill 自己的名称与图标写在 `skills/ziwei/agents/openai.yaml`，图标在 `assets/`（`logo.png` 由 `icon.svg` 渲染）。官方目录里已上架的插件用的也是这种 `.codex-plugin/plugin.json` 写法；[打包格式](https://developers.openai.com/plugins/build/plugins)另外描述了把同样的内容放在根目录 `plugin.json` 的 `extensions.com.openai` 下的写法，两者并存时后者整体生效。本仓库不用根目录写法：包里同时有根目录 `plugin.json`、`mcp.json` 与 `.codex-plugin/plugin.json`、`.mcp.json` 时，ChatGPT 的「上傳外掛程式封存檔」报 `Plugin-level test_cases require exactly one MCP server` 拒收（2026-11-21 实测），只留 `.codex-plugin` 这一套即可上传。
+提交的是一个 ZIP，根目录即 `plugin/` 的内容，由 CI 的发版作业生成并附在 GitHub Release 上（流程见 AGENTS.md「发版」）。展示信息写在 `.codex-plugin/plugin.json` 的 `interface` 里，Skill 自己的名称与图标写在 `skills/ziwei/agents/openai.yaml`，图标在 `assets/`（`logo.png` 由 `icon.svg` 渲染）。官方目录里已上架的插件用的也是这种 `.codex-plugin/plugin.json` 写法；[打包格式](https://developers.openai.com/plugins/build/plugins)另外描述了把同样的内容放在根目录 `plugin.json` 的 `extensions.com.openai` 下的写法，两者并存时后者整体生效。本仓库不用根目录写法：包里同时有根目录 `plugin.json`、`mcp.json` 与 `.codex-plugin/plugin.json`、`.mcp.json` 时，ChatGPT 的「上傳外掛程式封存檔」报 `Plugin-level test_cases require exactly one MCP server` 拒收（2026-11-21 实测），只留 `.codex-plugin` 这一套即可上传。
 
 `interface` 的要求与现状：
 
@@ -54,23 +54,22 @@ GPT Store（自定义 GPT + Actions）不再是可选项：官方的[迁移说�
 - `review.test_cases`：恰好 5 条正面用例（`description`、`prompt`、`tools_triggered`、`expected_behavior`）、3 条反面用例（`description`、`prompt`），已填，覆盖本命盘、按年取运限、流年一览、大限一览、知识包查询。`review.demo_recording_url` 已填，是放在 Google Drive 上、知道链接即可观看的录像（2026-11-21 录制，网页版 ChatGPT 暂存对话里逐条跑这 8 条用例）
 - `publication.release_notes`：已填。`publication.countries` 为 `[]`，即不限上架国家
 
-门户以包里的用例为准，不能在门户里改，要改就重新上传 ZIP。测试账号之类的审核信息不进包，在门户的 Review details 表单里填。
+门户以包里的用例为准，不能在门户里改，要改就重新上传 ZIP。提交时门户弹出的表单有 6 项发布者声明（条款、合规、不转账、第三方内容权利、适合未成年人、不针对 13 岁以下儿童）和一个选填的 Additional Submission Context，给审核员的说明（不需要测试账号、第三方内容的来源与许可等）写在后者。
 
-插件版本号写在 `.codex-plugin/plugin.json`、`.claude-plugin/plugin.json` 与 `.claude-plugin/marketplace.json` 三处，客户端按版本号缓存已安装的插件，改了插件内容要一起加版本号。
+新版本的 `version` 必须与已提交的不同，否则报 `plugin_version_unchanged`。
 
 文案限制：`displayName` 与 `shortDescription` 各 ≤30 字符；名称不用通用单词，不加 MCP、Plugin 后缀；描述里不写价格、免费、订阅，不与其他产品比较。
 
-无鉴权的写法、`mcp.json` 与 `.mcp.json` 两种格式的差别见[打包格式](https://developers.openai.com/plugins/build/plugins)。门户上传时走 With MCP 入口还是 Upload 入口，两份官方文档写法不一致，以门户实际界面为准。
+无鉴权的写法、`mcp.json` 与 `.mcp.json` 两种格式的差别见[打包格式](https://developers.openai.com/plugins/build/plugins)。门户只有一个上传入口「Upload new or existing plugin」；上传后在 MCPs 页连接服务、做域名校验。
 
-## 只能由人完成的事
+## 进度
 
-1. OpenAI Platform 组织：提交人是所有者或有 Apps Management Write 权限；项目不能是欧盟数据驻留。API 支持地区列表不含中国大陆、香港、澳门。
-2. 在组织设置里完成个人或企业身份核验；目录里显示的开发者名取自核验结果。
-3. 四个公开页面在 `site/` 里：官网 `https://ziwei.x-haose.com`、支持 `/support`、隐私政策 `/privacy`、服务条款 `/terms`，各有 `/zh` 与 `/en` 两个版本。隐私政策与条款是按服务的实际行为起草的，提交前要由发布者本人过一遍。
-4. 确认图标（`plugin/assets/`）。
-5. 演示录像：已录并填入 `demo_recording_url`。改了用例或插件行为后要重录。官方没写格式、托管位置和是否要分桌面与移动端。
-6. 真机跑一遍 `plugin.json` 里的 8 条用例：网页、桌面、移动端的 ChatGPT，以及 Codex。
-7. 门户操作：上传 ZIP、连接 MCP、取域名校验口令并配置到服务、Verify Domain、提交、通过后手动点 Publish（批准不会自动上架）。
-8. 决定上架国家、分类、发布名称（现为「x-ziwei 紫微斗数」）。
+2026-11-22 提交 0.3.0，审核中，门户预估 2026-12-06 前审完。组织与身份核验、隐私政策与条款的本人确认、上传、连接 MCP、域名校验都已完成。
 
-官方页面没有提到任何提交或上架费用，也不承诺审核时长。
+剩下只能由人做的：
+
+1. 审核通过后在门户手动点 Publish，批准不会自动上架。
+2. 真机跑一遍 `plugin.json` 里的 8 条用例：桌面、移动端的 ChatGPT，以及 Codex。网页版已在录像里跑过。
+3. 改了用例或插件行为后重录演示录像，更新 `demo_recording_url`。
+
+门户与组织的前提：提交人是组织所有者或有 Apps Management Write 权限；项目不能是欧盟数据驻留；API 支持地区列表不含中国大陆、香港、澳门；目录里显示的开发者名取自身份核验结果。官方页面没有提到提交或上架费用。

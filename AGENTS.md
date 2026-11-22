@@ -79,6 +79,16 @@ x-ziwei：紫微斗数的托管服务层。排盘、运限、格局判定由 [x-
 - 隐私政策、服务条款、支持三页是上架要填的链接，写的都是服务的实际行为；服务的数据处理方式有变化时要同步改这三页。
 - 检查：`cd site && npm ci && npm run types:check && npm run build`，CI 的 `site` 任务跑同一组命令。
 
+## 发版
+
+插件的版本号是唯一的发版开关；服务与站点不跟版本号走，推到 `main` 就部署。
+
+1. 改了 `plugin/` 下任何文件，三处 `version`（`plugin/.codex-plugin/plugin.json`、`plugin/.claude-plugin/plugin.json`、`.claude-plugin/marketplace.json`）一起加一版，`tests/plugin_manifest.rs` 断言三处相等。同时把 `.codex-plugin/plugin.json` 的 `publication.release_notes` 改写成这一版的说明（英文；门户与 GitHub Release 都展示它）。
+2. 推到 `main`。CI 全过后 `release` 作业看标签 `v<版本>`：不存在就建 GitHub Release 并打标签，附件 `x-ziwei-<版本>.zip` 是上架用的插件包；`plugin/` 有改动而版本号没加，或发布说明与上一版相同，作业失败。
+3. Claude Code 与 Codex 的插件市场直接读 `main`，推送即生效。OpenAI 插件目录要人工：门户里对已有插件 Upload new version，上传 Release 的 ZIP，检查通过后提交审核，批准后手动 Publish。门户没有公开的上传接口（2026-11-22 查官方文档）。
+
+只改工具（名称、描述、入参、注解）或服务内部、不动 `plugin/` 时不用发版：OpenAI 每天扫描 MCP 服务，工具定义的改动通过自动检查后直接替换线上定义，门户 MCPs 页的 Rescan 可立即触发；检查通过前线上仍是旧定义，所以服务要同时兼容新旧两版调用。清单、图标、Skill 的改动才需要新版本和人工审核；每次提交都是一轮新审核，同一插件同时只能有一个审核。
+
 ## 注释规范
 
 - 只解释「当前代码在当前项目的含义」，必须自包含。

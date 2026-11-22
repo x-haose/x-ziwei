@@ -38,3 +38,66 @@ jobs:
       - run: npm ci
       - run: npm run types:check
       - run: npm run build
+
+  # 推到 main 即发布：插件市场直接读 main，服务由 Dokploy 从 main 部署。
+  # 版本号取 plugin/.codex-plugin/plugin.json（三处一致由 tests/plugin_manifest.rs 保证）。
+  # 标签 v<版本> 不存在就发版：建 GitHub Release 并打标签，附上架 OpenAI 插件目录用的 ZIP，
+  # 描述取清单里的 publication.release_notes，与门户展示的发布说明是同一段。
+  # 标签已存在而 plugin/ 相对它有改动，就是改了插件没加版本号：客户端按版本号缓存，
+  # 已安装的用户拿不到这次改动，作业失败。
+  release:
+    needs: [check, msrv, site]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: 判断是否发版
+        id: ver
+        run: |
+          version=$(jq -er .version plugin/.codex-plugin/plugin.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+            if ! git diff --quiet "v$version" HEAD -- plugin; then
+              echo "::error::plugin/ 相对 v$version 有改动，但版本号仍是 $version。三处清单的 version 一起加一版。"
+              exit 1
+            fi
+            echo "v$version 已发布，plugin/ 无改动，跳过发版。"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "将发布 v$version。"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # 门户与 Release 都展示这段说明，沿用上一版的原文等于对外说错了这一版改了什么。
+      - name: 检查发布说明已更新
+        if: steps.ver.outputs.release == 'true'
+        run: |
+          notes='.extensions."com.openai".publication.release_notes'
+          previous=$(git tag -l 'v*' --sort=-v:refname | head -n 1)
+          if [ -z "$previous" ]; then
+            exit 0
+          fi
+          if [ "$(git show "$previous:plugin/.codex-plugin/plugin.json" | jq -r "$notes")" = "$(jq -r "$notes" plugin/.codex-plugin/plugin.json)" ]; then
+            echo "::error::publication.release_notes 与 $previous 相同，改写成这一版的说明。"
+            exit 1
+          fi
+
+      # ZIP 根目录即 plugin/ 的内容，只取门户用到的四样，Claude 专用的 .claude-plugin/ 不进包。
+      # 只打包已提交的文件，与标签指向的内容一致。
+      - name: 发布
+        if: steps.ver.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          git archive --format=zip -o "x-ziwei-$VERSION.zip" HEAD:plugin .codex-plugin .mcp.json assets skills
+          jq -er '.extensions."com.openai".publication.release_notes' plugin/.codex-plugin/plugin.json > RELEASE_NOTES.md
+          gh release create "v$VERSION" "x-ziwei-$VERSION.zip" --target "$GITHUB_SHA" --title "v$VERSION" --notes-file RELEASE_NOTES.md
