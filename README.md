@@ -88,4 +88,6 @@ x-ziwei stdio --allow-pack-dir ./packs
 
 ## License
 
-MIT
+The code is licensed under the [MIT License](LICENSE): you are free to use, modify and distribute it, including commercially.
+
+The MIT License covers the code only and does not grant trademark rights. The name "x-ziwei", its icon, and the "Star Map" visual design (the overall look presented by the design specification and mockups in `docs/design`) are not part of that license. If you build a separate product or service on this project, please use your own name and marks, and avoid presenting it in a way that suggests it is this project or an official version of it.
