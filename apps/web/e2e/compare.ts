@@ -17,7 +17,8 @@ const TARGETS = [
   { name: 'home', app: '/zh', mock: '#home' },
   { name: 'chart-empty', app: '/zh/chart', mock: '#chart' },
   { name: 'chart', app: '/zh/chart#cal=solar&d=2000-8-16&t=2&g=f', mock: '#chart?cal=solar&d=2000-8-16&g=f&t=2' },
-  { name: 'doc', app: '/zh/method', mock: '#doc/install' },
+  { name: 'doc', app: '/zh/install', mock: '#doc/install' },
+  { name: 'doc-privacy', app: '/zh/privacy', mock: '#doc/privacy' },
 ];
 
 const { spawn } = await import('node:child_process');

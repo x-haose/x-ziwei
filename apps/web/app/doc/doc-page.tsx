@@ -5,25 +5,23 @@ import { CaretIcon } from '../components/icons';
 import { TopBar } from '../components/top-bar';
 import { useLang, useMessages } from '../i18n/use-lang';
 import { scrollToAnchor } from '../lib/scroll';
-import { Markdown } from '../markdown/markdown';
-import { type TocEntry, tocOf } from '../markdown/toc';
 import * as css from './doc-page.css';
-import { DOC_GROUPS, DOC_ORDER, type DocId, docGroup, docLink, docTitle } from './docs';
+import { docNav } from './nav';
 
 /** 标题越过视口上沿这么多像素（含）之后，算作当前所在的节。 */
 const SPY_OFFSET = 120;
 
 /** 滚动时把越过视口上沿 120px 的最后一个标题标为当前节。 */
-function useCurrentSection(toc: readonly TocEntry[]): string | null {
-  const [current, setCurrent] = useState<string | null>(toc[0]?.id ?? null);
+function useCurrentSection(ids: readonly string[]): string | null {
+  const [current, setCurrent] = useState<string | null>(ids[0] ?? null);
   useEffect(() => {
     let frame = 0;
     const update = () => {
-      let cur = toc[0]?.id ?? null;
-      for (const entry of toc) {
-        const el = document.getElementById(entry.id);
-        if (!el) throw new Error(`目录项没有对应的标题：${entry.id}`);
-        if (el.getBoundingClientRect().top < SPY_OFFSET) cur = entry.id;
+      let cur = ids[0] ?? null;
+      for (const id of ids) {
+        const el = document.getElementById(id);
+        if (!el) throw new Error(`目录项没有对应的标题：${id}`);
+        if (el.getBoundingClientRect().top < SPY_OFFSET) cur = id;
       }
       setCurrent(cur);
     };
@@ -37,31 +35,23 @@ function useCurrentSection(toc: readonly TocEntry[]): string | null {
       cancelAnimationFrame(frame);
       window.removeEventListener('scroll', onScroll);
     };
-  }, [toc]);
+  }, [ids]);
   return current;
 }
 
-function DocLink({ id, className, current, children }: { id: DocId; className: string; current?: boolean; children: ReactNode }) {
-  const lang = useLang();
-  const link = docLink(lang, id);
-  return 'to' in link ? (
-    <Link className={className} to={link.to} aria-current={current ? 'page' : undefined}>
-      {children}
-    </Link>
-  ) : (
-    <a className={className} href={link.href}>
-      {children}
-    </a>
-  );
+export interface DocTocItem {
+  id: string;
+  depth: 2 | 3;
+  title: ReactNode;
 }
 
-function TocList({ toc, current, onPick }: { toc: readonly TocEntry[]; current: string | null; onPick?: () => void }) {
+function TocList({ toc, current, onPick }: { toc: readonly DocTocItem[]; current: string | null; onPick?: () => void }) {
   return (
     <ul>
       {toc.map((e) => (
         <li key={e.id}>
           <a
-            className={e.level === 3 ? `${css.tocLink} ${css.tocSub}` : css.tocLink}
+            className={e.depth === 3 ? `${css.tocLink} ${css.tocSub}` : css.tocLink}
             href={`#${e.id}`}
             data-current={e.id === current ? '' : undefined}
             onClick={(ev) => {
@@ -70,7 +60,7 @@ function TocList({ toc, current, onPick }: { toc: readonly TocEntry[]; current: 
               onPick?.();
             }}
           >
-            {e.text}
+            {e.title}
           </a>
         </li>
       ))}
@@ -79,39 +69,56 @@ function TocList({ toc, current, onPick }: { toc: readonly TocEntry[]; current: 
 }
 
 /**
- * 内容页模板：侧栏列出全部文档分组，正文是 Markdown，右侧是本页目录，末尾是上一篇/下一篇。
- * 页内锚点平滑滚动且不改地址。
+ * 内容页模板（设计规范第 14 节）：侧栏列出全部文档分组，正文，右侧本页目录，末尾上一篇/下一篇。
+ * 页内锚点平滑滚动且不改地址。`current` 是本页在侧栏里的 id（slug）。
  */
-export function DocPage({ id, lede, source }: { id: DocId; lede: string; source: string }) {
+export function DocPage({
+  current,
+  title,
+  lede,
+  toc,
+  children,
+}: {
+  current: string;
+  title: string;
+  lede?: string | undefined;
+  toc: readonly DocTocItem[];
+  children: ReactNode;
+}) {
   const t = useMessages();
-  const toc = useMemo(() => tocOf(source), [source]);
-  const current = useCurrentSection(toc);
+  const lang = useLang();
+  const nav = useMemo(() => docNav(lang, t), [lang, t]);
+  const flat = nav.flatMap((g) => g.items);
+  const index = flat.findIndex((d) => d.id === current);
+  if (index < 0) throw new Error(`本页不在侧栏里：${current}`);
+  const group = nav.find((g) => g.items.some((d) => d.id === current))!;
+  const prev = flat[index - 1];
+  const next = flat[index + 1];
+  const ids = useMemo(() => toc.map((e) => e.id), [toc]);
+  const currentSection = useCurrentSection(ids);
   const [tocOpen, setTocOpen] = useState(false);
   const tocListId = useId();
-  const index = DOC_ORDER.indexOf(id);
-  const prev = DOC_ORDER[index - 1];
-  const next = DOC_ORDER[index + 1];
   return (
     <>
       <TopBar />
       <div className={css.page}>
         <nav className={css.side} aria-label={t.doc.sideLabel}>
-          {DOC_GROUPS.map((g) => (
-            <div key={g.group} className={css.sideSection}>
-              <h3 className={css.sideGroup}>{t.doc.groups[g.group]}</h3>
+          {nav.map((g) => (
+            <div key={g.title} className={css.sideSection}>
+              <h3 className={css.sideGroup}>{g.title}</h3>
               {g.items.map((d) => (
-                <DocLink key={d} id={d} className={css.sideLink} current={d === id}>
-                  {docTitle(t, d)}
-                </DocLink>
+                <Link key={d.id} className={css.sideLink} to={d.url} aria-current={d.id === current ? 'page' : undefined}>
+                  {d.title}
+                </Link>
               ))}
             </div>
           ))}
         </nav>
         <article className={css.article}>
           <header className={css.header}>
-            <p className={css.crumb}>{t.doc.groups[docGroup(id)]}</p>
-            <h1 className={css.title}>{docTitle(t, id)}</h1>
-            <p className={css.lede}>{lede}</p>
+            <p className={css.crumb}>{group.title}</p>
+            <h1 className={css.title}>{title}</h1>
+            {lede && <p className={css.lede}>{lede}</p>}
           </header>
           {toc.length > 0 && (
             <div className={css.mobileToc}>
@@ -128,30 +135,30 @@ export function DocPage({ id, lede, source }: { id: DocId; lede: string; source:
                 </span>
               </button>
               <div id={tocListId} className={css.mobileTocList} hidden={!tocOpen}>
-                <TocList toc={toc} current={current} onPick={() => setTocOpen(false)} />
+                <TocList toc={toc} current={currentSection} onPick={() => setTocOpen(false)} />
               </div>
             </div>
           )}
-          <Markdown source={source} variant="prose" />
+          {children}
           <nav className={css.pager} aria-label={t.doc.pager}>
             {prev && (
-              <DocLink id={prev} className={css.pagerLink}>
+              <Link className={css.pagerLink} to={prev.url}>
                 <small className={css.pagerLabel}>{t.doc.prev}</small>
-                <b className={css.pagerTitle}>{docTitle(t, prev)}</b>
-              </DocLink>
+                <b className={css.pagerTitle}>{prev.title}</b>
+              </Link>
             )}
             {next && (
-              <DocLink id={next} className={`${css.pagerLink} ${css.pagerNext}`}>
+              <Link className={`${css.pagerLink} ${css.pagerNext}`} to={next.url}>
                 <small className={css.pagerLabel}>{t.doc.next}</small>
-                <b className={css.pagerTitle}>{docTitle(t, next)}</b>
-              </DocLink>
+                <b className={css.pagerTitle}>{next.title}</b>
+              </Link>
             )}
           </nav>
         </article>
         {toc.length > 0 && (
           <aside className={css.toc} aria-label={t.doc.tocLabel}>
             <p className={css.tocLabel}>{t.doc.toc}</p>
-            <TocList toc={toc} current={current} />
+            <TocList toc={toc} current={currentSection} />
           </aside>
         )}
       </div>

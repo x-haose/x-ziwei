@@ -1,7 +1,8 @@
 import { Link, useLocation } from 'react-router';
 import { LANGS } from '../i18n/lang';
 import { useLang, useMessages } from '../i18n/use-lang';
-import { GITHUB_URL, helpUrl } from '../lib/site';
+import { localePath } from '../i18n/lang';
+import { GITHUB_URL } from '../lib/site';
 import * as css from './footer.css';
 
 /** 内容页页脚：项目名、隐私政策、服务条款、GitHub，以及切到另一种语言的同一页。 */
@@ -13,12 +14,12 @@ export function Footer() {
   return (
     <footer className={css.footer}>
       <span>{t.footer.project}</span>
-      <a className={css.link} href={helpUrl(lang, 'privacy')}>
+      <Link className={css.link} to={localePath(lang, '/privacy')}>
         {t.footer.privacy}
-      </a>
-      <a className={css.link} href={helpUrl(lang, 'terms')}>
+      </Link>
+      <Link className={css.link} to={localePath(lang, '/terms')}>
         {t.footer.terms}
-      </a>
+      </Link>
       <a className={css.link} href={GITHUB_URL} target="_blank" rel="noopener">
         {t.footer.github}
       </a>

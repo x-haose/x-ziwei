@@ -98,13 +98,16 @@
 
 ## 帮助页迁入产品站
 
-网页第一期上线时做，不提前。
+产品站已内置帮助页，内容单一来源：`apps/web` 构建时直接读仓库里的 `site/content/*.mdx` 与 `meta.json`（fumadocs-mdx 15.6.4 的 Vite 插件编译，fumadocs-core 16.19.7 出页面树与搜索索引，2026-11-23 查），不复制文件；界面是产品站自己的内容页模板，不用 fumadocs-ui。`site/` 仍在线上并被插件审核引用，在它下线之前两站读同一份内容，改内容只改 `site/content`。
 
-- 内容沿用 `site/content` 的 MDX，用 fumadocs-core 与 fumadocs-mdx 处理（2026-11-23 查：fumadocs-core 16.19.7 的 peer 依赖含 react-router 7.x 或 8.x，fumadocs-mdx 15.6.4 支持 Vite 7、8），界面按产品站的设计规范自己写，不用 fumadocs-ui。
-- 上架 OpenAI 时填的四个地址（网站、支持、隐私、条款）路径不变。
-- 给模型读的入口照旧：`llms.txt`、`llms-full.txt`、页面加 `.md` 取原文，以及按 `Accept: text/markdown` 返回原文。纯静态站在构建时生成这些文件，按请求头返回原文改用 Vercel 的条件改写，要实测。
-- 站内搜索改为在浏览器里查构建时生成的索引。
-- 迁完后 `site/` 与它的 Vercel 项目下线，AGENTS.md「站点」一节随之改写。
+- 地址与旧站一致：`/{lang}/install`、`tools`、`knowledge`、`api`、`self-host`、`privacy`、`terms`、`support`，全部预渲染；上架时填的网站、支持、隐私、条款四个地址不变。
+- 给模型读的入口在构建时生成静态文件：`/llms.txt`（默认语言）、`/{lang}/llms.txt`、`/{lang}/llms-full.txt`，每页加 `.md` 取原文（含方法页）。
+- 站内搜索：构建时生成索引 `/search.json`（两种语言一份），浏览器第一次搜索时下载，本地检索；中文按 Unicode 词边界分词。
+
+上线时做：
+
+- 把 `site/content` 搬进 `apps/web`，改内容源路径；`site/` 与它的 Vercel 项目下线，AGENTS.md「站点」一节随之改写。
+- 按请求头 `Accept: text/markdown` 返回原文：纯静态站做不到，在托管侧配置条件改写到对应的 `.md`，要实测。
 
 ## 暂缓
 

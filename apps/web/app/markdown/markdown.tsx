@@ -31,7 +31,7 @@ function textOf(node: HastNode | HastNode['children'][number]): string {
   return '';
 }
 
-function CodeBlock({ code, lang, title }: { code: string; lang: string; title: string }) {
+export function CodeBlock({ code, lang, title }: { code: string; lang: string; title: string }) {
   const t = useMessages();
   const [state, setState] = useState<'idle' | 'ok' | 'failed'>('idle');
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);

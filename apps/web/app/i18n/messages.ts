@@ -215,7 +215,6 @@ const zh = {
   /** 农历年份逐位写成的数字（「二〇〇〇」）。 */
   lunarYearDigits: ['〇', '一', '二', '三', '四', '五', '六', '七', '八', '九'],
   doc: {
-    groups: { use: '使用', dev: '开发者', about: '关于' },
     sideLabel: '文档',
     toc: '本页',
     tocLabel: '本页目录',
@@ -228,20 +227,19 @@ const zh = {
     copyFailed: '复制失败，请手动选择',
     copyLabel: '复制{title}',
     copyCode: '代码',
-    titles: {
-      method: '解读方法',
-      install: '安装',
-      tools: '工具',
-      knowledge: '知识包',
-      api: 'HTTP 接口',
-      selfHost: '自己部署',
-      privacy: '隐私政策',
-      terms: '服务条款',
-      support: '支持',
-    },
+    methodTitle: '解读方法',
   },
   method: {
     lede: '网页生成的提示词以这段正文开头，告诉聊天 AI 怎么读盘、怎么说话。它是一份公开的 Markdown，与插件里的 Skill 并列维护。',
+  },
+  search: {
+    open: '搜索',
+    title: '搜索帮助与方法',
+    placeholder: '搜索帮助与方法',
+    results: '搜索结果',
+    loading: '正在载入索引',
+    none: '没有找到',
+    failed: '索引载入失败：{reason}',
   },
   footer: {
     project: 'x-ziwei 开源项目',
@@ -475,7 +473,6 @@ const en: Messages = {
   ],
   lunarYearDigits: ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'],
   doc: {
-    groups: { use: 'Using', dev: 'Developers', about: 'About' },
     sideLabel: 'Docs',
     toc: 'On this page',
     tocLabel: 'On this page',
@@ -488,20 +485,19 @@ const en: Messages = {
     copyFailed: 'Copy failed. Select it by hand',
     copyLabel: 'Copy {title}',
     copyCode: 'code',
-    titles: {
-      method: 'Reading method',
-      install: 'Install',
-      tools: 'Tools',
-      knowledge: 'Knowledge pack',
-      api: 'HTTP API',
-      selfHost: 'Self-hosting',
-      privacy: 'Privacy',
-      terms: 'Terms',
-      support: 'Support',
-    },
+    methodTitle: 'Reading method',
   },
   method: {
     lede: 'Every prompt the website builds starts with this text, which tells the chat AI how to read the chart and how to talk. It is a public Markdown file, maintained alongside the plugin Skill.',
+  },
+  search: {
+    open: 'Search',
+    title: 'Search help and method',
+    placeholder: 'Search help and method',
+    results: 'Search results',
+    loading: 'Loading the index',
+    none: 'Nothing found',
+    failed: 'The index failed to load: {reason}',
   },
   footer: {
     project: 'x-ziwei, open source',

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Links, Meta, Outlet, Scripts, ScrollRestoration, isRouteErrorResponse, useLocation } from 'react-router';
+import { RouterProvider } from 'react-aria-components';
+import { Links, Meta, Outlet, Scripts, ScrollRestoration, isRouteErrorResponse, useHref, useLocation, useNavigate } from 'react-router';
 import fonts from 'virtual:xzw-fonts';
 import type { Route } from './+types/root';
 import * as errorCss from './components/not-found.css';
@@ -53,11 +54,15 @@ export function Layout({ children }: { children: ReactNode }) {
   );
 }
 
+/** React Aria 组件里的链接（如搜索结果）走前端路由，不整页刷新。 */
 export default function App() {
+  const navigate = useNavigate();
   return (
-    <ToastProvider>
-      <Outlet />
-    </ToastProvider>
+    <RouterProvider navigate={(to, options) => navigate(to, options)} useHref={useHref}>
+      <ToastProvider>
+        <Outlet />
+      </ToastProvider>
+    </RouterProvider>
   );
 }
 

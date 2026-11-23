@@ -13,7 +13,6 @@ import { localePath } from '../i18n/lang';
 import { useLang, useMessages } from '../i18n/use-lang';
 import { type Kernel, loadKernel, useKernelState } from '../kernel/kernel';
 import { createLunarCalendar } from '../kernel/lunar';
-import { helpUrl } from '../lib/site';
 import * as css from './home.css';
 
 /** 首页的示例盘：公历 2000-8-16 寅时 女（与设计稿同一张）。 */
@@ -167,22 +166,22 @@ export function Home() {
             {t.homeNav.method[1]}
           </small>
         </Link>
-        <a className={css.item} href={helpUrl(lang, 'knowledge')}>
+        <Link className={css.item} to={localePath(lang, '/knowledge')}>
           <b className={css.itemTitle}>{t.nav.knowledge}</b>
           <small className={css.itemNote}>
             {t.homeNav.knowledge[0]}
             <br />
             {t.homeNav.knowledge[1]}
           </small>
-        </a>
-        <a className={css.item} href={helpUrl(lang, 'install')}>
+        </Link>
+        <Link className={css.item} to={localePath(lang, '/install')}>
           <b className={css.itemTitle}>{t.nav.install}</b>
           <small className={css.itemNote}>
             {t.homeNav.install[0]}
             <br />
             {t.homeNav.install[1]}
           </small>
-        </a>
+        </Link>
         <p className={css.blurb}>{t.homeNav.blurb}</p>
         <ThemeButton className={css.theme} />
       </nav>
@@ -201,9 +200,9 @@ export function Home() {
           <Link className={`${controls.button} ${css.ctaButton}`} to={chart}>
             {t.home.ctaChart}
           </Link>
-          <a className={`${controls.ghost} ${css.ctaButton}`} href={helpUrl(lang, 'install')}>
+          <Link className={`${controls.ghost} ${css.ctaButton}`} to={localePath(lang, '/install')}>
             {t.home.ctaInstall}
-          </a>
+          </Link>
         </div>
         <div className={css.facts}>
           <div className={css.fact}>

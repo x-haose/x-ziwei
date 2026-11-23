@@ -2,3 +2,4 @@ allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:
   - x-iztro@0.7.0
+  - fumadocs-core@16.19.7

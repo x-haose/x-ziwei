@@ -12,3 +12,11 @@ export function metaLang(pathname: string): Lang {
 export function pageMeta(title: string, description?: string): MetaDescriptor[] {
   return description ? [{ title }, { name: 'description', content: description }] : [{ title }];
 }
+
+/**
+ * 资源路由收到的地址：预渲染时会以加了 `.data` 后缀的地址再请求一次（取路由数据），这里去掉后缀，
+ * 两次请求得到同一个地址。
+ */
+export function resourcePathname(request: Request): string {
+  return new URL(request.url).pathname.replace(/\.data$/, '');
+}

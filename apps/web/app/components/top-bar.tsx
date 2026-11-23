@@ -1,8 +1,8 @@
 import { NavLink } from 'react-router';
 import { localePath } from '../i18n/lang';
 import { useLang, useMessages } from '../i18n/use-lang';
-import { helpUrl } from '../lib/site';
 import { Glyph } from './icons';
+import { SearchButton } from './search';
 import { ThemeButton } from './theme-button';
 import * as css from './top-bar.css';
 
@@ -27,13 +27,14 @@ export function TopBar() {
         <NavLink to={localePath(lang, '/method')} className={`${css.link} ${css.optional}`}>
           {t.nav.method}
         </NavLink>
-        <a href={helpUrl(lang, 'knowledge')} className={`${css.link} ${css.optional}`}>
+        <NavLink to={localePath(lang, '/knowledge')} className={`${css.link} ${css.optional}`}>
           {t.nav.knowledge}
-        </a>
-        <a href={helpUrl(lang, 'install')} className={`${css.link} ${css.optional}`}>
+        </NavLink>
+        <NavLink to={localePath(lang, '/install')} className={`${css.link} ${css.optional}`}>
           {t.nav.install}
-        </a>
-        <ThemeButton className={css.theme} />
+        </NavLink>
+        <SearchButton className={css.theme} />
+        <ThemeButton />
       </nav>
     </header>
   );
