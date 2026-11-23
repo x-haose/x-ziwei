@@ -74,4 +74,6 @@ There are two ways.
 
 It is merged on top of the default pack: the note for Ziwei and the palace selection for romance become yours, and every other entry stays. A pack without `extends` is used on its own.
 
+The service checks the whole pack against the x-iztro 0.9 rules when it loads it and rejects a pack with any must-fix issue; the tool error then lists every issue (JSON path, issue code and message, warnings included), so you can fix them one by one. The issue codes and how to fix each are in x-iztro's [Checking a pack](https://x-iztro.x-haose.com/en/docs/guide/guides/knowledge-pack#checking-a-pack).
+
 The public service has the default pack only. To make the tools use your pack, [host it yourself](/en/self-host).

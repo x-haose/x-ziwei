@@ -112,7 +112,8 @@ async fn main() -> anyhow::Result<()> {
             let app = build_app(packs)?;
             let server = ZiweiMcp::new(app);
             let io = (tokio::io::stdin(), tokio::io::stdout());
-            rmcp::serve_server(server, io).await?;
+            // serve_server 在握手完成时就返回；要等到对方关闭输入才退出，否则进程握手后即结束。
+            rmcp::serve_server(server, io).await?.waiting().await?;
         }
     }
     Ok(())

@@ -242,10 +242,14 @@ fn json_result<T: Serialize>(result: Result<T, Error>) -> CallToolResult {
 }
 
 fn tool_err(err: Error) -> CallToolResult {
-    let body = json!({
+    let mut body = json!({
         "code": err.code.as_str(),
         "message": err.message,
         "retryable": err.code.retryable(),
     });
+    // 知识包被内核拒绝时列出全部问题，调用方的模型据此告诉用户逐条怎么改。
+    if !err.issues.is_empty() {
+        body["issues"] = json!(err.issues);
+    }
     CallToolResult::error(vec![ContentBlock::text(body.to_string())])
 }

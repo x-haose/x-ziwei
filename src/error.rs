@@ -64,6 +64,19 @@ impl fmt::Display for ErrorCode {
     }
 }
 
+/// 知识包校验的一条问题，取自内核 `KnowledgePack::check`，原样转给调用方。
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, schemars::JsonSchema)]
+pub struct PackIssue {
+    /// `error`（构造时拒绝）或 `warning`（只报告）。
+    pub level: String,
+    /// 问题所在的点分路径，如 `stars.ziweiMjj`；空路径为 `(pack)`。
+    pub path: String,
+    /// 问题种类，与 x-iztro 文档站「知识包 · 校验一份包」的代码表一致。
+    pub code: String,
+    /// 内核给的英文说明，含最接近的写法（找得到时）。
+    pub message: String,
+}
+
 /// 服务层唯一错误类型。适配器按 [`ErrorCode`] 映射状态码，不把内核类型泄漏出去。
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{code}: {message}")]
@@ -72,6 +85,8 @@ pub struct Error {
     pub code: ErrorCode,
     /// 给人（和模型）看的说明，含怎么改。
     pub message: String,
+    /// 知识包被内核拒绝时的全部校验问题（其余错误为空）。
+    pub issues: Vec<PackIssue>,
 }
 
 impl Error {
@@ -80,7 +95,14 @@ impl Error {
         Self {
             code,
             message: message.into(),
+            issues: Vec::new(),
         }
+    }
+
+    /// 附上知识包的校验问题。
+    pub fn with_issues(mut self, issues: Vec<PackIssue>) -> Self {
+        self.issues = issues;
+        self
     }
 
     /// 入参非法（性别、历法、闰月、语言等）。

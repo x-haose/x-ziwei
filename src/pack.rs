@@ -7,9 +7,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use x_iztro::knowledge::{IssueLevel, KnowledgeIssue, check_json};
 use x_iztro::{KnowledgePack, Language};
 
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, ErrorCode, PackIssue};
 
 /// 远程知识包正文上限。超过则拒绝，不缓存截断内容。
 const MAX_PACK_BYTES: usize = 1024 * 1024;
@@ -208,15 +209,54 @@ impl PackStore {
     }
 
     fn parse_and_cache(&self, key: String, json: &str) -> Result<Arc<KnowledgePack>, Error> {
-        let pack = KnowledgePack::from_json(json)
-            .map_err(|e| Error::invalid_argument(format!("knowledge pack JSON rejected: {e}")))?;
-        let arc = Arc::new(resolve_extends(pack)?);
+        let arc = Arc::new(resolve_extends(parse_pack(json)?)?);
         self.cache
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert(key, Arc::clone(&arc));
         Ok(arc)
     }
+}
+
+/// 按内核的规则校验并构造。有 error 级问题时拒绝，错误里带内核给的全部问题（含 warning 级），
+/// 调用方的模型据此逐条告诉用户怎么改；覆盖默认包的包连同默认包一起校验（另报相对底包的提醒）。
+fn parse_pack(json: &str) -> Result<KnowledgePack, Error> {
+    let value: serde_json::Value = match serde_json::from_str(json) {
+        Ok(value) => value,
+        Err(_) => return Err(rejected(check_json(json, None))),
+    };
+    let builtin = KnowledgePack::builtin(Language::ZhCN)
+        .ok_or_else(|| Error::internal("builtin knowledge pack missing for zh-CN"))?;
+    let base = (value.get("extends").and_then(|v| v.as_str()) == Some(builtin.id.as_str()))
+        .then_some(builtin);
+    let issues = KnowledgePack::check(&value, base);
+    if issues.iter().any(|i| i.level == IssueLevel::Error) {
+        return Err(rejected(issues));
+    }
+    KnowledgePack::from_value(&value)
+        .map_err(|e| Error::invalid_argument(format!("knowledge pack rejected: {e}")))
+}
+
+/// 内核拒绝的包：说明里写 error 级问题的条数，`issues` 列出全部问题。
+fn rejected(issues: Vec<KnowledgeIssue>) -> Error {
+    let errors = issues
+        .iter()
+        .filter(|i| i.level == IssueLevel::Error)
+        .count();
+    Error::invalid_argument(format!(
+        "knowledge pack rejected: {errors} error(s) to fix, listed in `issues` with their JSON paths (format: https://x-iztro.x-haose.com/en/docs/guide/guides/knowledge-pack#checking-a-pack)"
+    ))
+    .with_issues(
+        issues
+            .iter()
+            .map(|i| PackIssue {
+                level: i.level.as_key().to_string(),
+                path: i.path_string(),
+                code: i.code.as_key().to_string(),
+                message: i.message(),
+            })
+            .collect(),
+    )
 }
 
 /// 按包的 `extends` 声明决定独立使用还是叠在默认包上。
@@ -268,6 +308,33 @@ mod tests {
             resolve_extends(orphan).unwrap_err().code,
             ErrorCode::InvalidArgument
         );
+    }
+
+    #[test]
+    fn rejected_pack_carries_every_issue() {
+        let err = parse_pack("{").unwrap_err();
+        assert_eq!(err.code, ErrorCode::InvalidArgument);
+        assert_eq!(err.issues.len(), 1);
+        assert_eq!(err.issues[0].code, "invalid_json");
+
+        let err = parse_pack(
+            r#"{"schema":1,"id":"x","language":"zh-CN","extends":"iztro-docs","stars":{"ziweiMjj":{}}}"#,
+        )
+        .unwrap_err();
+        let paths: Vec<_> = err
+            .issues
+            .iter()
+            .map(|i| (i.level.as_str(), i.path.as_str(), i.code.as_str()))
+            .collect();
+        assert!(
+            paths.contains(&("error", "version", "required_missing")),
+            "{paths:?}"
+        );
+        assert!(
+            paths.contains(&("error", "stars.ziweiMjj", "unknown_key")),
+            "{paths:?}"
+        );
+        assert!(err.message.contains("2 error(s)"), "{}", err.message);
     }
 
     #[test]

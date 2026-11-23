@@ -67,4 +67,4 @@ x-ziwei serve --allow-pack-url https://example.com/my-school.json
 
 之后各工具的 `pack` 参数可以写 `file:./packs/my-school.json` 或登记过的那个 URL。不在白名单里的路径和地址一律拒绝；远程包上限 1 MiB。
 
-包的写法见[知识包](/zh/knowledge#用自己的知识)。`extends` 写 `iztro-docs` 的包会合并到默认包之上。
+包的写法见[知识包](/zh/knowledge#用自己的知识)。`extends` 写 `iztro-docs` 的包会合并到默认包之上。加载时按 x-iztro 0.9 的规则校验整份包，有必须改的问题就拒绝；工具返回的错误里逐条列出全部问题（字段路径、问题代码与英文说明，提醒级的也在内），照着改即可。各种问题与改法见 x-iztro 的[校验一份包](https://x-iztro.x-haose.com/zh/docs/guide/guides/knowledge-pack#校验一份包)。

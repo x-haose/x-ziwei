@@ -21,7 +21,7 @@ use tokio_util::sync::CancellationToken;
 use tower_http::cors::CorsLayer;
 
 use crate::birth::BaziRequest;
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, ErrorCode, PackIssue};
 use crate::mcp::ZiweiMcp;
 use crate::openapi::{self, PublicUrl};
 use crate::service::{
@@ -91,6 +91,9 @@ pub struct ErrorBody {
     pub message: String,
     /// 出站依赖故障为 `true`。
     pub retryable: bool,
+    /// 知识包被内核拒绝时的全部校验问题；其余错误不出现。
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub issues: Vec<PackIssue>,
 }
 
 impl<T: Serialize> Envelope<T> {
@@ -110,6 +113,7 @@ impl<T: Serialize> Envelope<T> {
                 code: err.code.as_str(),
                 message: err.message.clone(),
                 retryable: err.code.retryable(),
+                issues: err.issues.clone(),
             }),
         }
     }

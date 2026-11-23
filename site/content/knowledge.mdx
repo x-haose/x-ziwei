@@ -74,4 +74,6 @@ icon: BookOpen
 
 它会合并到默认包之上：紫微的释义和婚恋的选宫换成你的，其余条目保留。不写 `extends` 的包整包独立使用。
 
+加载时按 x-iztro 0.9 的规则校验整份包，有必须改的问题就拒绝；工具返回的错误里逐条列出全部问题（字段路径、问题代码与英文说明，提醒级的也在内），照着改即可。各种问题与改法见 x-iztro 的[校验一份包](https://x-iztro.x-haose.com/zh/docs/guide/guides/knowledge-pack#校验一份包)。
+
 公网服务只有默认包。要让工具用你的包，需要[自己部署](/zh/self-host)。

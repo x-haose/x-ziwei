@@ -86,6 +86,8 @@ x-ziwei stdio --allow-pack-dir ./packs
 
 包的格式见 x-iztro 的[知识包格式规范](https://github.com/x-haose/x-iztro/blob/main/knowledge/SCHEMA.md)。`extends` 写 `iztro-docs` 的包会合并到默认包之上，只需写要改的条目；包里 `topics` 段的选宫定义直接决定 `ziwei_get_topic_palaces` 取哪些宫。
 
+加载时按 x-iztro 0.9 的规则校验整份包，有必须改的问题就拒绝；工具返回的错误里逐条列出全部问题（字段路径、问题代码与英文说明，提醒级的也在内），照着改即可。各种问题与改法见 x-iztro 的[校验一份包](https://x-iztro.x-haose.com/zh/docs/guide/guides/knowledge-pack#校验一份包)。
+
 ## 许可
 
 代码按 [MIT 许可](LICENSE) 开放，可以自由使用、修改、分发，包括商用。
