@@ -1,6 +1,7 @@
 //! 本机 stdio MCP 的真实入口：知识包被 x-iztro 0.9 的规则拒绝时，工具错误里带内核给的全部问题。
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use x_iztro::KnowledgePack;
@@ -23,6 +24,18 @@ fn reply(lines: &mut impl Iterator<Item = std::io::Result<String>>, id: u64) -> 
         }
     }
     panic!("stdio 服务在回复 {id} 之前退出");
+}
+
+fn exit_within(child: &mut Child, limit: Duration) {
+    let deadline = Instant::now() + limit;
+    while child.try_wait().unwrap().is_none() {
+        if Instant::now() >= deadline {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("stdio 服务在 stdin 关闭后 {limit:?} 内没有退出");
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }
 
 #[test]
@@ -59,8 +72,9 @@ fn rejected_pack_lists_every_issue_from_the_kernel() {
             "knowledge":"summary","pack":format!("file:{}", file.display())}}}),
     );
     let result = reply(&mut lines, 1)["result"].clone();
+    // 关掉 stdin 后服务应自行退出；不退出时杀掉并判失败，不让测试卡住。
     drop(stdin);
-    child.wait().unwrap();
+    exit_within(&mut child, Duration::from_secs(10));
     std::fs::remove_dir_all(&dir).unwrap();
 
     assert_eq!(result["isError"], true);

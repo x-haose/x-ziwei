@@ -25,7 +25,7 @@ pub enum ErrorCode {
     MissingHoroscopeDate,
     /// 请求的知识包不在白名单（本地目录或 URL）。
     PackNotAllowed,
-    /// 白名单内的包读不到（文件或 HTTP）；可重试。
+    /// 白名单内的包暂时读不到（文件 I/O 故障或 HTTP 失败）；可重试。本地文件不存在、正文不是 UTF-8 报 `InvalidArgument`。
     PackUnavailable,
     /// 内核或本进程本不该出现的状态。
     Internal,

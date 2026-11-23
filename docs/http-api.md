@@ -19,7 +19,7 @@
 | `/v1/lookup` | `ziwei_lookup_knowledge` | 按标识查知识包条目 |
 | `/v1/catalog` | `ziwei_list_knowledge` | 知识包目录 |
 
-响应信封：成功 `{"ok": true, "data": …}`；失败 `{"ok": false, "data": null, "error": {"code", "message", "retryable"}}`。
+响应信封：成功 `{"ok": true, "data": …}`；失败 `{"ok": false, "data": null, "error": {"code", "message", "retryable", "issues"?}}`。`issues` 只在知识包被内核拒绝时出现，每条 `{"level": "error"|"warning", "path", "code", "message"}`，与 MCP 工具错误里的同名字段一致。
 
 ### 生辰 `birth`
 
@@ -143,7 +143,7 @@
 | 413 | `invalid_argument` | 请求体超过 64 KiB |
 | 429 | `rate_limited` | 单地址超过限流，可重试 |
 | 500 | `internal` | 内部错误 |
-| 503 | `pack_unavailable` | 白名单内的知识包读不到，可重试 |
+| 503 | `pack_unavailable` | 白名单内的知识包暂时读不到（文件 I/O 故障、上游 HTTP 失败），可重试；本地文件不存在或不是 UTF-8 报 `invalid_argument` |
 
 - 请求体上限 64 KiB，超限返回 413 与 `invalid_argument`。路径或方法不对由 HTTP 框架直接拒绝，不带信封。
 - 与 `/mcp` 共用每 IP 限流，默认 10 次/秒、突发 30。

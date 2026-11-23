@@ -114,12 +114,7 @@ impl PackStore {
             Ok(canonical) => canonical,
             // 白名单外的路径一律答「不允许」，不透露文件是否存在。
             Err(_) if !self.file_allowed(path) => return Err(not_allowed()),
-            Err(e) => {
-                return Err(Error::new(
-                    ErrorCode::PackUnavailable,
-                    format!("cannot read pack file {}: {e}", path.display()),
-                ));
-            }
+            Err(e) => return Err(file_error(path, &e)),
         };
         if !self.file_allowed(&canonical) {
             return Err(not_allowed());
@@ -128,13 +123,16 @@ impl PackStore {
         if let Some(hit) = self.cached(&key) {
             return Ok(hit);
         }
-        let json = tokio::fs::read_to_string(&canonical).await.map_err(|e| {
-            Error::new(
-                ErrorCode::PackUnavailable,
-                format!("cannot read pack file {}: {e}", canonical.display()),
-            )
+        let bytes = tokio::fs::read(&canonical)
+            .await
+            .map_err(|e| file_error(&canonical, &e))?;
+        let json = std::str::from_utf8(&bytes).map_err(|_| {
+            Error::invalid_argument(format!(
+                "pack file {} is not UTF-8 JSON",
+                canonical.display()
+            ))
         })?;
-        self.parse_and_cache(key, &json)
+        self.parse_and_cache(key, json)
     }
 
     async fn load_url(&self, url: &str) -> Result<Arc<KnowledgePack>, Error> {
@@ -216,6 +214,15 @@ impl PackStore {
             .insert(key, Arc::clone(&arc));
         Ok(arc)
     }
+}
+
+/// 白名单内的本地包读不到。文件不存在是调用方给错了路径，重试结果不变，报 `invalid_argument`；
+/// 其余 I/O 故障（权限、磁盘）报可重试的 `pack_unavailable`。
+fn file_error(path: &Path, err: &std::io::Error) -> Error {
+    if err.kind() == std::io::ErrorKind::NotFound {
+        return Error::invalid_argument(format!("pack file {} does not exist", path.display()));
+    }
+    Error::pack_unavailable(format!("cannot read pack file {}: {err}", path.display()))
 }
 
 /// 按内核的规则校验并构造。有 error 级问题时拒绝，错误里带内核给的全部问题（含 warning 级），
@@ -357,6 +364,31 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(err.code, ErrorCode::PackNotAllowed);
+    }
+
+    #[tokio::test]
+    async fn missing_or_non_utf8_file_is_not_retryable() {
+        let dir = std::env::temp_dir().join(format!("x-ziwei-pack-file-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // 不存在的文件无法规范化，白名单按字面比较，测试路径须已是规范形式（macOS 的临时目录经过符号链接）。
+        let dir = dir.canonicalize().unwrap();
+        let latin1 = dir.join("latin1.json");
+        std::fs::write(&latin1, b"{\"id\":\"caf\xe9\"}").unwrap();
+        let store = PackStore::new(PackPolicy {
+            allow_dirs: vec![dir.clone()],
+            allow_urls: vec![],
+        })
+        .unwrap();
+        let non_utf8 = store.load(PackRef::File(latin1)).await.unwrap_err();
+        let missing = store
+            .load(PackRef::File(dir.join("missing.json")))
+            .await
+            .unwrap_err();
+        std::fs::remove_dir_all(&dir).unwrap();
+        for err in [non_utf8, missing] {
+            assert_eq!(err.code, ErrorCode::InvalidArgument, "{err}");
+            assert!(!err.code.retryable());
+        }
     }
 
     #[tokio::test]

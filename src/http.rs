@@ -91,8 +91,8 @@ pub struct ErrorBody {
     pub message: String,
     /// 出站依赖故障为 `true`。
     pub retryable: bool,
-    /// 知识包被内核拒绝时的全部校验问题；其余错误不出现。
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    /// 知识包被内核拒绝时的全部校验问题；其余错误不出现（OpenAPI 里非必填）。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub issues: Vec<PackIssue>,
 }
 

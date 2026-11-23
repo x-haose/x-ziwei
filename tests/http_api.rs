@@ -168,6 +168,17 @@ async fn v1_api_over_http() {
         schema["paths"]["/v1/chart"]["post"]["x-openai-isConsequential"],
         false
     );
+    // 普通错误不带 issues：错误体里它必须是可选字段，严格校验响应的客户端才不会判不合规。
+    let error_body = find_error_body(&schema).expect("OpenAPI 里应有错误体 schema");
+    let mut required: Vec<&str> = error_body["required"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    required.sort_unstable();
+    assert_eq!(required, ["code", "message", "retryable"]);
+    assert!(error_body["properties"].get("issues").is_some());
 
     let preflight = client
         .request(reqwest::Method::OPTIONS, format!("{base}/v1/chart"))
@@ -537,4 +548,21 @@ async fn oversized_body_is_rejected_with_an_envelope() {
     assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     let body = response.json::<Value>().await.unwrap();
     assert_eq!(body["error"]["code"], "invalid_argument");
+}
+
+/// 在 OpenAPI 文档里找错误体的 schema：带 `code`、`message`、`retryable` 属性的那个对象。
+fn find_error_body(value: &Value) -> Option<&Value> {
+    match value {
+        Value::Object(map) => {
+            if map
+                .get("properties")
+                .is_some_and(|p| p.get("retryable").is_some() && p.get("code").is_some())
+            {
+                return Some(value);
+            }
+            map.values().find_map(find_error_body)
+        }
+        Value::Array(items) => items.iter().find_map(find_error_body),
+        _ => None,
+    }
 }

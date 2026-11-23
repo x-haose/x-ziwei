@@ -42,6 +42,15 @@ Failure:
 { "ok": false, "data": null, "error": { "code": "invalid_date", "message": "…", "retryable": false } }
 ```
 
+When a knowledge pack is rejected (only possible when you [host it yourself](/en/self-host) and allow pack directories or URLs), `error` also carries `issues`, one entry per problem to fix (other errors omit this field):
+
+```json
+{ "ok": false, "data": null, "error": { "code": "invalid_argument", "message": "knowledge pack rejected: 1 error(s) to fix, …", "retryable": false,
+  "issues": [{ "level": "error", "path": "version", "code": "required_missing", "message": "…" }] } }
+```
+
+`level` is `error` (must fix) or `warning` (advisory); `path` locates the problem in the pack; the codes are listed in [x-iztro's knowledge pack guide](https://x-iztro.x-haose.com/en/docs/guide/guides/knowledge-pack#checking-a-pack).
+
 ## Errors and limits
 
 | HTTP | `error.code` | Meaning |

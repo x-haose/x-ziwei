@@ -42,6 +42,15 @@ curl https://ziwei-mcp.x-haose.com/v1/chart \
 { "ok": false, "data": null, "error": { "code": "invalid_date", "message": "…", "retryable": false } }
 ```
 
+知识包被拒绝时（只在[自己部署](/zh/self-host)并放开了知识包目录或网址时会遇到），`error` 里另有 `issues`，逐条列出要改的问题（其余错误没有这个字段）：
+
+```json
+{ "ok": false, "data": null, "error": { "code": "invalid_argument", "message": "knowledge pack rejected: 1 error(s) to fix, …", "retryable": false,
+  "issues": [{ "level": "error", "path": "version", "code": "required_missing", "message": "…" }] } }
+```
+
+`level` 为 `error`（要改）或 `warning`（提醒）；`path` 是问题在包里的位置，`code` 的含义见 [x-iztro 的知识包文档](https://x-iztro.x-haose.com/zh/docs/guide/guides/knowledge-pack#校验一份包)。
+
 ## 错误与限制
 
 | HTTP | `error.code` | 含义 |
