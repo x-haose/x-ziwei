@@ -3,11 +3,13 @@ import {
   DEFAULT_PACK_ID,
   DEFAULT_USE,
   type Pack,
+  addToStack,
   checkUse,
   describePack,
   diffAgainst,
   libraryProblems,
   moveInStack,
+  pickWhole,
   usePack,
   withoutPack,
 } from './library';
@@ -35,31 +37,43 @@ describe('本机包库的导入规则', () => {
 });
 
 describe('生效组合', () => {
-  it('叠加只收基于默认包的覆盖包，整包只收默认包或本机独立整包', () => {
-    expect(() => checkUse({ mode: 'stack', stack: ['notes', 'more'], whole: 'school' }, packs)).not.toThrow();
+  it('两处叠加各自只收基于自己底包的覆盖包；整包模式选默认包时不叠加', () => {
+    expect(() => checkUse({ mode: 'stack', stack: ['notes', 'more'], whole: 'school', wholeStack: ['on-school'] }, packs)).not.toThrow();
     expect(() => checkUse({ ...DEFAULT_USE, stack: ['school'] }, packs)).toThrow();
     expect(() => checkUse({ ...DEFAULT_USE, stack: ['on-school'] }, packs)).toThrow();
     expect(() => checkUse({ ...DEFAULT_USE, stack: ['notes', 'notes'] }, packs)).toThrow();
     expect(() => checkUse({ ...DEFAULT_USE, whole: 'notes' }, packs)).toThrow();
     expect(() => checkUse({ ...DEFAULT_USE, stack: ['gone'] }, packs)).toThrow();
+    expect(() => checkUse({ ...DEFAULT_USE, whole: 'school', wholeStack: ['notes'] }, packs)).toThrow();
+    expect(() => checkUse({ ...DEFAULT_USE, wholeStack: ['notes'] }, packs)).toThrow();
   });
 
-  it('前移后移交换相邻两项，越界报错', () => {
+  it('前移后移交换当前模式叠加里相邻两项，越界报错', () => {
     const use = { ...DEFAULT_USE, stack: ['notes', 'more'] };
     expect(moveInStack(use, 1, -1).stack).toEqual(['more', 'notes']);
     expect(() => moveInStack(use, 0, -1)).toThrow();
+    const whole = { ...DEFAULT_USE, mode: 'whole' as const, whole: 'school', wholeStack: ['on-school'] };
+    expect(addToStack(whole, 'on-school')).toBe(whole);
+    expect(() => moveInStack(whole, 0, 1)).toThrow();
   });
 
-  it('删包后从叠加里去掉；它是所选整包时改回默认包；另一模式的选择保留', () => {
-    const use = { mode: 'whole' as const, stack: ['notes', 'more'], whole: 'school' };
-    expect(withoutPack(use, 'notes')).toEqual({ mode: 'whole', stack: ['more'], whole: 'school' });
-    expect(withoutPack(use, 'school')).toEqual({ mode: 'whole', stack: ['notes', 'more'], whole: DEFAULT_PACK_ID });
+  it('删包后从两处叠加里去掉；它是所选整包时改回默认包并清空整包的叠加；另一模式的选择保留', () => {
+    const use = { mode: 'whole' as const, stack: ['notes', 'more'], whole: 'school', wholeStack: ['on-school'] };
+    expect(withoutPack(use, 'notes')).toEqual({ ...use, stack: ['more'] });
+    expect(withoutPack(use, 'on-school')).toEqual({ ...use, wholeStack: [] });
+    expect(withoutPack(use, 'school')).toEqual({ mode: 'whole', stack: ['notes', 'more'], whole: DEFAULT_PACK_ID, wholeStack: [] });
   });
 
-  it('改用一个包：覆盖包排到末尾并切到叠加，整包切到整包模式', () => {
-    expect(usePack({ ...DEFAULT_USE, mode: 'whole', stack: ['more'] }, notes)).toEqual({ mode: 'stack', stack: ['more', 'notes'], whole: DEFAULT_PACK_ID });
-    expect(usePack(DEFAULT_USE, school)).toEqual({ mode: 'whole', stack: [], whole: 'school' });
-    expect(() => usePack(DEFAULT_USE, onSchool)).toThrow();
+  it('换整包清空原来整包上的叠加', () => {
+    const use = { ...DEFAULT_USE, mode: 'whole' as const, whole: 'school', wholeStack: ['on-school'] };
+    expect(pickWhole(use, DEFAULT_PACK_ID)).toEqual({ ...use, whole: DEFAULT_PACK_ID, wholeStack: [] });
+    expect(pickWhole(use, 'school')).toBe(use);
+  });
+
+  it('改用一个包：覆盖包排到所在底包的叠加末尾并切到对应模式，整包切到整包模式', () => {
+    expect(usePack({ ...DEFAULT_USE, mode: 'whole', stack: ['more'] }, notes)).toEqual({ ...DEFAULT_USE, mode: 'stack', stack: ['more', 'notes'] });
+    expect(usePack(DEFAULT_USE, school)).toEqual({ ...DEFAULT_USE, mode: 'whole', whole: 'school' });
+    expect(usePack(DEFAULT_USE, onSchool)).toEqual({ ...DEFAULT_USE, mode: 'whole', whole: 'school', wholeStack: ['on-school'] });
   });
 });
 

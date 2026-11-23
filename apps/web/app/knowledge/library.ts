@@ -79,20 +79,27 @@ export function describePack(raw: PackRaw, importedAt: number | null): Pack {
 }
 
 /**
- * 生效组合。`mode` 为 stack 时在默认包上按 `stack` 的顺序叠加覆盖包（排在后面的覆盖前面的）；
- * 为 whole 时只用 `whole` 这一个独立整包。两种模式各自的选择都保留，来回切换不丢。
+ * 生效组合。`mode` 为 stack 时在默认包上按 `stack` 的顺序叠加覆盖包；为 whole 时以独立整包 `whole` 为底，
+ * 按 `wholeStack` 的顺序叠加基于它的覆盖包（选的是默认包时不叠加，叠加默认包用 stack 模式）。
+ * 两处叠加都是排在后面的覆盖前面的。两种模式各自的选择都保留，来回切换不丢。
  */
 export interface Use {
   mode: 'stack' | 'whole';
   stack: string[];
   whole: string;
+  wholeStack: string[];
 }
 
-export const DEFAULT_USE: Use = { mode: 'stack', stack: [], whole: DEFAULT_PACK_ID };
+export const DEFAULT_USE: Use = { mode: 'stack', stack: [], whole: DEFAULT_PACK_ID, wholeStack: [] };
 
-/** 能叠加在默认包上的覆盖包：`extends` 为默认包。 */
+/** 能叠加在 `base` 上的覆盖包：`extends` 为它。 */
+export function overlaysOf(packs: readonly Pack[], base: string): Pack[] {
+  return packs.filter((p) => p.extends === base);
+}
+
+/** 能叠加在默认包上的覆盖包。 */
 export function stackable(packs: readonly Pack[]): Pack[] {
-  return packs.filter((p) => p.extends === DEFAULT_PACK_ID);
+  return overlaysOf(packs, DEFAULT_PACK_ID);
 }
 
 /** 本机的独立整包（不含默认包）。 */
@@ -100,54 +107,81 @@ export function wholes(packs: readonly Pack[]): Pack[] {
   return packs.filter((p) => p.extends === null);
 }
 
+/** 当前模式的底包与叠加。 */
+function current(use: Use): { base: string; layers: string[] } {
+  return use.mode === 'stack' ? { base: DEFAULT_PACK_ID, layers: use.stack } : { base: use.whole, layers: use.wholeStack };
+}
+
+/** 换掉当前模式的叠加。 */
+function withLayers(use: Use, layers: string[]): Use {
+  return use.mode === 'stack' ? { ...use, stack: layers } : { ...use, wholeStack: layers };
+}
+
 /**
- * 核对组合引用的包都在本机且用法对得上：叠加里只有基于默认包的覆盖包、不重复；整包是默认包或本机的独立整包。
- * 组合与包库在同一个事务里改，对不上即是代码缺陷，直接报错。
+ * 核对组合引用的包都在本机且用法对得上：两处叠加都只有基于各自底包的覆盖包、不重复；整包是默认包或本机的独立整包，
+ * 选默认包时整包模式不叠加。组合与包库在同一个事务里改，对不上即是代码缺陷，直接报错。
  */
 export function checkUse(use: Use, packs: readonly Pack[]): void {
   const byId = new Map(packs.map((p) => [p.id, p]));
-  if (new Set(use.stack).size !== use.stack.length) throw new Error(`叠加里有重复的包：${use.stack.join(', ')}`);
-  for (const id of use.stack) {
-    const p = byId.get(id);
-    if (!p || p.extends !== DEFAULT_PACK_ID) throw new Error(`叠加里的 ${id} 不是本机基于默认包的覆盖包`);
-  }
   if (use.whole !== DEFAULT_PACK_ID) {
     const p = byId.get(use.whole);
     if (!p || p.extends !== null) throw new Error(`整包 ${use.whole} 不是本机的独立整包`);
+  } else if (use.wholeStack.length) {
+    throw new Error('整包模式选默认包时不叠加');
+  }
+  for (const [base, layers] of [[DEFAULT_PACK_ID, use.stack], [use.whole, use.wholeStack]] as const) {
+    if (new Set(layers).size !== layers.length) throw new Error(`叠加里有重复的包：${layers.join(', ')}`);
+    for (const id of layers) {
+      if (byId.get(id)?.extends !== base) throw new Error(`叠加里的 ${id} 不是本机基于 ${base} 的覆盖包`);
+    }
   }
 }
 
 /** 当前生效用到的包标识，按合并顺序；第一个是底包。 */
 export function activeIds(use: Use): string[] {
-  return use.mode === 'stack' ? [DEFAULT_PACK_ID, ...use.stack] : [use.whole];
+  const { base, layers } = current(use);
+  return [base, ...layers];
 }
 
-/** 删掉一个包之后的组合：从叠加里去掉；它是所选整包时改回默认包。 */
+/** 删掉一个包之后的组合：从两处叠加里去掉；它是所选整包时改回默认包（连同它的叠加）。 */
 export function withoutPack(use: Use, id: string): Use {
-  return { mode: use.mode, stack: use.stack.filter((x) => x !== id), whole: use.whole === id ? DEFAULT_PACK_ID : use.whole };
+  if (use.whole === id) return { ...use, stack: use.stack.filter((x) => x !== id), whole: DEFAULT_PACK_ID, wholeStack: [] };
+  return { ...use, stack: use.stack.filter((x) => x !== id), wholeStack: use.wholeStack.filter((x) => x !== id) };
 }
 
-/** 叠加里第 `i` 个包前移（-1）或后移（1）。越界即是调用方的缺陷。 */
+/** 当前模式的叠加里第 `i` 个包前移（-1）或后移（1）。越界即是调用方的缺陷。 */
 export function moveInStack(use: Use, i: number, dir: -1 | 1): Use {
+  const layers = [...current(use).layers];
   const j = i + dir;
-  if (i < 0 || j < 0 || i >= use.stack.length || j >= use.stack.length) throw new Error(`叠加里移不动：${i} → ${j}`);
-  const stack = [...use.stack];
-  [stack[i], stack[j]] = [stack[j]!, stack[i]!];
-  return { ...use, stack };
+  if (i < 0 || j < 0 || i >= layers.length || j >= layers.length) throw new Error(`叠加里移不动：${i} → ${j}`);
+  [layers[i], layers[j]] = [layers[j]!, layers[i]!];
+  return withLayers(use, layers);
 }
 
-/** 改用一个包：覆盖包排到叠加末尾（已在叠加里则不动）并切到叠加；整包切到整包模式。 */
+/** 从当前模式的叠加里移出一个包。 */
+export function removeFromStack(use: Use, id: string): Use {
+  return withLayers(use, current(use).layers.filter((x) => x !== id));
+}
+
+/** 把一个覆盖包排到当前模式的叠加末尾。 */
+export function addToStack(use: Use, id: string): Use {
+  const layers = current(use).layers;
+  return layers.includes(id) ? use : withLayers(use, [...layers, id]);
+}
+
+/** 整包模式换底包：换了底包，原来的叠加随之清空（它们基于原来的底包）。 */
+export function pickWhole(use: Use, id: string): Use {
+  return id === use.whole ? use : { ...use, whole: id, wholeStack: [] };
+}
+
+/**
+ * 改用一个包：基于默认包的覆盖包排到默认包叠加的末尾；基于本机整包的覆盖包切到整包模式、以那个整包为底排到末尾；
+ * 整包切到整包模式。
+ */
 export function usePack(use: Use, pack: Pack): Use {
-  if (pack.extends === DEFAULT_PACK_ID) {
-    return { ...use, mode: 'stack', stack: use.stack.includes(pack.id) ? use.stack : [...use.stack, pack.id] };
-  }
-  if (pack.extends !== null) throw new Error(`${pack.id} 基于 ${pack.extends}，不能叠加在默认包上`);
-  return { ...use, mode: 'whole', whole: pack.id };
-}
-
-/** 两个组合是否等价（生效的包与顺序相同）。 */
-export function sameActive(a: Use, b: Use): boolean {
-  return activeIds(a).join('\n') === activeIds(b).join('\n');
+  if (pack.extends === DEFAULT_PACK_ID) return addToStack({ ...use, mode: 'stack' }, pack.id);
+  if (pack.extends !== null) return addToStack({ ...pickWhole(use, pack.extends), mode: 'whole' }, pack.id);
+  return { ...pickWhole(use, pack.id), mode: 'whole' };
 }
 
 /** 覆盖包相对底包的改动：同键条目算「改」，底包没有的键算「新增」。 */

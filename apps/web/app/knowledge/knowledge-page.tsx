@@ -21,8 +21,11 @@ import {
   type Use,
   activeIds,
   diffAgainst,
+  addToStack,
   moveInStack,
-  stackable,
+  overlaysOf,
+  pickWhole,
+  removeFromStack,
   usePack,
   wholes,
   withoutPack,
@@ -66,30 +69,31 @@ function UsePanel({
 }) {
   const u = t.knowledge.use;
   const active = activePacks(use, packs, defaultPack);
-  const overlays = stackable(packs);
-  const otherBase = packs.filter((p) => p.extends !== null && p.extends !== DEFAULT_PACK_ID);
+  const [base, ...layers] = active;
+  if (!base) throw new Error('生效组合没有底包');
+  const baseOverlays = overlaysOf(packs, base.id);
   const whole = [defaultPack, ...wholes(packs)];
-  const merged: Record<Section, number> = { ...defaultPack.counts };
+  const merged: Record<Section, number> = { ...base.counts };
   const marks: Partial<Record<Section, string>> = {};
-  if (use.mode === 'whole') {
-    Object.assign(merged, active[0]!.counts);
-  } else {
-    const keys: Record<Section, Set<string>> = Object.fromEntries(SECTIONS.map((s) => [s, new Set(defaultPack.keys[s])])) as Record<Section, Set<string>>;
-    const touched: Record<Section, Set<string>> = Object.fromEntries(SECTIONS.map((s) => [s, new Set<string>()])) as Record<Section, Set<string>>;
-    for (const p of active.slice(1)) {
-      for (const s of SECTIONS) {
-        for (const k of p.keys[s]) {
-          keys[s].add(k);
-          touched[s].add(k);
-        }
+  const keys = Object.fromEntries(SECTIONS.map((s) => [s, new Set(base.keys[s])])) as Record<Section, Set<string>>;
+  const touched = Object.fromEntries(SECTIONS.map((s) => [s, new Set<string>()])) as Record<Section, Set<string>>;
+  for (const p of layers) {
+    for (const s of SECTIONS) {
+      for (const k of p.keys[s]) {
+        keys[s].add(k);
+        touched[s].add(k);
       }
     }
-    for (const s of SECTIONS) {
-      merged[s] = keys[s].size;
-      if (touched[s].size) marks[s] = fmt(u.changedMark, { n: touched[s].size });
-    }
   }
-  const addable = overlays.filter((p) => !use.stack.includes(p.id));
+  for (const s of SECTIONS) {
+    merged[s] = keys[s].size;
+    if (touched[s].size) marks[s] = fmt(u.changedMark, { n: touched[s].size });
+  }
+  const addable = baseOverlays.filter((p) => !layers.some((l) => l.id === p.id));
+  // 叠加模式下，基于本机整包的覆盖包要到整包切换里选那个整包才能叠加。
+  const elsewhere = use.mode === 'stack' ? packs.filter((p) => p.extends !== null && p.extends !== DEFAULT_PACK_ID) : [];
+  // 整包模式选的是默认包时不叠加（叠加默认包用叠加模式）。
+  const canLayer = use.mode === 'stack' || base.id !== DEFAULT_PACK_ID;
   return (
     <section className={css.use} aria-labelledby="knowledge-use-title">
       <div className={css.useHead}>
@@ -109,31 +113,17 @@ function UsePanel({
       </div>
       <div className={css.row}>
         {use.mode === 'stack' ? (
-          <>
-            <div className={`${css.sheet} ${css.sheetBase}`}>
-              <small className={css.sheetKind}>{u.base}</small>
-              <b className={css.sheetName}>{defaultPack.name}</b>
-              <span className={css.sheetId}>{defaultPack.version}</span>
-              <p className={css.sheetNote}>{u.defaultNote}</p>
-            </div>
-            {active.slice(1).map((p, i) => (
-              <Overlay
-                key={p.id}
-                t={t}
-                pack={p}
-                index={i}
-                last={i === use.stack.length - 1}
-                diff={diffText(diffAgainst(p, defaultPack), t)}
-                onMove={(dir) => onChange(moveInStack(use, i, dir))}
-                onRemove={() => onChange({ ...use, stack: use.stack.filter((x) => x !== p.id) })}
-              />
-            ))}
-          </>
+          <div className={`${css.sheet} ${css.sheetBase}`}>
+            <small className={css.sheetKind}>{u.base}</small>
+            <b className={css.sheetName}>{defaultPack.name}</b>
+            <span className={css.sheetId}>{defaultPack.version}</span>
+            <p className={css.sheetNote}>{u.defaultNote}</p>
+          </div>
         ) : (
           <RadioGroup
             aria-label={u.whole}
             value={use.whole}
-            onChange={(id) => onChange({ ...use, whole: id })}
+            onChange={(id) => onChange(pickWhole(use, id))}
             className={css.wholeRow}
             orientation="horizontal"
             isDisabled={blocked}
@@ -152,6 +142,18 @@ function UsePanel({
             ))}
           </RadioGroup>
         )}
+        {layers.map((p, i) => (
+          <Overlay
+            key={p.id}
+            t={t}
+            pack={p}
+            index={i}
+            last={i === layers.length - 1}
+            diff={diffText(diffAgainst(p, base), t)}
+            onMove={(dir) => onChange(moveInStack(use, i, dir))}
+            onRemove={() => onChange(removeFromStack(use, p.id))}
+          />
+        ))}
         <span className={`${css.op} ${css.opEq}`} aria-hidden="true">
           =
         </span>
@@ -162,9 +164,10 @@ function UsePanel({
           <p className={css.sheetNote}>{u.resultNote}</p>
         </div>
       </div>
-      {use.mode === 'stack' ? (
-        <p className={css.addable}>
-          {addable.length ? (
+      <p className={css.addable}>
+        {use.mode === 'whole' && <span>{whole.length > 1 ? u.wholeNote : u.noWhole}</span>}
+        {canLayer &&
+          (addable.length ? (
             <>
               <span>{u.addable}</span>
               {addable.map((p) => (
@@ -173,7 +176,7 @@ function UsePanel({
                   type="button"
                   className={css.addButton}
                   aria-label={fmt(u.addLabel, { name: p.name })}
-                  onClick={() => onChange({ ...use, stack: [...use.stack, p.id] })}
+                  onClick={() => onChange(addToStack(use, p.id))}
                 >
                   {p.name}
                 </button>
@@ -181,13 +184,10 @@ function UsePanel({
               <span>{u.laterWins}</span>
             </>
           ) : (
-            <span>{overlays.length ? u.allStacked : u.noOverlay}</span>
-          )}
-          {otherBase.length > 0 && <span>{fmt(u.otherBase, { names: otherBase.map((p) => p.name).join(t.knowledge.diff.sep) })}</span>}
-        </p>
-      ) : (
-        <p className={css.addable}>{whole.length > 1 ? u.wholeNote : u.noWhole}</p>
-      )}
+            <span>{baseOverlays.length ? u.allStacked : fmt(u.noOverlay, { base: base.id })}</span>
+          ))}
+        {elsewhere.length > 0 && <span>{fmt(u.otherBase, { names: elsewhere.map((p) => p.name).join(t.knowledge.diff.sep) })}</span>}
+      </p>
     </section>
   );
 }

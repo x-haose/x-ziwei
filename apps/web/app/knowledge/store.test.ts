@@ -17,11 +17,11 @@ describe('本机知识包库（IndexedDB）', () => {
     expect(await lib.use()).toEqual(DEFAULT_USE);
     await lib.add({ id: 'b', raw: raw('b'), importedAt: 2 });
     await lib.add({ id: 'a', raw: raw('a'), importedAt: 1 });
-    await lib.setUse({ mode: 'stack', stack: ['a'], whole: 'iztro-docs' });
+    await lib.setUse({ mode: 'stack', stack: ['a'], whole: 'iztro-docs', wholeStack: [] });
     lib.close();
     const again = await openLibrary();
     expect((await again.packs()).map((p) => p.id)).toEqual(['a', 'b']);
-    expect(await again.use()).toEqual({ mode: 'stack', stack: ['a'], whole: 'iztro-docs' });
+    expect(await again.use()).toEqual({ mode: 'stack', stack: ['a'], whole: 'iztro-docs', wholeStack: [] });
     again.close();
   });
 
@@ -36,7 +36,7 @@ describe('本机知识包库（IndexedDB）', () => {
   it('删包与改组合在同一个事务里', async () => {
     const lib = await openLibrary();
     await lib.add({ id: 'a', raw: raw('a'), importedAt: 1 });
-    await lib.setUse({ mode: 'stack', stack: ['a'], whole: 'iztro-docs' });
+    await lib.setUse({ mode: 'stack', stack: ['a'], whole: 'iztro-docs', wholeStack: [] });
     await lib.remove('a', DEFAULT_USE);
     expect(await lib.packs()).toEqual([]);
     expect(await lib.use()).toEqual(DEFAULT_USE);
@@ -47,6 +47,27 @@ describe('本机知识包库（IndexedDB）', () => {
     const lib = await openLibrary();
     await lib.setUse({ mode: 'oops' } as never);
     await expect(lib.use()).rejects.toThrow(/损坏/);
+    lib.close();
+  });
+});
+
+describe('库的版本升级', () => {
+  it('版本 1 存的生效组合补上整包模式的叠加', async () => {
+    await new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open('xzw-knowledge', 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        db.createObjectStore('packs', { keyPath: 'id' });
+        db.createObjectStore('state').put({ mode: 'whole', stack: ['a'], whole: 'iztro-docs' }, 'use');
+      };
+      req.onsuccess = () => {
+        req.result.close();
+        resolve();
+      };
+      req.onerror = () => reject(req.error);
+    });
+    const lib = await openLibrary();
+    expect(await lib.use()).toEqual({ mode: 'whole', stack: ['a'], whole: 'iztro-docs', wholeStack: [] });
     lib.close();
   });
 });

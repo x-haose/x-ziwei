@@ -7,7 +7,7 @@ import { fmt, type Messages } from '../i18n/messages';
 import type { KernelState } from '../kernel/kernel';
 import { type ImportProblem, MAX_PACK_BYTES, checkImport } from './kernel-pack';
 import * as css from './knowledge.css';
-import { DEFAULT_PACK_ID, type Pack, type PackRaw, diffAgainst } from './library';
+import { type Pack, type PackRaw, diffAgainst } from './library';
 import { diffText, totalOf } from './parts';
 import { StorageFullError } from './store';
 
@@ -214,11 +214,11 @@ function Result({
       <div className={css.resultActions}>
         {inUse(p.id) ? (
           <span className={`${css.tag} ${css.tagOn}`}>{k.inUse}</span>
-        ) : p.extends === null || p.extends === DEFAULT_PACK_ID ? (
+        ) : (
           <Button className={`${controls.button} ${css.resultButton}`} onPress={() => onUse(p)}>
             {p.extends === null ? k.useIt : k.stackIt}
           </Button>
-        ) : null}
+        )}
         <Button className={`${controls.ghost} ${css.resultButton}`} onPress={() => onView(p)}>
           {t.knowledge.list.view}
         </Button>

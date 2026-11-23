@@ -60,12 +60,16 @@ describe('按生效组合合并', () => {
     expect(activePack(kernel, { ...DEFAULT_USE, stack: ['b', 'a'] }, [a, b]).star('ziweiMaj')?.intro).toBe('甲说');
   });
 
-  it('没有覆盖包时就是默认包；整包只用那一个包', () => {
+  it('没有覆盖包时就是默认包；整包以所选的包为底，只叠加基于它的覆盖包', () => {
     expect(activePack(kernel, DEFAULT_USE, [])).toBe(builtinPack(kernel));
     const school = describePack({ schema: 1, id: 'school', version: '1', language: 'zh-CN', stars: { ziweiMaj: { intro: '本门' } } }, 3);
-    const p = activePack(kernel, { mode: 'whole', stack: ['a'], whole: 'school' }, [a, school]);
+    const p = activePack(kernel, { mode: 'whole', stack: ['a'], whole: 'school', wholeStack: [] }, [a, school]);
     expect(p.star('ziweiMaj')?.intro).toBe('本门');
     expect(p.star('tianjiMaj')).toBeUndefined();
+    const onSchool = describePack({ ...overlay('on-school', '门内又说'), extends: 'school' }, 4);
+    const layered = activePack(kernel, { mode: 'whole', stack: [], whole: 'school', wholeStack: ['on-school'] }, [a, school, onSchool]);
+    expect(layered.star('ziweiMaj')?.intro).toBe('门内又说');
+    expect(layered.star('tianjiMaj')).toBeUndefined();
   });
 
   it('默认包信息：六段条目数取自内核', () => {

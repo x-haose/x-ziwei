@@ -12,7 +12,8 @@ interface Schema extends DBSchema {
 }
 
 const DB_NAME = 'xzw-knowledge';
-const DB_VERSION = 1;
+/** 2：生效组合加了整包模式的叠加 `wholeStack`。 */
+const DB_VERSION = 2;
 
 /** 浏览器不让本页用 IndexedDB（隐私窗口、关了网站数据等）。默认包照常可用，导入关闭。 */
 export class StorageUnavailableError extends Error {
@@ -47,7 +48,9 @@ function isUse(v: unknown): v is Use {
     (u.mode === 'stack' || u.mode === 'whole') &&
     Array.isArray(u.stack) &&
     u.stack.every((x) => typeof x === 'string') &&
-    typeof u.whole === 'string'
+    typeof u.whole === 'string' &&
+    Array.isArray(u.wholeStack) &&
+    u.wholeStack.every((x) => typeof x === 'string')
   );
 }
 
@@ -98,9 +101,16 @@ export async function openLibrary(): Promise<Library> {
   let db: IDBPDatabase<Schema>;
   try {
     db = await openDB<Schema>(DB_NAME, DB_VERSION, {
-      upgrade(d) {
-        d.createObjectStore('packs', { keyPath: 'id' });
-        d.createObjectStore('state');
+      async upgrade(d, oldVersion, _newVersion, tx) {
+        if (oldVersion < 1) {
+          d.createObjectStore('packs', { keyPath: 'id' });
+          d.createObjectStore('state');
+        }
+        if (oldVersion < 2) {
+          const state = tx.objectStore('state');
+          const use = await state.get('use');
+          if (use !== undefined) await state.put({ ...use, wholeStack: [] }, 'use');
+        }
       },
     });
   } catch (err) {

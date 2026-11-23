@@ -139,7 +139,8 @@ export const sheetKind = style({ fontSize: size.label, color: color.fg3 });
 
 export const sheetName = style({ fontFamily: font.serif, fontWeight: 600, fontSize: 18, lineHeight: 1.35, overflowWrap: 'anywhere' });
 
-export const sheetId = style({ fontFamily: font.num, fontSize: size.aux, color: color.fg3, whiteSpace: 'nowrap' });
+/** 标识与版本不折行；卡片被压窄时以省略号截断。 */
+export const sheetId = style({ fontFamily: font.num, fontSize: size.aux, color: color.fg3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' });
 
 export const sheetVersion = style({ marginLeft: 10 });
 

@@ -7,6 +7,7 @@ import {
   type Pack,
   type PackRaw,
   type Use,
+  activeIds,
   describePack,
   libraryProblems,
 } from './library';
@@ -122,7 +123,7 @@ export function checkImport(kernel: Kernel, text: string, packs: readonly Pack[]
 }
 
 /**
- * 按生效组合合出释义用的包：叠加时以默认包为底依次合并覆盖包；整包时直接用那个包。
+ * 按生效组合合出释义用的包：以底包（默认包或所选整包）为底，按顺序合并叠加的覆盖包。
  * `packs` 是本机的包，组合须已通过 `checkUse`。
  */
 export function activePack(kernel: Kernel, use: Use, packs: readonly Pack[]): KnowledgePack {
@@ -131,7 +132,8 @@ export function activePack(kernel: Kernel, use: Use, packs: readonly Pack[]): Kn
     if (!p) throw new Error(`生效组合里的 ${id} 不在本机`);
     return p;
   };
-  if (use.mode === 'whole') return use.whole === DEFAULT_PACK_ID ? builtinPack(kernel) : kernel.KnowledgePack.fromObject(raw(use.whole));
-  const overlays = use.stack.map(raw);
-  return overlays.length ? builtinPack(kernel).merged(...overlays) : builtinPack(kernel);
+  const [base, ...layers] = activeIds(use);
+  if (base === undefined) throw new Error('生效组合没有底包');
+  const basePack = base === DEFAULT_PACK_ID ? builtinPack(kernel) : kernel.KnowledgePack.fromObject(raw(base));
+  return layers.length ? basePack.merged(...layers.map(raw)) : basePack;
 }

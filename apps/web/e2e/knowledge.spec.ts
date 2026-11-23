@@ -186,3 +186,26 @@ test('内核未装好：放置区与粘贴按钮写明在加载，默认包照�
   await page.getByRole('tab', { name: '粘贴 JSON' }).click();
   await expect(page.getByRole('button', { name: /^内核加载中 \d+%$/ })).toBeDisabled();
 });
+
+test('整包加它的覆盖包：以所选整包为底叠加，排盘页的释义与「更换」选项随之', async ({ page }) => {
+  await openPage(page);
+  await paste(page, { schema: 1, id: 'school', version: '2025-03-01', language: 'zh-CN', source: { name: '某门派' }, stars: { ziweiMaj: { intro: '本门说紫微。' } } });
+  await page.getByRole('button', { name: '改用这个包' }).click();
+  await paste(page, { ...overlay('school-notes', '门内笔记', '门内又说紫微。'), extends: 'school' });
+  await page.getByRole('button', { name: '叠加到当前生效' }).click();
+  const use = page.getByRole('region', { name: '当前生效' });
+  await expect(use.getByRole('radio', { name: /某门派/ })).toBeChecked();
+  await expect(use).toContainText('某门派 + 门内笔记');
+
+  const preview = page.getByRole('region', { name: '提示词预览' });
+  await page.goto(SAMPLE);
+  await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
+  await page.getByRole('radio', { name: '原文' }).click();
+  await expect(preview).toContainText('门内又说紫微。');
+  await expect(preview).toContainText('释义摘自知识包 school 2025-03-01 + school-notes 2026-11-20');
+  await page.getByRole('button', { name: /^释义：某门派 \+ 门内笔记/ }).click();
+  const options = page.getByRole('dialog', { name: '释义用哪套知识包' }).getByRole('option');
+  await expect(options).toHaveText([/^iztro-docs默认包$/, /^某门派整包$/, /^某门派 \+ 门内笔记叠加$/]);
+  await options.filter({ hasText: /^某门派整包$/ }).click();
+  await expect(preview).toContainText('本门说紫微。');
+});
