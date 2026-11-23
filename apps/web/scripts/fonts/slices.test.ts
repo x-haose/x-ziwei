@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cssOrder, parseSlicingStrategy, planSlices, sliceRange, unicodeRange } from './slices';
+import { parseSlicingStrategy, planSlices, unicodeRange } from './slices';
 
 describe('parseSlicingStrategy', () => {
   it('读出每个 subsets 块的码位', () => {
@@ -34,10 +34,16 @@ describe('planSlices', () => {
     expect(new Set(all)).toEqual(cmap);
   });
 
-  it('余字片写首尾区间，且最先声明', () => {
+  it('各片的 unicode-range 只覆盖字体有的码位，且互不重叠', () => {
     const slices = planSlices({ cmap, strategy: [[65]], critical: new Set([66]), restChunk: 3 });
-    expect(cssOrder(slices).map((s) => s.kind)).toEqual(['rest', 'rest', 'rest', 'strategy', 'critical']);
-    expect(sliceRange(slices.find((s) => s.name === 'r001')!)).toBe('U+4E01-9FA5');
+    const expand = (range: string) =>
+      range.split(',').flatMap((part) => {
+        const [a, b = a] = part.replace('U+', '').split('-').map((x) => Number.parseInt(x, 16)) as [number, number?];
+        return Array.from({ length: b! - a + 1 }, (_, k) => a + k);
+      });
+    const all = slices.flatMap((sl) => expand(unicodeRange(sl.codepoints)));
+    expect(new Set(all).size).toBe(all.length);
+    for (const cp of all) expect(cmap.has(cp)).toBe(true);
   });
 });
 

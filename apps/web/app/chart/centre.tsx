@@ -85,7 +85,14 @@ export function CentreState({ title, children }: { title: string; children?: Rea
 export function LoadingBar({ progress, loaded, total, t }: { progress: number; loaded: number; total: number; t: Messages }) {
   return (
     <>
-      <div className={css.bar} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)}>
+      <div
+        className={css.bar}
+        role="progressbar"
+        aria-label={t.chart.loading}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress * 100)}
+      >
         <i className={css.barFill} style={{ width: `${Math.round(progress * 100)}%` }} />
       </div>
       <small className={css.stateHint}>{fmt(t.chart.loadingBytes, { a: Math.round(loaded / 1024), b: Math.round(total / 1024) })}</small>

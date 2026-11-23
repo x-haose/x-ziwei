@@ -278,7 +278,7 @@ export const footLayer = style({
   boxShadow: `inset 0 0 0 ${stroke.hair} ${color.line3}`,
 });
 
-/* 宫内收起：量出重叠时逐级收起，收起的内容在读数区都列出。 */
+/* 宫内收起（见 board.tsx 的收起顺序）：第 1 级起收起运星，第 2 级起收起非当前层的层宫名，第 3 级起收起杂耀，第 4 级收起横排辅星。 */
 globalStyle(`${cell}[data-fold] ${starFlow}`, { display: 'none' });
 globalStyle(`${cell}[data-fold="2"] ${layerName}:not(${layerNameActive}), ${cell}[data-fold="3"] ${layerName}:not(${layerNameActive}), ${cell}[data-fold="4"] ${layerName}:not(${layerNameActive})`, { display: 'none' });
 globalStyle(`${cell}[data-fold="3"] ${adjectives}, ${cell}[data-fold="4"] ${adjectives}`, { display: 'none' });

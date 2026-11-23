@@ -2,7 +2,7 @@ import type { Astrolabe, KnowledgeOptions } from 'x-iztro';
 import type { Birth } from '../birth/birth';
 import { PERIODS } from '../birth/birth';
 import type { LunarCalendar } from '../birth/calendar';
-import { hourName, periodName } from '../birth/labels';
+import { candidatesText, hourName, periodName } from '../birth/labels';
 import type { LayerSelection } from '../chart/model';
 import { fmt, type Messages } from '../i18n/messages';
 
@@ -12,7 +12,7 @@ export interface PromptChoice {
   natal: boolean;
   /** 各段附上知识包的释义摘要。 */
   know: boolean;
-  /** 所选流年的运限（选在流月层时写到流月）。 */
+  /** 所选流年的运限与该年流月一览；选在流月层时改为所选流月的运限。 */
   year: boolean;
   /** 大限一览。 */
   decades: boolean;
@@ -49,7 +49,8 @@ export function chartSections({
       if (!start) throw new Error(`农历 ${sel.year} 年没有闰 ${sel.month.month} 月`);
       out.push(chart.horoscope(`${start.year}-${start.month}-${start.day}`).toText({ ...opts, through: 'monthly' }));
     } else {
-      out.push(chart.horoscopeOfYear(sel.year).toText(opts));
+      // 与 MCP 工具 ziwei_get_horoscope 问某一年时的返回一致：运限写到流年，文末附该年的流月一览。
+      out.push(`${chart.horoscopeOfYear(sel.year).toText(opts)}\n${chart.monthlyListToText(sel.year, opts)}`);
     }
   }
   if (choice.decades) out.push(chart.decadalListToText(opts));
@@ -62,13 +63,12 @@ export function chartSections({
 }
 
 /** 只知道大概时段时，提示词开头写明时辰未定、候选与这张盘用的时辰。 */
-export function approxNote(t: Messages, birth: Birth, hour: number): string | null {
+export function approxNote(t: Messages, birth: Birth): string | null {
   if (birth.time.kind !== 'period') return null;
-  const p = PERIODS[birth.time.period];
   return fmt(t.chart.approxPrompt, {
     period: periodName(t, birth.time.period),
-    range: p.range,
-    hours: p.hours.map((h) => hourName(t, h)).join(t.form.listSep),
-    hour: hourName(t, hour),
+    range: PERIODS[birth.time.period].range,
+    hours: candidatesText(t, birth.time.period),
+    hour: hourName(t, birth.time.pick),
   });
 }

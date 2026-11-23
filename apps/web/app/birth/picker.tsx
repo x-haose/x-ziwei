@@ -1,5 +1,5 @@
 import { assignInlineVars } from '@vanilla-extract/dynamic';
-import type { CSSProperties, KeyboardEvent, ReactNode, Ref } from 'react';
+import { type CSSProperties, type KeyboardEvent, type ReactNode, type Ref, useId } from 'react';
 import { Button, Dialog, DialogTrigger, ListBox, ListBoxItem, Modal, ModalOverlay, Popover } from 'react-aria-components';
 import * as controls from '../components/controls.css';
 import { CaretIcon, CloseIcon, PageIcon } from '../components/icons';
@@ -39,7 +39,7 @@ export function Picker({
   triggerClass,
   children,
 }: {
-  /** 触发钮的无障碍名称（「出生年份」）。 */
+  /** 字段名（「出生年份」）；触发钮的无障碍名称是字段名加当前值。 */
   label: string;
   /** 弹层标题，也是对话框的无障碍名称。 */
   title: string;
@@ -64,6 +64,8 @@ export function Picker({
 }) {
   const t = useMessages();
   const narrow = useMediaQuery(media.s);
+  const labelId = useId();
+  const valueId = useId();
   const onKeys = (e: KeyboardEvent) => {
     if (paging && (e.key === 'PageUp' || e.key === 'PageDown')) {
       e.preventDefault();
@@ -103,12 +105,17 @@ export function Picker({
     <DialogTrigger onOpenChange={onOpenChange}>
       <Button
         className={triggerClass ? `${css.trigger} ${triggerClass}` : css.trigger}
-        aria-label={label}
+        aria-labelledby={value === null ? labelId : `${labelId} ${valueId}`}
         isDisabled={isDisabled}
         aria-describedby={errorId}
         render={(props) => <button {...props} aria-haspopup="dialog" aria-invalid={errorId ? true : undefined} />}
       >
-        <span className={value === null ? css.placeholder : css.triggerValue}>{value ?? placeholder}</span>
+        <span id={labelId} className={controls.visuallyHidden}>
+          {label}
+        </span>
+        <span id={valueId} className={value === null ? css.placeholder : css.triggerValue}>
+          {value ?? placeholder}
+        </span>
         <span className={css.caret}>
           <CaretIcon />
         </span>

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { Blob as HbBlob, Face as HbFace } from 'harfbuzzjs';
 import subsetFont from 'subset-font';
 import { renameFont } from './sfnt.ts';
-import { type Slice, codepointsOf, cssOrder, parseSlicingStrategy, planSlices, sliceRange, unicodeRange } from './slices.ts';
+import { type Slice, codepointsOf, parseSlicingStrategy, planSlices, unicodeRange } from './slices.ts';
 import { FONT_SOURCES, type FontSource, REST_CHUNK, SC_SLICING } from './sources.ts';
 
 /**
@@ -21,7 +21,7 @@ interface StoredManifest extends FontManifest {
 }
 
 /** 处理逻辑的版本：改了切片、命名或 CSS 的生成方式时加一，让已有产物失效。 */
-const PIPELINE_VERSION = 2;
+const PIPELINE_VERSION = 3;
 
 /** 名字表里除默认的 0–6 之外还要保留的 nameID：商标、厂商、设计师、描述、网址、许可证、排版族名。 */
 const PRESERVE_NAME_IDS = [7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 21, 22, 25];
@@ -119,11 +119,11 @@ export async function buildFonts({ root, critical }: { root: string; critical: s
       if (src.preload) preload.push(`/fonts/${file}`);
     } else {
       const slices = planSlices({ cmap, strategy, critical: criticalSet, restChunk: REST_CHUNK });
-      for (const slice of cssOrder(slices)) {
+      for (const slice of slices) {
         const woff2 = await toWoff2(font, slice);
         const file = `${src.id}-${slice.name}-${sha256(woff2).slice(0, 10)}.woff2`;
         await writeFile(path.join(outDir, file), woff2);
-        css.push(fontFace(src, file, sliceRange(slice)));
+        css.push(fontFace(src, file, unicodeRange(slice.codepoints)));
         if (src.preload && slice.kind === 'critical') preload.push(`/fonts/${file}`);
       }
     }

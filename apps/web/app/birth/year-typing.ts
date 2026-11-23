@@ -14,8 +14,9 @@ const RESET_MS = 1500;
 /** 年代总览的页数：1900–1909 到 2100 共 21 个年代。 */
 export const DECADE_COUNT = Math.floor((YEAR_MAX - YEAR_MIN) / 10) + 1;
 
-/** 某年所在年代的页码（0 起）。 */
-export function decadeOf(year: number): number {
+/** 某年所在年代的页码（0 起）；年份不在可排范围内时为 null。 */
+export function decadeOf(year: number): number | null {
+  if (year < YEAR_MIN || year > YEAR_MAX) return null;
   return Math.floor((year - YEAR_MIN) / 10);
 }
 
@@ -37,11 +38,7 @@ export function typeYearDigit(
   if (!/^\d$/.test(digit)) throw new Error(`只接受一位数字：${digit}`);
   const restart = now - state.at > RESET_MS || state.typed.length >= 4;
   const typed = (restart ? '' : state.typed) + digit;
-  let page: number | null = null;
-  if (typed.length >= 3) {
-    const p = decadeOf(Number(typed.slice(0, 3)) * 10);
-    if (p >= 0 && p < DECADE_COUNT) page = p;
-  }
+  const page = typed.length >= 3 ? decadeOf(Number(typed.slice(0, 3)) * 10) : null;
   const year = Number(typed);
   const focus = typed.length === 4 && year >= YEAR_MIN && year <= YEAR_MAX ? year : null;
   return { state: { typed, at: now }, page, focus };

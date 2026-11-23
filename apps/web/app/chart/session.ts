@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Astrolabe } from 'x-iztro';
-import { type Birth, PERIODS } from '../birth/birth';
+import type { Birth } from '../birth/birth';
 import type { LunarCalendar } from '../birth/calendar';
 import type { Kernel } from '../kernel/kernel';
 import {
@@ -33,11 +33,9 @@ export function monthKeyOf(month: number, leap: boolean, day: number): MonthKey 
   return { month, part: leap ? (day <= 15 ? 'first' : 'second') : 'normal' };
 }
 
-/** 排盘用的时辰：确定时辰直接用；只知道大概时段时用所选候选（缺省取三个候选的中间一个）。 */
-export function chartHour(birth: Birth, candidate: number | null): number {
-  if (birth.time.kind === 'hour') return birth.time.index;
-  const hours = PERIODS[birth.time.period].hours;
-  return candidate !== null && (hours as readonly number[]).includes(candidate) ? candidate : hours[1];
+/** 排盘用的时辰：确定时辰直接用；只知道大概时段时用当前看的那一张候选。 */
+export function chartHour(birth: Birth): number {
+  return birth.time.kind === 'hour' ? birth.time.index : birth.time.pick;
 }
 
 /** 按生辰排盘。日期已经过校验，内核拒绝即是代码缺陷，照样抛出。 */

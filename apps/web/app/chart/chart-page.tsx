@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import type { Astrolabe } from 'x-iztro';
 import { type Birth, EMPTY_DRAFT, PERIODS, decodeBirth, draftOf, encodeBirth } from '../birth/birth';
@@ -51,13 +51,21 @@ function RecentList({ state, onOpen, t }: { state: RecentState | null; onOpen: (
       {state?.kind === 'ok' && state.items.length > 0 && (
         <ul>
           {state.items.map((item) => {
-            const s = birthSummary(t, item.birth);
+            const s = item.decoded.kind === 'ok' ? birthSummary(t, item.decoded.birth) : null;
+            const when = new Date(item.ts).toLocaleDateString(HTML_LANG[lang]);
             return (
               <li key={item.hash} className={css.recentRow}>
-                <button type="button" className={css.recentGo} onClick={() => onOpen(item.hash)}>
-                  <b className={css.recentBirth}>{`${s.date} ${s.time}`}</b>
-                  <small className={css.recentMeta}>{`${s.gender}　${new Date(item.ts).toLocaleDateString(HTML_LANG[lang])}`}</small>
-                </button>
+                {item.decoded.kind === 'invalid' ? (
+                  <span className={css.recentGo}>
+                    <b className={css.recentBirth}>{t.form.recentBroken}</b>
+                    <small className={css.recentMeta}>{when}</small>
+                  </span>
+                ) : (
+                  <button type="button" className={css.recentGo} onClick={() => onOpen(item.hash)}>
+                    <b className={css.recentBirth}>{s ? `${s.date} ${s.time}` : t.form.recentPending}</b>
+                    <small className={css.recentMeta}>{s ? `${s.gender}　${when}` : when}</small>
+                  </button>
+                )}
                 <button
                   type="button"
                   className={css.recentDelete}
@@ -85,6 +93,7 @@ function BirthSummary({
   open,
   onToggle,
   onCandidate,
+  buttonRef,
   t,
 }: {
   birth: Birth;
@@ -93,6 +102,7 @@ function BirthSummary({
   open: boolean;
   onToggle: () => void;
   onCandidate: (hour: number) => void;
+  buttonRef: RefObject<HTMLButtonElement | null>;
   t: Messages;
 }) {
   const s = birthSummary(t, birth);
@@ -104,7 +114,7 @@ function BirthSummary({
         : `${t.form.solar} ${chart.solarDate}`;
   return (
     <>
-      <button type="button" className={css.summary} aria-expanded={open} onClick={onToggle}>
+      <button ref={buttonRef} type="button" className={css.summary} aria-expanded={open} onClick={onToggle}>
         <span className={css.summaryWhen}>
           {`${s.date} ${birth.time.kind === 'hour' ? s.time : hourName(t, hour)}`}
           <small className={css.summaryNote}>{[birth.cal === 'solar' ? t.form.solar : t.form.lunar, s.gender, other].filter(Boolean).join('　')}</small>
@@ -141,7 +151,6 @@ function ChartBody({
   lunar,
   chart,
   birth,
-  hour,
   today,
   t,
   lang,
@@ -150,7 +159,6 @@ function ChartBody({
   lunar: LunarCalendar;
   chart: Astrolabe;
   birth: Birth;
-  hour: number;
   today: Today;
   t: Messages;
   lang: Lang;
@@ -186,10 +194,10 @@ function ChartBody({
     : null;
 
   const text = useMemo(() => {
-    const note = approxNote(t, birth, hour);
+    const note = approxNote(t, birth);
     const sections = chartSections({ chart, sel, choice, knowledge, lunar });
     return buildPrompt({ lang, method: READING_METHOD[lang], sections: note ? [note, ...sections] : sections, question });
-  }, [t, birth, hour, chart, sel, choice, knowledge, lunar, lang, question]);
+  }, [t, birth, chart, sel, choice, knowledge, lunar, lang, question]);
 
   const hitTitles = palaces.map((p) => fmt(t.layer.pickDecadal, { a: p.decadal[0], b: p.decadal[1], palace: p.name }));
   const cellLabels = palaces.map((p) =>
@@ -230,7 +238,7 @@ function ChartBody({
         emptyText=""
         choice={choice}
         onChoice={setChoice}
-        yearLabel={fmt(t.chart.checkYear, { y: sel.year })}
+        yearLabel={monthItem ? fmt(t.chart.checkMonth, { y: sel.year, month: monthLabel(t, monthItem) }) : fmt(t.chart.checkYear, { y: sel.year })}
         yearsLabel={fmt(t.chart.checkYears, { a: decadal.yearRange[0], b: decadal.yearRange[1] })}
         question={question}
         onQuestion={setQuestion}
@@ -257,8 +265,9 @@ export function ChartPage() {
   const recent = useRecent(lunar);
   const decoded = decodeBirth(hash, lunar);
   const birth = decoded.kind === 'ok' ? decoded.birth : null;
-  const [candidate, setCandidate] = useState<{ hash: string; hour: number } | null>(null);
-  const hour = birth ? chartHour(birth, candidate?.hash === hash ? candidate.hour : null) : null;
+  const hour = birth ? chartHour(birth) : null;
+  const summaryRef = useRef<HTMLButtonElement>(null);
+  const focusSummary = useRef(false);
   const [formOpen, setFormOpen] = useState(false);
   const reported = useRef('');
 
@@ -279,10 +288,19 @@ export function ChartPage() {
   // 生辰由 hash 唯一决定；按 hash 而不是每次新解析出的对象记忆，同一张盘在重渲染之间保持同一个对象。
   const chart = useMemo(() => (kernel && birth && hour !== null ? castChart(kernel, birth, hour) : null), [kernel, hash, hour]);
 
+  /** 打开一张盘：写进地址并记进最近排过。表单随之收起，焦点移到生辰摘要。 */
   const open = (b: Birth) => {
     if (recent && !pushRecent(b, recent, Date.now())) toast(t.form.recentUnsaved);
+    focusSummary.current = true;
     navigate({ hash: encodeBirth(b) }, { replace: true, preventScrollReset: true });
   };
+
+  useEffect(() => {
+    if (!focusSummary.current || !birth) return;
+    focusSummary.current = false;
+    if (!summaryRef.current) throw new Error('生辰摘要没有挂上');
+    summaryRef.current.focus();
+  }, [hash, birth]);
 
   const waiting = (birth !== null || decoded.kind === 'unsupported') && kstate.status !== 'ready';
   const progress = kstate.status === 'loading' ? kstate.loaded / kstate.total : 0;
@@ -324,7 +342,11 @@ export function ChartPage() {
             hour={hour}
             open={formOpen}
             onToggle={() => setFormOpen((o) => !o)}
-            onCandidate={(h) => setCandidate({ hash, hour: h })}
+            buttonRef={summaryRef}
+            onCandidate={(h) => {
+              if (birth.time.kind !== 'period') throw new Error('确定时辰的生辰没有候选');
+              navigate({ hash: encodeBirth({ ...birth, time: { ...birth.time, pick: h } }) }, { replace: true, preventScrollReset: true });
+            }}
             t={t}
           />
         )}
@@ -334,7 +356,7 @@ export function ChartPage() {
         {!birth && <RecentList state={recent} t={t} onOpen={(h) => navigate({ hash: h }, { replace: true, preventScrollReset: true })} />}
       </section>
       {chart && kernel && lunar && today && birth && hour !== null ? (
-        <ChartBody key={`${hash}|${hour}`} kernel={kernel} lunar={lunar} chart={chart} birth={birth} hour={hour} today={today} t={t} lang={lang} />
+        <ChartBody key={hash} kernel={kernel} lunar={lunar} chart={chart} birth={birth} today={today} t={t} lang={lang} />
       ) : (
         <>
           <Board

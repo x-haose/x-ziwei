@@ -3,7 +3,7 @@ import { Button } from 'react-aria-components';
 import { CaretIcon } from '../components/icons';
 import { fmt } from '../i18n/messages';
 import { useMessages } from '../i18n/use-lang';
-import { type BirthTime, PERIOD_KEYS, PERIODS, type Period } from './birth';
+import { type BirthTime, PERIOD_KEYS, PERIODS, type Period, periodTime } from './birth';
 import { type LunarCalendar, YEAR_MIN, solarDaysInMonth, solarFirstWeekday } from './calendar';
 import { hourName, hourRange, lunarDayName, lunarMonthName, lunarYearName, periodName } from './labels';
 import { type GridOption, OptionGrid, Picker } from './picker';
@@ -12,6 +12,13 @@ import { DECADE_COUNT, NO_TYPING, type YearTyping, decadeOf, typeYearDigit, year
 
 /** 年份弹层未选过年份时打开的年代。 */
 const DEFAULT_YEAR = 1990;
+
+/** 打开年份弹层时的年代页：所选年份所在的年代；没选或不在可排范围内时为缺省年代。 */
+function startPage(value: number | null): number {
+  const page = decadeOf(value ?? DEFAULT_YEAR) ?? decadeOf(DEFAULT_YEAR);
+  if (page === null) throw new Error('缺省年份不在可排范围内');
+  return page;
+}
 
 /**
  * 出生年份：每页一个年代的 10 年（5 列）；点页头切到年代总览（21 格，3 列），选了年代回到该年代。
@@ -31,7 +38,7 @@ export function YearPicker({
 }) {
   const t = useMessages();
   const [mode, setMode] = useState<'years' | 'decades'>('years');
-  const [page, setPage] = useState(decadeOf(value ?? DEFAULT_YEAR));
+  const [page, setPage] = useState(() => startPage(value));
   const [typing, setTyping] = useState<YearTyping>(NO_TYPING);
   const [focusYear, setFocusYear] = useState<number | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -93,7 +100,7 @@ export function YearPicker({
       onOpenChange={(open) => {
         if (!open) return;
         setMode('years');
-        setPage(decadeOf(value ?? DEFAULT_YEAR));
+        setPage(startPage(value));
         setTyping(NO_TYPING);
       }}
     >
@@ -269,7 +276,15 @@ export function DayPicker({
   if (isLunar) {
     if (!lunar) throw new Error('没有农历能力时不能打开农历日');
     const m = lunar.months(year).find((x) => x.month === month && x.leap === leap);
-    const days = m ? m.days : 30;
+    if (!m) {
+      // 所选的月在这一年不存在（如换了年份后没有的闰月）：月份字段已报错，先改月份才能选日。
+      return (
+        <Picker label={t.form.day} title={t.form.day} value={display} placeholder={t.form.dayPh} isDisabled width={300} errorId={errorId}>
+          {() => null}
+        </Picker>
+      );
+    }
+    const days = m.days;
     return (
       <Picker
         label={t.form.day}
@@ -412,7 +427,7 @@ export function HourPicker({
             options={periods}
             selected={value?.kind === 'period' ? value.period : null}
             onSelect={(period) => {
-              onChange({ kind: 'period', period });
+              onChange(periodTime(period));
               close();
             }}
           />

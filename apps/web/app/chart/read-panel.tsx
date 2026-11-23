@@ -1,4 +1,5 @@
 import type { Astrolabe } from 'x-iztro';
+import * as controls from '../components/controls.css';
 import { fmt, type Messages } from '../i18n/messages';
 import type { LayerView, PalaceView, StarView } from './model';
 import * as css from './read-panel.css';
@@ -18,8 +19,9 @@ function StarLine({ star, t }: { star: StarView; t: Messages }) {
 }
 
 /**
- * 读数区：选中宫的宫名、干支、当前层宫名、大限岁数；该宫全部星曜（含四化与各层运星）、杂耀；
+ * 读数区：选中宫的宫名、干支、各层宫名、大限岁数；该宫全部星曜（含四化与各层运星）、杂耀；
  * 三方四正（每行可点去切换）；落在该宫的格局。盘上因密度或重叠收起的内容在这里都能看到。
+ * 换宫时读屏只播报一句摘要（宫名、干支、各层宫名），不把整块重读一遍。
  */
 export function ReadPanel({
   chart,
@@ -37,15 +39,22 @@ export function ReadPanel({
   t: Messages;
 }) {
   const p = palaces[surround[0]]!;
-  const act = layers.at(-1);
+  const layerNames = layers.map((l) => `${t.layer[l.kind]}${l.names[p.index]}`);
   const flow = layers.flatMap((l) => l.stars[p.index] ?? []);
   const patterns = chart.patterns().filter((h) => h.palaceIndex === p.index);
   return (
-    <section className={css.section} aria-live="polite" aria-label={t.chart.read}>
+    <section className={css.section} aria-label={t.chart.read}>
+      <p className={controls.visuallyHidden} aria-live="polite">
+        {[p.name, `${p.stem}${p.branch}`, ...layerNames].join('，')}
+      </p>
       <div className={css.head}>
         <b className={css.name}>{p.name}</b>
         <span className={css.headNote}>{`${p.stem}${p.branch}`}</span>
-        {act && <span className={css.headNote}>{`${t.layer[act.kind]}${act.names[p.index]}`}</span>}
+        {layerNames.map((n) => (
+          <span key={n} className={css.headNote}>
+            {n}
+          </span>
+        ))}
         <span className={css.headAges}>{fmt(t.layer.ages, { a: p.decadal[0], b: p.decadal[1] })}</span>
       </div>
       <div className={css.stars}>

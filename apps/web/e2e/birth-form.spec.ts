@@ -23,7 +23,7 @@ test('年份：回车打开、焦点落在第一项、直接键入跳到该年�
   await expect(dialog.getByRole('option', { name: '1987' })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(dialog).toBeHidden();
-  await expect(trigger).toHaveText('1987');
+  await expect(trigger).toHaveAccessibleName('出生年份 1987');
   await expect(trigger).toBeFocused();
 });
 
@@ -58,7 +58,7 @@ test('日：年月没选时不可用；月历按星期排，方向键按网格�
   await page.keyboard.press('End');
   await expect(dialog.getByRole('option', { name: '31', exact: true })).toBeFocused();
   await page.keyboard.press(' ');
-  await expect(day).toHaveText('31');
+  await expect(day).toHaveAccessibleName('出生日 31');
 });
 
 test('提交空表单：各字段报错并把焦点移到第一个出错的字段', async ({ page }) => {
@@ -97,18 +97,20 @@ test('填好提交：生辰写进地址 # 之后并记进最近排过；带生�
   await expect(page.getByText('对应农历 二〇〇〇年七月十七')).toBeVisible();
   await page.getByRole('button', { name: '出生时辰' }).click();
   await page.getByRole('option', { name: /^夜里/ }).click();
-  await expect(page.getByText('时辰未定，排出 早子、丑、寅 三张候选盘')).toBeVisible();
+  await expect(page.getByText('时辰未定，按所填日期排 4 张候选盘：早子（00:00–00:59）、丑（01:00–02:59）、寅（03:00–04:59）、晚子（23:00–23:59）')).toBeVisible();
   await page.getByRole('radio', { name: '女' }).click();
   await page.getByRole('button', { name: '排盘', exact: true }).click();
-  await expect(page).toHaveURL('/zh/chart#cal=solar&d=2000-8-16&p=night&g=f');
-  await expect(page.getByRole('radiogroup', { name: '候选时辰' })).toBeVisible();
+  await expect(page).toHaveURL('/zh/chart#cal=solar&d=2000-8-16&p=night&h=1&g=f');
+  await expect(page.getByRole('radiogroup', { name: '候选时辰' }).getByRole('radio')).toHaveCount(4);
+  // 表单收起后焦点落在生辰摘要上，不丢到页面开头。
+  await expect(page.getByRole('button', { name: /2000-8-16 丑时/ })).toBeFocused();
 
   await page.goto('/zh/chart');
   await expect(page.getByRole('button', { name: /2000-8-16 夜里（时辰未定）/ })).toBeVisible();
 
   await page.goto('/zh/chart#cal=solar&d=1987-2-3&t=12&g=m');
   await page.getByRole('button', { name: /修改/ }).click();
-  await expect(page.getByRole('button', { name: '出生年份' })).toHaveText('1987');
+  await expect(page.getByRole('button', { name: '出生年份 1987' })).toBeVisible();
   await expect(page.getByRole('button', { name: '出生时辰' })).toContainText('晚子时');
   await expect(page.getByRole('radio', { name: '男' })).toBeChecked();
 });
@@ -151,4 +153,48 @@ test('手机上选择器是底部面板', async ({ page }) => {
   const box = await dialog.boundingBox();
   expect(box && Math.round(box.y + box.height)).toBeGreaterThanOrEqual(800);
   expect(box && Math.round(box.width)).toBe(375);
+});
+
+test('选择器的无障碍名称包含当前值', async ({ page }) => {
+  await page.getByRole('button', { name: '出生年份' }).click();
+  await page.keyboard.type('1987');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('button', { name: '出生年份 1987' })).toBeVisible();
+});
+
+test('可排范围按公历判断：农历日期换算到公历 2101 年时报错，不能提交', async ({ page }) => {
+  await page.getByRole('radio', { name: '农历' }).click();
+  await page.getByRole('button', { name: '出生年份' }).click();
+  await page.keyboard.type('2100');
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: '出生月份' }).click();
+  await page.getByRole('option', { name: /^腊月/ }).click();
+  await page.getByRole('button', { name: '出生日' }).click();
+  await page.getByRole('option', { name: '十五' }).click();
+  await page.getByRole('button', { name: '排盘', exact: true }).click();
+  await expect(page.getByText('超出可排范围：公历 1900–2100 年')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^出生年份/ })).toHaveAttribute('aria-invalid', 'true');
+  await expect(page).toHaveURL('/zh/chart');
+});
+
+test('内核没装好时，排一次盘不会删掉本机已有的农历记录', async ({ page }) => {
+  await page.route('**/*.wasm', (route) => route.abort());
+  const lunarHash = 'cal=lunar&d=2020-4-3&leap=1&t=2&g=f';
+  await page.evaluate((h) => localStorage.setItem('xzw-recent', JSON.stringify([{ hash: h, ts: 1 }])), lunarHash);
+  await page.reload();
+  await expect(page.getByText('农历记录，排盘内核装好后显示')).toBeVisible();
+  await page.getByRole('button', { name: '出生年份' }).click();
+  await page.keyboard.type('2000');
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: '出生月份' }).click();
+  await page.getByRole('option', { name: /^8 月/ }).click();
+  await page.getByRole('button', { name: '出生日' }).click();
+  await page.getByRole('option', { name: '16', exact: true }).click();
+  await page.getByRole('button', { name: '出生时辰' }).click();
+  await page.getByRole('option', { name: /^寅时/ }).click();
+  await page.getByRole('radio', { name: '女' }).click();
+  await page.getByRole('button', { name: '排盘', exact: true }).click();
+  await expect(page).toHaveURL(/#cal=solar/);
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('xzw-recent')!) as { hash: string }[]);
+  expect(stored.map((s) => s.hash)).toEqual(['cal=solar&d=2000-8-16&t=2&g=f', lunarHash]);
 });

@@ -16,7 +16,7 @@ import {
 } from './birth';
 import * as css from './birth-form.css';
 import type { LunarCalendar } from './calendar';
-import { errorText, lunarDateText, solarDateText } from './labels';
+import { candidatesText, errorText, lunarDateText, solarDateText } from './labels';
 import { DayPicker, HourPicker, MonthPicker, YearPicker } from './pickers';
 
 /** 年月日完整且合法时返回它们（时辰与性别不参与判断），否则 null。 */
@@ -183,7 +183,7 @@ export function BirthForm({
         <HourPicker value={time} errorId={errorId('time')} onChange={(next) => update({ time: next }, ['time'])} />
         {time?.kind === 'period' && (
           <p className={css.conv}>
-            {fmt(t.form.approxNote, { hours: PERIODS[time.period].hours.map((h) => t.hours[h]).join(t.form.listSep) })}
+            {fmt(t.form.approxNote, { n: PERIODS[time.period].hours.length, hours: candidatesText(t, time.period) })}
           </p>
         )}
         {err('time')}

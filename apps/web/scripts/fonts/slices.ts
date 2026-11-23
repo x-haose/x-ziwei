@@ -8,9 +8,8 @@
  * - 余下的码位：字体里有、而策略没覆盖的字（扩展区生僻字等）按码位顺序每 `restChunk` 个一片，
  *   保证字体能显示的字都由它显示，不落到系统字体。
  *
- * 余字片在 CSS 里只写首尾两个码位组成的区间，样式表短得多。区间会盖住其他片的字，
- * 靠声明顺序解决：unicode-range 重叠时浏览器先查后声明的规则，所以余字片要最先声明
- * （见 `cssOrder`），一个字有专属的片时总是取那一片。
+ * 每片的 unicode-range 只写它真有的码位（连续的合成区间），各片互不重叠，
+ * 页面上出现字体没有的字（emoji、韩文等）时不会白下载任何一片。
  */
 
 /** 一片：文件名里的标识、种类与它包含的码位（升序、无重复，均在字体的 cmap 里）。 */
@@ -97,18 +96,4 @@ export function unicodeRange(codepoints: readonly number[]): string {
   }
   flush();
   return parts.join(',');
-}
-
-/** 一片在 CSS 里声明的 unicode-range：余字片写首尾区间，其余逐个码位列出。 */
-export function sliceRange(slice: Slice): string {
-  if (slice.kind !== 'rest') return unicodeRange(slice.codepoints);
-  const first = slice.codepoints[0]!;
-  const last = slice.codepoints.at(-1)!;
-  return first === last ? unicodeRange([first]) : `${unicodeRange([first])}-${last.toString(16).toUpperCase()}`;
-}
-
-/** 同一字族的 @font-face 声明顺序：余字片最先，关键子集最后。 */
-export function cssOrder(slices: readonly Slice[]): Slice[] {
-  const rank = { rest: 0, strategy: 1, critical: 2 } as const;
-  return [...slices].sort((a, b) => rank[a.kind] - rank[b.kind]);
 }

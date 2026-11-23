@@ -159,7 +159,10 @@ function CellContent({ p, layers, density }: { p: PalaceView; layers: readonly L
   );
 }
 
-/** 宫内收起的顺序：当前层以外的运星 → 非当前层的层宫名 → 杂耀 → 横排辅星。 */
+/**
+ * 宫内收起的顺序：当前层的运星（盘上只放当前层的运星）→ 非当前层的层宫名 → 杂耀 → 横排辅星。
+ * 收起的内容读数区都列出：各层运星、各层宫名、杂耀与全部辅星。
+ */
 const FOLD_LEVELS = 4;
 
 /**

@@ -25,7 +25,20 @@ test('真实排盘：十二宫主星落宫与金标一致', async ({ page }) => 
   await expect(page.getByText(`农历 ${gold.lunarDate}`)).toBeVisible();
 });
 
-test('内核加载中显示进度，失败明确报错并可重试', async ({ page }) => {
+test('内核加载中显示进度：进度条随下载推进', async ({ page }) => {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Network.enable');
+  await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 20, downloadThroughput: 400 * 1024, uploadThroughput: -1 });
+  await page.goto(SAMPLE);
+  const bar = page.getByRole('progressbar', { name: '排盘内核加载中' });
+  await expect(bar).toBeVisible();
+  await expect.poll(async () => Number(await bar.getAttribute('aria-valuenow')), { timeout: 15000 }).toBeGreaterThan(0);
+  await expect(page.getByText(/^\d+ \/ \d+ KB$/)).toBeVisible();
+  await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+  await expect(page.getByRole('button', { name: /^命宫，壬午，主星紫微$/ })).toBeVisible({ timeout: 20000 });
+});
+
+test('内核加载失败明确报错并可重试', async ({ page }) => {
   let fail = true;
   await page.route('**/*.wasm', async (route) => {
     if (fail) await route.abort();
@@ -107,14 +120,34 @@ test('提示词：内核文本、方法正文与问题，复制原文与链接',
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${new URL(page.url()).origin}${SAMPLE}`);
 });
 
-test('只知道大概时间：候选时辰切换，提示词写明时辰未定', async ({ page }) => {
-  await page.goto('/zh/chart#cal=solar&d=2000-8-16&p=night&g=f');
+test('只知道大概时间：夜里有四个候选，所选候选写进地址，提示词写明时辰未定', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/zh/chart#cal=solar&d=2000-8-16&p=night&h=1&g=f');
   const cands = page.getByRole('radiogroup', { name: '候选时辰' });
+  await expect(cands.getByRole('radio')).toHaveText(['早子', '丑', '寅', '晚子']);
   await expect(cands.getByRole('radio', { name: '丑' })).toBeChecked();
   await cands.getByRole('radio', { name: '寅' }).click();
+  await expect(page).toHaveURL('/zh/chart#cal=solar&d=2000-8-16&p=night&h=2&g=f');
   await expect(page.getByRole('button', { name: /^命宫，壬午，主星紫微$/ })).toBeVisible();
   await page.getByRole('radio', { name: '原文' }).click();
-  await expect(page.getByRole('region', { name: '提示词预览' })).toContainText('时辰未定：出生在夜里（23:00–04:59），候选 早子时、丑时、寅时；这张盘按寅时排。');
+  await expect(page.getByRole('region', { name: '提示词预览' })).toContainText(
+    '时辰未定：出生在所填日期的夜里（00:00–04:59、23:00–23:59），候选 早子（00:00–00:59）、丑（01:00–02:59）、寅（03:00–04:59）、晚子（23:00–23:59）；这张盘按寅时排。',
+  );
+  await page.getByRole('button', { name: '复制链接' }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/#cal=solar&d=2000-8-16&p=night&h=2&g=f$/);
+});
+
+test('提示词：选在流月层时勾选项写到流月；按年时附流月一览', async ({ page }) => {
+  await page.goto(SAMPLE);
+  await page.getByRole('radio', { name: '原文' }).click();
+  const preview = page.getByRole('region', { name: '提示词预览' });
+  await expect(page.getByRole('checkbox', { name: /^\d{4} 年运限$/ })).toBeChecked();
+  await expect(preview).toContainText('# 流月一览');
+  await page.getByRole('radio', { name: '流月' }).click();
+  await page.getByRole('button', { name: '三月', exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: /^\d{4} 年三月运限$/ })).toBeChecked();
+  await expect(preview).toContainText('## 流月');
+  await expect(preview).not.toContainText('# 流月一览');
 });
 
 test('首页示例盘由内核排出，引线连到命宫的紫微', async ({ page }) => {

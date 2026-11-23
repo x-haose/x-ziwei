@@ -10,7 +10,7 @@ function watchConsole(page: Page): string[] {
   return problems;
 }
 
-const PAGES = ['/zh', '/en', '/zh/chart', '/en/chart', '/zh/chart#cal=solar&d=2000-8-16&t=2&g=f', '/en/chart#cal=lunar&d=2020-4-3&leap=1&p=evening&g=m', '/zh/method', '/en/method', '/zh/install', '/en/install', '/zh/tools', '/en/api', '/zh/privacy'];
+const PAGES = ['/zh', '/en', '/zh/chart', '/en/chart', '/zh/chart#cal=solar&d=2000-8-16&t=2&g=f', '/en/chart#cal=lunar&d=2020-4-3&leap=1&p=evening&h=10&g=m', '/zh/method', '/en/method', '/zh/install', '/en/install', '/zh/tools', '/en/api', '/zh/privacy'];
 
 for (const width of [375, 1440]) {
   for (const scheme of ['light', 'dark'] as const) {
@@ -78,10 +78,14 @@ for (const [locale, lang] of [
   });
 }
 
-test('不存在的地址显示 404', async ({ page }) => {
-  const res = await page.goto('/zh/nope');
+test('不存在的地址显示 404：语言取地址，没有语言对照链接，水合无报错', async ({ page }) => {
+  const problems = watchConsole(page);
+  const res = await page.goto('/en/nope');
   expect(res?.status()).toBe(404);
-  await expect(page.getByRole('heading', { name: '没有这个页面' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(page.locator('link[rel="alternate"]')).toHaveCount(0);
+  expect(problems.filter((p) => !p.includes('404'))).toEqual([]);
 });
 
 test('方法页：目录点击滚到标题并把焦点移过去，不改地址', async ({ page }) => {

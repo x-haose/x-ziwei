@@ -1,5 +1,6 @@
 import { type Messages, fmt } from '../i18n/messages';
-import { type Birth, type BirthError, HOUR_RANGES, type Period } from './birth';
+import { type Birth, type BirthError, HOUR_RANGES, PERIODS, type Period } from './birth';
+import { YEAR_MAX, YEAR_MIN } from './calendar';
 
 /** 时辰名（「寅时」）。 */
 export function hourName(t: Messages, index: number): string {
@@ -81,5 +82,14 @@ export function errorText(t: Messages, err: BirthError, field: 'year' | 'month' 
       return fmt(t.form.errLunarLeap, { y: lunarYearName(t, err.year), month: lunarMonthName(t, err.month, false) });
     case 'lunarUnavailable':
       return t.form.lunarUnavailable;
+    case 'outOfRange':
+      return fmt(t.form.errOutOfRange, { a: YEAR_MIN, b: YEAR_MAX });
+    case 'invalid':
+      return t.form.errInvalid;
   }
+}
+
+/** 某个大概时段的全部候选时辰，各带钟点（「早子（00:00–00:59）、丑（01:00–02:59）……」）。 */
+export function candidatesText(t: Messages, period: Period): string {
+  return PERIODS[period].hours.map((h) => fmt(t.form.candidate, { name: t.hours[h]!, range: hourRange(h) })).join(t.form.listSep);
 }
