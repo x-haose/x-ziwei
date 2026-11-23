@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
+import { useToast } from '../components/toast';
 import type { KnowledgePack } from 'x-iztro';
 import type { Lang } from '../i18n/lang';
 import { fmt, type Messages } from '../i18n/messages';
@@ -7,7 +8,7 @@ import { activePack, builtinPack, defaultPackInfo } from './kernel-pack';
 import { DEFAULT_USE, type Use } from './library';
 import { KnowledgeMark } from './mark';
 import * as css from './mark.css';
-import { activePacks, provenance, useLabel } from './parts';
+import { activePacks, provenance } from './parts';
 import type { LibraryState } from './use-library';
 
 /** 排盘页释义用的包与提示词里的出处（「iztro-docs 2026-08-19 + my-notes 2026-11-20」）。 */
@@ -29,7 +30,7 @@ export function useActiveKnowledge(kernel: Kernel | null, lib: LibraryState): Ac
   }, [kernel, lib]);
 }
 
-/** 提示词区的释义标记，本机包库读取失败时下方写明原因。`onPick` 收到新组合与它的组合名。 */
+/** 提示词区的释义标记，本机包库读取失败时下方写明原因。`onPick` 收到算新组合的函数与新组合名。 */
 export function ChartKnowledgeMark({
   t,
   lang,
@@ -41,7 +42,7 @@ export function ChartKnowledgeMark({
   lang: Lang;
   kernel: Kernel;
   lib: LibraryState;
-  onPick: (next: Use, label: string) => void;
+  onPick: (next: (use: Use) => Use, label: string) => void;
 }) {
   const def = defaultPackInfo(kernel);
   const use = lib.status === 'ready' ? lib.use : DEFAULT_USE;
@@ -54,7 +55,7 @@ export function ChartKnowledgeMark({
         use={use}
         packs={packs}
         defaultPack={def}
-        onPick={(next) => onPick(next, useLabel(activePacks(next, packs, def)))}
+        onPick={onPick}
       />
       {lib.status === 'failed' && (
         <p className={css.failed} role="alert">
@@ -63,4 +64,12 @@ export function ChartKnowledgeMark({
       )}
     </div>
   );
+}
+
+/** 读库时从组合里移出了不在本机的包（见 `Library.load`）：提示一句移出了哪些。 */
+export function useRepairNotice(lib: LibraryState, t: Messages): void {
+  const toast = useToast();
+  useEffect(() => {
+    if (lib.status === 'ready' && lib.repaired.length) toast(fmt(t.knowledge.use.repaired, { names: lib.repaired.join(t.knowledge.diff.sep) }));
+  }, [lib, t, toast]);
 }

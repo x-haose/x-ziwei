@@ -209,3 +209,86 @@ test('整包加它的覆盖包：以所选整包为底叠加，排盘页的释�
   await options.filter({ hasText: /^某门派整包$/ }).click();
   await expect(preview).toContainText('本门说紫微。');
 });
+
+test('两个标签页同时操作：改动按库里此刻的数据校验，另一页随之更新，库不会写坏', async ({ context, page }) => {
+  await openPage(page);
+  await paste(page, overlay('p1', '甲', '甲说紫微。'));
+  await expect(page.getByText('已导入「甲」')).toBeVisible();
+  await paste(page, overlay('p2', '乙', '乙说紫微。'));
+  await expect(page.getByText('已导入「乙」')).toBeVisible();
+  await page.getByRole('button', { name: '把 甲 叠加到最后' }).click();
+  await expect(page.getByRole('region', { name: '当前生效' })).toContainText('iztro-docs + 甲');
+
+  const other = await context.newPage();
+  await openPage(other);
+  await expect(other.getByRole('region', { name: '当前生效' })).toContainText('iztro-docs + 甲');
+  await row(page, 'p1').getByRole('button', { name: '删除' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '删除' }).click();
+  await expect(row(other, 'p1')).toHaveCount(0);
+  await other.getByRole('button', { name: '把 乙 叠加到最后' }).click();
+  for (const p of [page, other]) await expect(p.getByRole('region', { name: '当前生效' })).toContainText('iztro-docs + 乙');
+  await page.reload();
+  await expect(page.getByRole('region', { name: '当前生效' })).toContainText('iztro-docs + 乙');
+  await expect(page.getByText('读不出本机的知识包')).toHaveCount(0);
+});
+
+test('库里的组合引用了不在本机的包：读库时移出并提示，页面照常可用', async ({ page }) => {
+  await openPage(page);
+  await paste(page, overlay('p2', '乙', '乙说紫微。'));
+  await expect(page.getByText('已导入「乙」')).toBeVisible();
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open('xzw-knowledge');
+        req.onsuccess = () => {
+          const tx = req.result.transaction('state', 'readwrite');
+          tx.objectStore('state').put({ mode: 'stack', stack: ['gone', 'p2'], whole: 'iztro-docs', wholeStack: [] }, 'use');
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+  );
+  await page.reload();
+  await expect(page.getByRole('status').filter({ hasText: '生效组合里的 gone 已不在本机' })).toBeVisible();
+  await expect(page.getByRole('region', { name: '当前生效' })).toContainText('iztro-docs + 乙');
+});
+
+test('整包加覆盖包：换底包时原来的叠加移出并提示；删除整包时确认框写明覆盖包留在本机', async ({ page }) => {
+  await openPage(page);
+  const school = (id: string, name: string) => ({ schema: 1, id, version: '1', language: 'zh-CN', source: { name }, stars: { ziweiMaj: { intro: `${name}说。` } } });
+  await paste(page, school('school', '某门派'));
+  await page.getByRole('button', { name: '改用这个包' }).click();
+  await paste(page, { ...overlay('school-notes', '门内笔记', '门内又说。'), extends: 'school' });
+  await page.getByRole('button', { name: '叠加到当前生效' }).click();
+  await paste(page, school('other', '别派'));
+  await expect(page.getByText('已导入「别派」')).toBeVisible();
+  const use = page.getByRole('region', { name: '当前生效' });
+  await use.locator('label').filter({ hasText: '别派' }).click();
+  await expect(page.getByRole('status').filter({ hasText: '换了底包，原来叠加在 某门派 上的 门内笔记 已移出叠加。' })).toBeVisible();
+  await expect(use).toContainText('别派');
+  await use.locator('label').filter({ hasText: '某门派' }).click();
+  await page.getByRole('button', { name: '把 门内笔记 叠加到最后' }).click();
+  await expect(use).toContainText('某门派 + 门内笔记');
+
+  await row(page, 'school').getByRole('button', { name: '删除' }).click();
+  const dialog = page.getByRole('alertdialog', { name: '删除「某门派」？' });
+  await expect(dialog).toContainText('它正在生效，删除后改用默认包 iztro-docs。');
+  await expect(dialog).toContainText('基于它的覆盖包 门内笔记 会留在本机，重新导入它之后才能再叠加。');
+  await dialog.getByRole('button', { name: '删除' }).click();
+  await expect(use.getByRole('radio', { name: /iztro-docs/ })).toBeChecked();
+  await expect(row(page, 'school-notes')).toHaveCount(1);
+  await page.getByRole('radio', { name: '在默认包上叠加' }).click();
+  await expect(page.getByText('门内笔记 所基于的包不在本机')).toBeVisible();
+});
+
+test('id 里带逗号的包也能在排盘页「更换」里选用', async ({ page }) => {
+  await openPage(page);
+  await paste(page, overlay('a,b', '逗号', '逗号说紫微。'));
+  await expect(page.getByText('已导入「逗号」')).toBeVisible();
+  await page.goto(SAMPLE);
+  await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
+  await page.getByRole('radio', { name: '原文' }).click();
+  await page.getByRole('button', { name: /^释义：iztro-docs/ }).click();
+  await page.getByRole('dialog', { name: '释义用哪套知识包' }).getByRole('option', { name: 'iztro-docs + 逗号，叠加' }).click();
+  await expect(page.getByRole('region', { name: '提示词预览' })).toContainText('逗号说紫微。');
+});

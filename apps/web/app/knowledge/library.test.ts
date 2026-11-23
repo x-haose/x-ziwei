@@ -10,6 +10,7 @@ import {
   libraryProblems,
   moveInStack,
   pickWhole,
+  repairUse,
   usePack,
   withoutPack,
 } from './library';
@@ -50,11 +51,12 @@ describe('生效组合', () => {
 
   it('前移后移交换当前模式叠加里相邻两项，越界报错', () => {
     const use = { ...DEFAULT_USE, stack: ['notes', 'more'] };
-    expect(moveInStack(use, 1, -1).stack).toEqual(['more', 'notes']);
-    expect(() => moveInStack(use, 0, -1)).toThrow();
+    expect(moveInStack(use, 'more', -1).stack).toEqual(['more', 'notes']);
+    expect(() => moveInStack(use, 'notes', -1)).toThrow();
+    expect(() => moveInStack(use, 'school', 1)).toThrow();
     const whole = { ...DEFAULT_USE, mode: 'whole' as const, whole: 'school', wholeStack: ['on-school'] };
     expect(addToStack(whole, 'on-school')).toBe(whole);
-    expect(() => moveInStack(whole, 0, 1)).toThrow();
+    expect(() => moveInStack(whole, 'on-school', 1)).toThrow();
   });
 
   it('删包后从两处叠加里去掉；它是所选整包时改回默认包并清空整包的叠加；另一模式的选择保留', () => {
@@ -84,5 +86,18 @@ describe('覆盖包相对底包的改动', () => {
     expect(d.changed.stars).toBe(1);
     expect(d.added.stars).toBe(1);
     expect(d.changed.topics + d.added.topics).toBe(0);
+  });
+});
+
+describe('修复对不上的组合', () => {
+  it('整包不在本机时改回默认包并移出它的叠加；叠加里去掉不在本机、底包不对与重复的', () => {
+    const r = repairUse({ mode: 'whole', stack: ['notes', 'gone', 'notes', 'school'], whole: 'nowhere', wholeStack: ['on-school'] }, packs);
+    expect(r.use).toEqual({ mode: 'whole', stack: ['notes'], whole: DEFAULT_PACK_ID, wholeStack: [] });
+    expect(r.dropped.sort()).toEqual(['gone', 'notes', 'nowhere', 'on-school', 'school'].sort());
+  });
+
+  it('组合对得上时原样返回', () => {
+    const use = { mode: 'whole' as const, stack: ['notes'], whole: 'school', wholeStack: ['on-school'] };
+    expect(repairUse(use, packs)).toEqual({ use, dropped: [] });
   });
 });

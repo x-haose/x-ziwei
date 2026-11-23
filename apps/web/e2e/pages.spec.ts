@@ -15,6 +15,8 @@ const PAGES = ['/zh', '/en', '/zh/chart', '/en/chart', '/zh/chart#cal=solar&d=20
 for (const width of [375, 1440]) {
   for (const scheme of ['light', 'dark'] as const) {
     test(`${width}px ${scheme}：无横向溢出，控制台无报错`, async ({ page }) => {
+      // 一个用例走遍十几个页面（含两次排盘与内核装载），给三倍的时限。
+      test.slow();
       await page.setViewportSize({ width, height: 900 });
       await page.emulateMedia({ colorScheme: scheme });
       const problems = watchConsole(page);

@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as kernel from 'x-iztro';
+import { type ImportState, runImport } from './import';
 import { jsonErrorPosition } from './json-position';
 import { activePack, builtinPack, checkImport, defaultPackInfo } from './kernel-pack';
 import { DEFAULT_PACK_ID, DEFAULT_USE, describePack } from './library';
@@ -77,5 +78,28 @@ describe('按生效组合合并', () => {
     expect(d.id).toBe(DEFAULT_PACK_ID);
     expect(d.counts).toEqual({ stars: 162, patterns: 64, palaces: 12, mutagens: 4, concepts: 50, topics: 13 });
     expect(d.raw).toBeNull();
+  });
+});
+
+describe('深层嵌套', () => {
+  it('语法错误定位不递归，极深的嵌套也给出行列', () => {
+    expect(jsonErrorPosition('['.repeat(200000))).toEqual({ line: 1, column: 200001 });
+    expect(jsonErrorPosition(`${'['.repeat(5000)}1${']'.repeat(5000)}`)).toBeNull();
+    expect(jsonErrorPosition('{"a": {"b": [1, {"c": }]}}')).toEqual({ line: 1, column: 23 });
+  });
+
+  it('嵌套极深使校验本身跑不完时，导入以一条「没能完成校验」结束，不停在校验中', async () => {
+    const states: ImportState[] = [];
+    for (const text of ['['.repeat(200000), `{"schema":1,"id":"deep","extends":"iztro-docs","stars":{"ziweiMaj":{"intro":"x","attributes":${'['.repeat(5000)}${']'.repeat(5000)}}}}`]) {
+      await runImport({ file: 'deep.json', read: async () => text, kernel, packs: [], save: async () => { throw new Error('不该走到存入'); }, onState: (s) => states.push(s) });
+      const last = states.at(-1);
+      expect(last?.phase, text.slice(0, 20)).toBe('error');
+    }
+  });
+
+  it('粘贴的文本超过 2 MB 按字节拒绝', async () => {
+    const states: ImportState[] = [];
+    await runImport({ file: 'p', read: async () => '中'.repeat(700_000), kernel, packs: [], save: async () => { throw new Error('不该走到存入'); }, onState: (s) => states.push(s) });
+    expect(states.at(-1)).toMatchObject({ phase: 'error', errors: [{ code: 'tooLarge' }] });
   });
 });

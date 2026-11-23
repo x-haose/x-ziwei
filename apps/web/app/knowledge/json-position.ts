@@ -57,67 +57,67 @@ export function jsonErrorPosition(text: string): { line: number; column: number 
       while (/[0-9]/.test(text[i] ?? '')) i++;
     }
   };
-  const value = (): void => {
+  /** 对象里的「"键":」，停在冒号之后。 */
+  const key = () => {
     ws();
-    const c = text[i];
-    if (c === '{') {
-      i++;
+    if (text[i] !== '"') fail();
+    str();
+    ws();
+    if (text[i] !== ':') fail();
+    i++;
+  };
+  /**
+   * 整个文本：用显式的栈记住所在的对象或数组，不递归，任意深的嵌套也不会爆栈。
+   * `want` 为 value 时下一个应是值，为 next 时刚读完一个值、应是逗号或闭合括号。
+   */
+  const document = () => {
+    const stack: ('{' | '[')[] = [];
+    let want: 'value' | 'next' = 'value';
+    for (;;) {
       ws();
-      if (text[i] === '}') {
-        i++;
-        return;
-      }
-      for (;;) {
-        ws();
-        if (text[i] !== '"') fail();
-        str();
-        ws();
-        if (text[i] !== ':') fail();
-        i++;
-        value();
-        ws();
-        if (text[i] === ',') {
+      if (want === 'value') {
+        const c = text[i];
+        if (c === '{' || c === '[') {
           i++;
+          ws();
+          if (text[i] === (c === '{' ? '}' : ']')) {
+            i++;
+            want = 'next';
+            continue;
+          }
+          stack.push(c);
+          if (c === '{') key();
           continue;
         }
-        if (text[i] === '}') {
-          i++;
-          return;
-        }
-        fail();
+        if (c === '"') str();
+        else if (c === 't') lit('true');
+        else if (c === 'f') lit('false');
+        else if (c === 'n') lit('null');
+        else num();
+        want = 'next';
+        continue;
       }
-    }
-    if (c === '[') {
-      i++;
-      ws();
-      if (text[i] === ']') {
-        i++;
+      const top = stack.at(-1);
+      if (top === undefined) {
+        if (i < text.length) fail();
         return;
       }
-      for (;;) {
-        value();
-        ws();
-        if (text[i] === ',') {
-          i++;
-          continue;
-        }
-        if (text[i] === ']') {
-          i++;
-          return;
-        }
-        fail();
+      if (text[i] === ',') {
+        i++;
+        if (top === '{') key();
+        want = 'value';
+        continue;
       }
+      if (text[i] === (top === '{' ? '}' : ']')) {
+        i++;
+        stack.pop();
+        continue;
+      }
+      fail();
     }
-    if (c === '"') return str();
-    if (c === 't') return lit('true');
-    if (c === 'f') return lit('false');
-    if (c === 'n') return lit('null');
-    return num();
   };
   try {
-    value();
-    ws();
-    if (i < text.length) fail();
+    document();
     return null;
   } catch (at) {
     if (typeof at !== 'number') throw at;

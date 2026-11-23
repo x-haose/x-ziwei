@@ -66,7 +66,9 @@ jobs:
       # 端到端测试按测试站的形态断言（禁止收录、测试站域名）。
       - run: pnpm build:beta
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm e2e
+      - run: pnpm e2e --project=chromium
+      # 依赖外网（Cloudflare 线上统计脚本）的用例单独一步，失败时一眼能看出是哪一类。
+      - run: pnpm e2e --project=external
 
   # 推到 main 即发布：插件市场直接读 main，服务由 Dokploy 从 main 部署。
   # 版本号取 plugin/.codex-plugin/plugin.json（三处一致由 tests/plugin_manifest.rs 保证）。

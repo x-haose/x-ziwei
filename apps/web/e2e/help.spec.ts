@@ -13,6 +13,8 @@ const PAGES = slugs.flatMap((slug) => [
 ]);
 
 test('每个帮助页能打开，站内链接都有页面、锚点都有标题，没有指向旧说明站的链接', async ({ page, request }) => {
+  // 一个用例打开全部帮助页并逐个检查站内链接，给三倍的时限。
+  test.slow();
   const checked = new Set<string>();
   for (const p of [...PAGES, { url: '/zh/method', title: '解读方法' }, { url: '/en/method', title: 'Reading method' }]) {
     await page.goto(p.url);

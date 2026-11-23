@@ -4,27 +4,15 @@ import * as pickerCss from '../birth/picker.css';
 import { PageIcon } from '../components/icons';
 import { type Lang, localePath } from '../i18n/lang';
 import { fmt, type Messages } from '../i18n/messages';
-import { DEFAULT_PACK_ID, type Pack, type Use, overlaysOf, wholes } from './library';
+import { type Pack, type Use, overlaysOf, sameActive, wholes } from './library';
 import * as css from './mark.css';
 import { activePacks, useLabel } from './parts';
 
-/** 选择器里的一项：一种组合。`key` 写成 `def`、`stack:a,b`、`whole:W`、`whole:W:a,b`。 */
-function keyOf(use: Use): string {
-  if (use.mode === 'whole') {
-    if (use.whole === DEFAULT_PACK_ID) return 'def';
-    return use.wholeStack.length ? `whole:${use.whole}:${use.wholeStack.join(',')}` : `whole:${use.whole}`;
-  }
-  return use.stack.length ? `stack:${use.stack.join(',')}` : 'def';
-}
-
-function useOf(key: string, use: Use): Use {
-  if (key === 'def') return { ...use, mode: 'stack', stack: [] };
-  if (key.startsWith('stack:')) return { ...use, mode: 'stack', stack: key.slice(6).split(',') };
-  if (key.startsWith('whole:')) {
-    const [whole = '', layers] = key.slice(6).split(':');
-    return { ...use, mode: 'whole', whole, wholeStack: layers ? layers.split(',') : [] };
-  }
-  throw new Error(`不认识的组合：${key}`);
+/** 选择器里的一项：一种组合。`part` 是这个组合在它那种模式下的选择，套在库里此刻的组合上（另一种模式的选择不动）。 */
+interface Option {
+  label: string;
+  kind: string;
+  part: Partial<Use>;
 }
 
 /**
@@ -46,27 +34,32 @@ export function KnowledgeMark({
   use: Use;
   packs: readonly Pack[];
   defaultPack: Pack;
-  onPick: (next: Use) => void;
+  /** 选了另一种组合：由库里此刻的组合算出新组合的函数，以及新组合名。 */
+  onPick: (next: (use: Use) => Use, label: string) => void;
 }) {
   const label = useLabel(activePacks(use, packs, defaultPack));
-  const options: { key: string; label: string; kind: string }[] = [{ key: 'def', label: defaultPack.name, kind: t.chart.knowDefault }];
+  const options: Option[] = [{ label: defaultPack.name, kind: t.chart.knowDefault, part: { mode: 'stack', stack: [] } }];
   /** 一个底包上的各种叠加：每个覆盖包各一项，多于一个时再加全部叠上的一项。 */
-  const layered = (base: Pack, prefix: string) => {
+  const layered = (base: Pack, part: (ids: string[]) => Partial<Use>) => {
     const overlays = overlaysOf(packs, base.id);
-    for (const p of overlays) options.push({ key: `${prefix}${p.id}`, label: `${base.name} + ${p.name}`, kind: t.chart.knowStack });
+    for (const p of overlays) options.push({ label: `${base.name} + ${p.name}`, kind: t.chart.knowStack, part: part([p.id]) });
     if (overlays.length > 1) {
-      options.push({ key: `${prefix}${overlays.map((p) => p.id).join(',')}`, label: [base, ...overlays].map((p) => p.name).join(' + '), kind: t.chart.knowStack });
+      options.push({ label: [base, ...overlays].map((p) => p.name).join(' + '), kind: t.chart.knowStack, part: part(overlays.map((p) => p.id)) });
     }
   };
-  layered(defaultPack, 'stack:');
+  layered(defaultPack, (ids) => ({ mode: 'stack', stack: ids }));
   for (const w of wholes(packs)) {
-    options.push({ key: `whole:${w.id}`, label: w.name, kind: t.chart.knowWhole });
-    layered(w, `whole:${w.id}:`);
+    options.push({ label: w.name, kind: t.chart.knowWhole, part: { mode: 'whole', whole: w.id, wholeStack: [] } });
+    layered(w, (ids) => ({ mode: 'whole', whole: w.id, wholeStack: ids }));
   }
-  const current = keyOf(use);
-  if (!options.some((o) => o.key === current)) options.splice(1, 0, { key: current, label, kind: t.chart.knowStack });
-  const grid: GridOption<string>[] = options.map((o) => ({
-    key: o.key,
+  let current = options.findIndex((o) => sameActive({ ...use, ...o.part }, use));
+  if (current < 0) {
+    const part: Partial<Use> = use.mode === 'stack' ? { mode: 'stack', stack: use.stack } : { mode: 'whole', whole: use.whole, wholeStack: use.wholeStack };
+    options.splice(1, 0, { label, kind: t.chart.knowStack, part });
+    current = 1;
+  }
+  const grid: GridOption<number>[] = options.map((o, i) => ({
+    key: i,
     text: o.label,
     label: fmt(t.chart.knowOption, { label: o.label, kind: o.kind }),
     content: (
@@ -99,9 +92,11 @@ export function KnowledgeMark({
               autoFocus
               options={grid}
               selected={current}
-              onSelect={(key) => {
+              onSelect={(i) => {
                 close();
-                if (key !== current) onPick(useOf(key, use));
+                const o = options[i];
+                if (!o) throw new Error(`选择器里没有第 ${i} 项`);
+                if (i !== current) onPick((u) => ({ ...u, ...o.part }), o.label);
               }}
             />
             <Link className={css.manage} href={localePath(lang, '/knowledge')}>

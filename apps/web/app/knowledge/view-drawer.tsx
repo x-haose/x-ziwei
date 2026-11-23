@@ -92,8 +92,9 @@ export function ViewDrawer({
                 {pack.name}
               </Heading>
               <p className={css.drawerMeta}>
-                {meta.map((m) => (
-                  <span key={m} className={css.nowrap}>
+                {meta.map((m, i) => (
+                  // 元信息的四项位置固定（标识、版本、语言、基于），按位置作 key。
+                  <span key={i} className={css.nowrap}>
                     {m}
                   </span>
                 ))}

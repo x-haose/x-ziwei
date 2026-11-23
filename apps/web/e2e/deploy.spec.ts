@@ -108,25 +108,3 @@ test('测试站带 Cloudflare Web Analytics 统计脚本，CSP 只为它放行�
     expect(csp.find((d) => d.startsWith('script-src '))).toMatch(/^script-src 'self' 'wasm-unsafe-eval' https:\/\/static\.cloudflareinsights\.com( 'sha256-[^']+')+$/);
   }
 });
-
-test('统计上报只有路径：生辰在 # 之后，首次载入、换候选、前端跳转与后退都不进上报', async ({ context, page }) => {
-  // 用 Cloudflare 线上的统计脚本（覆盖默认的空脚本），上报照旧拦下、不发出。
-  await context.route('https://static.cloudflareinsights.com/**', async (r) => r.fulfill({ response: await r.fetch() }));
-  const reports: string[] = [];
-  await context.route('https://cloudflareinsights.com/**', (r) => {
-    reports.push(r.request().postData() ?? '');
-    return r.fulfill({ status: 204 });
-  });
-  await page.goto('/zh/chart#cal=solar&d=2000-8-16&p=night&h=1&g=f');
-  await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
-  await page.getByRole('radiogroup', { name: '候选时辰' }).getByRole('radio', { name: '寅' }).click();
-  await page.getByRole('link', { name: '装进 AI' }).first().click();
-  await expect(page).toHaveURL(/\/zh\/install$/);
-  await page.goBack();
-  await expect(page).toHaveURL(/#cal=solar&d=2000-8-16&p=night&h=2&g=f$/);
-  await expect.poll(() => reports.length).toBeGreaterThanOrEqual(3);
-  const locations = reports.flatMap((r) => [...r.matchAll(/"(?:location|referrer|path)":"([^"]*)"/g)].map((m) => m[1]));
-  expect(locations.length).toBeGreaterThan(0);
-  for (const l of locations) expect(l).toMatch(/^(http:\/\/localhost:4173)?\/zh\/(chart|install)$/);
-  for (const r of reports) expect(r).not.toMatch(/2000-8-16|cal=|#/);
-});

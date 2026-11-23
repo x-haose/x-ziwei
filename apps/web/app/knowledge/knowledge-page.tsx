@@ -9,7 +9,8 @@ import { localePath } from '../i18n/lang';
 import { fmt, type Messages } from '../i18n/messages';
 import { useLang, useMessages } from '../i18n/use-lang';
 import { type Kernel, loadKernel, useKernelState } from '../kernel/kernel';
-import { ImportPanel, type ImportState, fileProblems, runImport } from './import-panel';
+import { type ImportState, fileProblems, runImport } from './import';
+import { ImportPanel } from './import-panel';
 import { defaultPackInfo, packRaw } from './kernel-pack';
 import * as css from './knowledge.css';
 import {
@@ -31,7 +32,8 @@ import {
   withoutPack,
 } from './library';
 import { CountList, activePacks, diffText, importedText, totalOf, useLabel } from './parts';
-import { addPack, removePack, setUse, useLibrary } from './use-library';
+import { addPack, removePack, updateUse, useLibrary } from './use-library';
+import { useRepairNotice } from './chart-knowledge';
 import { ViewDrawer } from './view-drawer';
 
 /** 下载一个包的原文：`id-版本.json`。 */
@@ -65,7 +67,8 @@ function UsePanel({
   defaultPack: Pack;
   /** 存储不可用或读库失败：组合改不了，只有默认包。 */
   blocked: boolean;
-  onChange: (next: Use) => void;
+  /** 改组合：传入由库里此刻的组合算出新组合的函数（见 `updateUse`）。 */
+  onChange: (next: (use: Use) => Use) => void;
 }) {
   const u = t.knowledge.use;
   const active = activePacks(use, packs, defaultPack);
@@ -91,7 +94,10 @@ function UsePanel({
   }
   const addable = baseOverlays.filter((p) => !layers.some((l) => l.id === p.id));
   // 叠加模式下，基于本机整包的覆盖包要到整包切换里选那个整包才能叠加。
-  const elsewhere = use.mode === 'stack' ? packs.filter((p) => p.extends !== null && p.extends !== DEFAULT_PACK_ID) : [];
+  const onWhole = (p: Pack) => p.extends !== null && p.extends !== DEFAULT_PACK_ID;
+  const elsewhere = use.mode === 'stack' ? packs.filter((p) => onWhole(p) && packs.some((b) => b.id === p.extends)) : [];
+  // 底包已被删掉的覆盖包：留在本机，重新导入底包后才能叠加。
+  const orphans = packs.filter((p) => onWhole(p) && !packs.some((b) => b.id === p.extends));
   // 整包模式选的是默认包时不叠加（叠加默认包用叠加模式）。
   const canLayer = use.mode === 'stack' || base.id !== DEFAULT_PACK_ID;
   return (
@@ -104,7 +110,7 @@ function UsePanel({
           label={u.modeLabel}
           className={css.useMode}
           value={use.mode}
-          onChange={(mode) => onChange({ ...use, mode })}
+          onChange={(mode) => onChange((u) => ({ ...u, mode }))}
           options={[
             { value: 'stack', label: u.stack, ...(blocked ? { disabledReason: t.knowledge.imp.blocked } : {}) },
             { value: 'whole', label: u.whole, ...(blocked ? { disabledReason: t.knowledge.imp.blocked } : {}) },
@@ -123,7 +129,7 @@ function UsePanel({
           <RadioGroup
             aria-label={u.whole}
             value={use.whole}
-            onChange={(id) => onChange(pickWhole(use, id))}
+            onChange={(id) => onChange((u) => pickWhole(u, id))}
             className={css.wholeRow}
             orientation="horizontal"
             isDisabled={blocked}
@@ -150,8 +156,8 @@ function UsePanel({
             index={i}
             last={i === layers.length - 1}
             diff={diffText(diffAgainst(p, base), t)}
-            onMove={(dir) => onChange(moveInStack(use, i, dir))}
-            onRemove={() => onChange(removeFromStack(use, p.id))}
+            onMove={(dir) => onChange((u) => moveInStack(u, p.id, dir))}
+            onRemove={() => onChange((u) => removeFromStack(u, p.id))}
           />
         ))}
         <span className={`${css.op} ${css.opEq}`} aria-hidden="true">
@@ -176,7 +182,7 @@ function UsePanel({
                   type="button"
                   className={css.addButton}
                   aria-label={fmt(u.addLabel, { name: p.name })}
-                  onClick={() => onChange(addToStack(use, p.id))}
+                  onClick={() => onChange((u) => addToStack(u, p.id))}
                 >
                   {p.name}
                 </button>
@@ -187,6 +193,7 @@ function UsePanel({
             <span>{baseOverlays.length ? u.allStacked : fmt(u.noOverlay, { base: base.id })}</span>
           ))}
         {elsewhere.length > 0 && <span>{fmt(u.otherBase, { names: elsewhere.map((p) => p.name).join(t.knowledge.diff.sep) })}</span>}
+        {orphans.length > 0 && <span>{fmt(u.orphans, { names: orphans.map((p) => p.name).join(t.knowledge.diff.sep) })}</span>}
       </p>
     </section>
   );
@@ -370,6 +377,7 @@ function DeleteDialog({
   const inUse = activeIds(use).includes(pack.id);
   const after = withoutPack(use, pack.id);
   const rest = activePacks(after, packs.filter((p) => p.id !== pack.id), defaultPack);
+  const dependents = overlaysOf(packs, pack.id);
   return (
     <ModalOverlay isOpen isDismissable onOpenChange={(o) => !o && onCancel()} className={css.scrim}>
       <Modal className={css.dialog}>
@@ -383,7 +391,13 @@ function DeleteDialog({
               <>
                 <br />
                 <b className={css.dialogStrong}>{d.active}</b>
-                {use.mode === 'whole' ? d.activeWhole : fmt(d.activeStack, { label: useLabel(rest) })}
+                {use.mode === 'whole' && use.whole === pack.id ? d.activeWhole : fmt(d.activeStack, { label: useLabel(rest) })}
+              </>
+            )}
+            {dependents.length > 0 && (
+              <>
+                <br />
+                {fmt(d.overlaysKept, { names: dependents.map((p) => p.name).join(t.knowledge.diff.sep) })}
               </>
             )}
           </p>
@@ -423,6 +437,7 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
   useEffect(() => {
     loadKernel().catch(() => undefined);
   }, []);
+  useRepairNotice(lib, t);
 
   // 格式说明搬到 /{lang}/knowledge/format 之前，带锚点的旧链接指向这里；把锚点带过去。
   useEffect(() => {
@@ -445,7 +460,17 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
       toast(fmt(t.knowledge.actionFailed, { reason: err instanceof Error ? err.message : String(err) }));
     }
   };
-  const changeUse = (next: Use) => void act(() => setUse(next));
+  /** 改组合；换了整包、原来叠加在旧整包上的覆盖包随之移出时，提示一句。 */
+  const changeUse = (next: (u: Use) => Use) =>
+    void act(async () => {
+      const before = use;
+      const after = (await updateUse(next)).use;
+      const gone = before.whole !== after.whole ? before.wholeStack.filter((id) => !after.wholeStack.includes(id)) : [];
+      if (gone.length) {
+        const name = (id: string) => packs.find((p) => p.id === id)?.name ?? id;
+        toast(fmt(t.knowledge.use.baseChanged, { names: gone.map(name).join(t.knowledge.diff.sep), base: name(before.whole) }));
+      }
+    });
   const baseOf = (p: Pack): Pack | null =>
     p.extends === null ? null : p.extends === DEFAULT_PACK_ID ? defaultPack : (packs.find((x) => x.id === p.extends) ?? null);
   const startImport = (file: string, read: () => Promise<string>) => {
@@ -538,9 +563,8 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
             base={baseOf}
             onUse={(p) =>
               void act(async () => {
-                const next = usePack(use, p);
-                await setUse(next);
-                toast(fmt(t.knowledge.use.toast, { label: useLabel(activePacks(next, packs, defaultPack)) }));
+                const snap = await updateUse((u) => usePack(u, p));
+                toast(fmt(t.knowledge.use.toast, { label: useLabel(activePacks(snap.use, snap.packs, defaultPack)) }));
               })
             }
             onView={setViewing}

@@ -5,29 +5,10 @@ import * as controls from '../components/controls.css';
 import { FileIcon, LockIcon } from '../components/icons';
 import { fmt, type Messages } from '../i18n/messages';
 import type { KernelState } from '../kernel/kernel';
-import { type ImportProblem, MAX_PACK_BYTES, checkImport } from './kernel-pack';
+import type { ImportState, Problem } from './import';
 import * as css from './knowledge.css';
-import { type Pack, type PackRaw, diffAgainst } from './library';
+import { type Pack, diffAgainst } from './library';
 import { diffText, totalOf } from './parts';
-import { StorageFullError } from './store';
-
-/** 导入失败的原因：导入前的检查（`ImportProblem`）与写入本机时的失败。 */
-export type Problem = ImportProblem | { code: 'full' } | { code: 'storage'; reason: string };
-
-/** 导入区的结果：导入中（第几步）、失败（逐条原因）、成功（导入的包）。 */
-export type ImportState =
-  | { phase: 'idle' }
-  | { phase: 'busy'; file: string; step: 0 | 1 | 2 | 3 }
-  | { phase: 'error'; file: string; errors: Problem[]; warnings: Problem[] }
-  | { phase: 'done'; file: string; pack: Pack; warnings: Problem[] };
-
-/** 选的文件本身的问题：不是 .json、超过 2 MB。 */
-export function fileProblems(file: File): Problem[] {
-  const out: Problem[] = [];
-  if (!/\.json$/i.test(file.name) && file.type !== 'application/json') out.push({ code: 'notJsonFile' });
-  if (file.size > MAX_PACK_BYTES) out.push({ code: 'tooLarge', bytes: file.size });
-  return out;
-}
 
 /** 一条原因的位置与文字。 */
 export function problemText(p: Problem, t: Messages): { where: string; text: string } {
@@ -63,54 +44,8 @@ export function problemText(p: Problem, t: Messages): { where: string; text: str
       return { where: w.storage, text: m.full };
     case 'storage':
       return { where: w.storage, text: fmt(m.storage, { reason: p.reason }) };
-  }
-}
-
-/**
- * 导入一个包：读文本 → 解析与内核校验 → 本机包库的规则 → 存入本机，逐步更新导入区。
- * `save` 写入失败时（存满了或 IndexedDB 故障）结果区写明原因，库不变。
- */
-export async function runImport({
-  file,
-  read,
-  kernel,
-  packs,
-  save,
-  onState,
-}: {
-  file: string;
-  read: () => Promise<string>;
-  kernel: Parameters<typeof checkImport>[0];
-  packs: readonly Pack[];
-  save: (raw: PackRaw) => Promise<Pack>;
-  onState: (s: ImportState) => void;
-}): Promise<void> {
-  onState({ phase: 'busy', file, step: 0 });
-  let text: string;
-  try {
-    text = await read();
-  } catch (err) {
-    console.error(err);
-    onState({ phase: 'error', file, errors: [{ code: 'unreadable' }], warnings: [] });
-    return;
-  }
-  onState({ phase: 'busy', file, step: 1 });
-  const checked = checkImport(kernel, text, packs);
-  if (!checked.ok) {
-    onState({ phase: 'error', file, errors: checked.errors, warnings: checked.warnings });
-    return;
-  }
-  onState({ phase: 'busy', file, step: 3 });
-  try {
-    const pack = await save(checked.raw);
-    onState({ phase: 'done', file, pack, warnings: checked.warnings });
-  } catch (err) {
-    if (err instanceof StorageFullError) {
-      onState({ phase: 'error', file, errors: [{ code: 'full' }], warnings: checked.warnings });
-      return;
-    }
-    console.error(err);
-    onState({ phase: 'error', file, errors: [{ code: 'storage', reason: err instanceof Error ? err.message : String(err) }], warnings: checked.warnings });
+    case 'unexpected':
+      return { where: w.file, text: fmt(m.unexpected, { reason: p.reason }) };
   }
 }
 

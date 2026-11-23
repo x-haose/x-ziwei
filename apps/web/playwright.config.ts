@@ -11,7 +11,11 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   reporter: process.env.CI ? 'github' : 'list',
   use: { baseURL: 'http://localhost:4173', locale: 'zh-CN' },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: '*.external.spec.ts' },
+    // 依赖外网的用例（线上统计脚本），带有限重试，CI 里单独一步跑。
+    { name: 'external', use: { ...devices['Desktop Chrome'] }, testMatch: '*.external.spec.ts', retries: 2 },
+  ],
   webServer: {
     command: 'wrangler dev --port 4173',
     url: 'http://localhost:4173/zh',

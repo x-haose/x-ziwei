@@ -149,11 +149,12 @@ export function withoutPack(use: Use, id: string): Use {
   return { ...use, stack: use.stack.filter((x) => x !== id), wholeStack: use.wholeStack.filter((x) => x !== id) };
 }
 
-/** 当前模式的叠加里第 `i` 个包前移（-1）或后移（1）。越界即是调用方的缺陷。 */
-export function moveInStack(use: Use, i: number, dir: -1 | 1): Use {
+/** 当前模式的叠加里把 `id` 前移（-1）或后移（1）一位；不在叠加里或已到头时报错。 */
+export function moveInStack(use: Use, id: string, dir: -1 | 1): Use {
   const layers = [...current(use).layers];
+  const i = layers.indexOf(id);
   const j = i + dir;
-  if (i < 0 || j < 0 || i >= layers.length || j >= layers.length) throw new Error(`叠加里移不动：${i} → ${j}`);
+  if (i < 0 || j < 0 || j >= layers.length) throw new Error(`叠加里移不动 ${id}`);
   [layers[i], layers[j]] = [layers[j]!, layers[i]!];
   return withLayers(use, layers);
 }
@@ -182,6 +183,38 @@ export function usePack(use: Use, pack: Pack): Use {
   if (pack.extends === DEFAULT_PACK_ID) return addToStack({ ...use, mode: 'stack' }, pack.id);
   if (pack.extends !== null) return addToStack({ ...pickWhole(use, pack.extends), mode: 'whole' }, pack.id);
   return { ...pickWhole(use, pack.id), mode: 'whole' };
+}
+
+/** 两个组合生效的包与顺序是否相同。 */
+export function sameActive(a: Use, b: Use): boolean {
+  return activeIds(a).join('\n') === activeIds(b).join('\n');
+}
+
+/**
+ * 修复组合与包库对不上的地方（另一个标签页删了包等）：整包不在本机或不是独立整包时改回默认包并清空它的叠加；
+ * 两处叠加里去掉不在本机、不基于对应底包或重复的包。返回修复后的组合与被移出的包标识（没有修复时为空）。
+ */
+export function repairUse(use: Use, packs: readonly Pack[]): { use: Use; dropped: string[] } {
+  const byId = new Map(packs.map((p) => [p.id, p]));
+  const dropped: string[] = [];
+  const keep = (layers: readonly string[], base: string): string[] =>
+    layers.filter((id, i) => {
+      const ok = byId.get(id)?.extends === base && layers.indexOf(id) === i;
+      if (!ok) dropped.push(id);
+      return ok;
+    });
+  const wholeOk = use.whole === DEFAULT_PACK_ID || byId.get(use.whole)?.extends === null;
+  if (!wholeOk) dropped.push(use.whole);
+  const whole = wholeOk ? use.whole : DEFAULT_PACK_ID;
+  // 选默认包时整包模式不叠加；整包换回默认包时它的叠加一并移出。
+  let wholeStack: string[];
+  if (whole === DEFAULT_PACK_ID) {
+    dropped.push(...use.wholeStack);
+    wholeStack = [];
+  } else {
+    wholeStack = keep(use.wholeStack, whole);
+  }
+  return { use: { mode: use.mode, stack: keep(use.stack, DEFAULT_PACK_ID), whole, wholeStack }, dropped: [...new Set(dropped)] };
 }
 
 /** 覆盖包相对底包的改动：同键条目算「改」，底包没有的键算「新增」。 */
