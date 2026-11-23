@@ -111,6 +111,7 @@
 
 上线时做：
 
+- OpenAI 审核通过（0.3.0 上架）后合并分支 `deps/x-iztro-0.9`：服务端升 x-iztro 0.9.0、知识包加载时逐条报问题（错误体带 `issues`）、stdio 握手后退出的修复、`site/content` 的知识包 / 自托管 / 接口说明。合并即触发 Dokploy 部署（约 6 分钟）；部署后用 HTTP 与 MCP 各验一次默认包与一份有问题的包（错误里列出全部 `issues`，`retryable` 为 false）。
 - `ziwei.x-haose.com` 从 Vercel 项目 `x-ziwei` 切到正式站 Worker `x-ziwei-web`（构建命令 `pnpm build:production`，部署命令 `pnpm deploy:production`）。
 - 下线 `site/` 与它的 Vercel 项目：`site/content` 搬进 `apps/web` 并改内容源路径，AGENTS.md「站点」一节随之改写。
 - 隐私政策（`privacy.mdx` 与 `privacy.en.mdx`，改生效日期）按渠道分述，草稿：
@@ -123,6 +124,8 @@
     > 排盘用的生辰写在网址 `#` 之后：这部分只在你的浏览器里使用，不会发给服务器，也不进访问统计。最近排过的生辰与明暗主题只存在你浏览器的本地存储里，清除网站数据即删除。
     >
     > 站内搜索在浏览器里进行：网站下载一份搜索索引，搜索词不会发出。
+    >
+    > 导入的知识包只存在你浏览器的本地数据库（IndexedDB）里，不会上传；清除网站数据即删除。
 
 ## 暂缓
 
