@@ -347,3 +347,28 @@ export const credit = style({
     [media.mDown]: { position: 'static', display: 'block', maxWidth: 640, margin: '0 auto', padding: `24px ${space.pad} 32px` },
   },
 });
+
+/* ── 引线：拓片上的紫微垣 → 示例盘命宫的紫微（只在宽屏） ── */
+
+export const leader = style({
+  position: 'absolute',
+  inset: 0,
+  zIndex: 2,
+  width: '100%',
+  height: '100%',
+  overflow: 'visible',
+  pointerEvents: 'none',
+  '@media': { [media.mDown]: { display: 'none' } },
+});
+
+export const leaderLine = style({ stroke: color.fg, strokeWidth: 1, opacity: 0.8 });
+export const leaderDot = style({ fill: color.accent });
+export const leaderText = style({
+  fontFamily: font.sans,
+  fontSize: size.label,
+  fill: color.fg2,
+  paintOrder: 'stroke',
+  stroke: color.bg,
+  strokeWidth: 5,
+  strokeLinejoin: 'round',
+});

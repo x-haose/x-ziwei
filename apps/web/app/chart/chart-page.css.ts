@@ -1,6 +1,6 @@
 import { globalStyle, style } from '@vanilla-extract/css';
 import { media } from '../styles/media';
-import { color, font, size, space, stroke } from '../styles/tokens.css';
+import { color, font, motion, size, space, stroke } from '../styles/tokens.css';
 import { boardHeight, boardWidth, ringBand } from './board.css';
 
 /**
@@ -216,7 +216,7 @@ export const previewHead = style({
   paddingBottom: 6,
   fontSize: size.label,
   color: color.fg3,
-  '@media': { [media.lDown]: { alignSelf: 'end' } },
+  '@media': { [media.lDown]: { alignSelf: 'end' }, [media.mDown]: { alignSelf: 'stretch' } },
 });
 
 export const previewMode = style({ height: 32, marginLeft: 'auto', marginRight: 12 });
@@ -279,3 +279,59 @@ export const aiLink = style({
   color: color.fg2,
   selectors: { '&:hover': { color: color.fg, boxShadow: `inset 0 calc(-1 * ${stroke.hair}) 0 ${color.fg}` } },
 });
+
+/** 原文视图：保留换行，标题行主色，其余次色。 */
+export const previewRaw = style({ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: font.sans });
+export const rawHeading = style({ color: color.fg, fontWeight: 500 });
+export const rawQuestion = style({ color: color.accent });
+
+/* ── 生辰摘要（已排盘时，可展开修改） ── */
+
+export const summary = style({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 8,
+  width: '100%',
+  minHeight: 64,
+  padding: '8px 0',
+  borderBottom: `${stroke.hair} solid ${color.line}`,
+  textAlign: 'left',
+});
+
+export const summaryWhen = style({ fontFamily: font.serif, fontSize: size.subtitle, fontWeight: 500, lineHeight: 1.3 });
+
+export const summaryNote = style({
+  display: 'block',
+  marginTop: 3,
+  fontFamily: font.sans,
+  fontSize: size.aux,
+  fontWeight: 400,
+  color: color.fg2,
+});
+
+export const summaryToggle = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  flex: 'none',
+  fontSize: size.aux,
+  color: color.fg2,
+  selectors: { [`${summary}:hover &`]: { color: color.fg } },
+});
+
+export const summaryCaret = style({
+  transition: `transform ${motion.base}`,
+  selectors: { [`${summary}[aria-expanded="true"] &`]: { transform: 'rotate(180deg)' } },
+});
+
+export const candidates = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  padding: '6px 0 8px',
+  borderBottom: `${stroke.hair} solid ${color.line}`,
+});
+
+export const candidatesLabel = style({ flex: 'none', fontSize: size.label, color: color.fg3 });
+export const candidatesSeg = style({ flex: 1 });

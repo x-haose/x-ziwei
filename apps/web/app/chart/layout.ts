@@ -3,6 +3,10 @@ export const BRANCHES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未',
 
 export type Branch = (typeof BRANCHES)[number];
 
+export function isBranch(value: string): value is Branch {
+  return (BRANCHES as readonly string[]).includes(value);
+}
+
 /**
  * 方盘上各地支所在的格（行、列，从 0 起，4×4 网格的外圈）：巳午未申在上排，
  * 辰卯在左列，酉戌在右列，寅丑子亥在下排；中间 2×2 是中宫。

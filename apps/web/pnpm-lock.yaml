@@ -205,6 +205,9 @@ importers:
       remend:
         specifier: 1.5.0
         version: 1.5.0
+      x-iztro:
+        specifier: 0.7.0
+        version: 0.7.0(typescript@7.0.2)
     devDependencies:
       '@playwright/test':
         specifier: 1.65.1
@@ -1778,6 +1781,15 @@ packages:
 
   woff2sfnt-sfnt2woff@1.0.0:
     resolution: {integrity: sha512-edK4COc1c1EpRfMqCZO1xJOvdUtM5dbVb9iz97rScvnTevqEB3GllnLWCmMVp1MfQBdF1DFg/11I0rSyAdS4qQ==}
+
+  x-iztro@0.7.0:
+    resolution: {integrity: sha512-dWouIWe5lhq458pkF2l2bRSl+pOqz0vpKLsGBmAh2tikx4EUOz8u15IHc8shMtuS4Jecau6CFNsx1Vm1Tqp+YA==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      typescript: '>=5.0'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
@@ -3445,6 +3457,10 @@ snapshots:
   woff2sfnt-sfnt2woff@1.0.0:
     dependencies:
       pako: 1.0.11
+
+  x-iztro@0.7.0(typescript@7.0.2):
+    optionalDependencies:
+      typescript: 7.0.2
 
   yallist@3.1.1: {}
 

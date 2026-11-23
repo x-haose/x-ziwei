@@ -1,0 +1,96 @@
+{
+  "source": "x-iztro tests/golden/tier1_data.json（提交 07a7df2），与 JS iztro 逐字段一致的金标",
+  "params": {
+    "solar_date": "1992-2-15",
+    "time_index": 7,
+    "gender": "女"
+  },
+  "lunarDate": "一九九二年正月十二",
+  "fiveElementsClass": "水二局",
+  "palaces": [
+    {
+      "branch": "寅",
+      "name": "疾厄",
+      "majors": [
+        "天同",
+        "天梁"
+      ]
+    },
+    {
+      "branch": "卯",
+      "name": "财帛",
+      "majors": [
+        "武曲",
+        "七杀"
+      ]
+    },
+    {
+      "branch": "辰",
+      "name": "子女",
+      "majors": [
+        "太阳"
+      ]
+    },
+    {
+      "branch": "巳",
+      "name": "夫妻",
+      "majors": []
+    },
+    {
+      "branch": "午",
+      "name": "兄弟",
+      "majors": [
+        "天机"
+      ]
+    },
+    {
+      "branch": "未",
+      "name": "命宫",
+      "majors": [
+        "紫微",
+        "破军"
+      ]
+    },
+    {
+      "branch": "申",
+      "name": "父母",
+      "majors": []
+    },
+    {
+      "branch": "酉",
+      "name": "福德",
+      "majors": [
+        "天府"
+      ]
+    },
+    {
+      "branch": "戌",
+      "name": "田宅",
+      "majors": [
+        "太阴"
+      ]
+    },
+    {
+      "branch": "亥",
+      "name": "官禄",
+      "majors": [
+        "廉贞",
+        "贪狼"
+      ]
+    },
+    {
+      "branch": "子",
+      "name": "仆役",
+      "majors": [
+        "巨门"
+      ]
+    },
+    {
+      "branch": "丑",
+      "name": "迁移",
+      "majors": [
+        "天相"
+      ]
+    }
+  ]
+}

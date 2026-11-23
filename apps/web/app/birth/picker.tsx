@@ -36,6 +36,7 @@ export function Picker({
   paging,
   onKeyDownCapture,
   onOpenChange,
+  triggerClass,
   children,
 }: {
   /** 触发钮的无障碍名称（「出生年份」）。 */
@@ -57,6 +58,8 @@ export function Picker({
   onKeyDownCapture?: (e: KeyboardEvent) => void;
   /** 弹层开合时调用；选择器据此在每次打开时回到初始视图。 */
   onOpenChange?: (open: boolean) => void;
+  /** 触发钮的附加样式（流年选择条里的居中触发钮）。 */
+  triggerClass?: string;
   children: (close: () => void) => ReactNode;
 }) {
   const t = useMessages();
@@ -99,7 +102,7 @@ export function Picker({
   return (
     <DialogTrigger onOpenChange={onOpenChange}>
       <Button
-        className={css.trigger}
+        className={triggerClass ? `${css.trigger} ${triggerClass}` : css.trigger}
         aria-label={label}
         isDisabled={isDisabled}
         aria-describedby={errorId}
@@ -136,6 +139,10 @@ export interface GridOption<K extends string | number> {
   content: ReactNode;
   /** 不可选时给出原因（「这个月没有三十」），读屏随选项读出。 */
   disabledReason?: string;
+  /** 今天所在的一项，右上标一个小圆点。 */
+  now?: boolean;
+  /** 选项的无障碍名称；缺省用内容文字。 */
+  label?: string;
 }
 
 /**
@@ -197,7 +204,8 @@ export function OptionGrid<K extends string | number>({
           key={o.key}
           id={o.key}
           textValue={o.text}
-          className={row ? `${css.option} ${css.optionRow}` : css.option}
+          aria-label={o.label}
+          className={[css.option, row ? css.optionRow : '', o.now ? css.optionNow : ''].filter(Boolean).join(' ')}
           style={i === 0 && firstColumn > 1 ? ({ gridColumnStart: firstColumn } satisfies CSSProperties) : undefined}
         >
           {o.content}

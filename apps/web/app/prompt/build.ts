@@ -13,6 +13,11 @@ const QUESTION: Record<Lang, { heading: string; fallback: string }> = {
   },
 };
 
+/** 「我的问题」一节的标题行。 */
+export function questionHeading(lang: Lang): string {
+  return QUESTION[lang].heading;
+}
+
 /**
  * 拼出贴给聊天 AI 的整段提示词。
  *

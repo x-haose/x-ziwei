@@ -14,7 +14,7 @@ const RESOLVED = `\0${ID}`;
  */
 export function fontsPlugin({ root }: { root: string }): Plugin {
   let manifest: Promise<FontManifest> | null = null;
-  const ensure = () => (manifest ??= buildFonts({ root, critical: criticalText() }));
+  const ensure = () => (manifest ??= criticalText().then((critical) => buildFonts({ root, critical })));
   return {
     name: 'xzw-fonts',
     async buildStart() {

@@ -4,7 +4,7 @@ import { chromium } from '@playwright/test';
 
 /**
  * 与对照稿并排截图：左边是 `docs/design/mockup.html` 的对应状态，右边是构建产物，
- * 宽度 375 与 1440、明暗两套，写进 `e2e/shots/`。用于逐项走查，不做像素断言。
+ * 宽度 375、768、1024、1440，明暗两套，写进 `e2e/shots/`。用于逐项走查，不做像素断言。
  *
  * 先 `pnpm build`，再 `node e2e/compare.ts`（会自己起静态服务器）。
  */
@@ -16,6 +16,7 @@ mkdirSync(out, { recursive: true });
 const TARGETS = [
   { name: 'home', app: '/zh', mock: '#home' },
   { name: 'chart-empty', app: '/zh/chart', mock: '#chart' },
+  { name: 'chart', app: '/zh/chart#cal=solar&d=2000-8-16&t=2&g=f', mock: '#chart?cal=solar&d=2000-8-16&g=f&t=2' },
   { name: 'doc', app: '/zh/method', mock: '#doc/install' },
 ];
 
@@ -25,7 +26,7 @@ await new Promise((r) => setTimeout(r, 500));
 
 const browser = await chromium.launch();
 try {
-  for (const width of [375, 1440]) {
+  for (const width of [375, 768, 1024, 1440]) {
     for (const scheme of ['light', 'dark'] as const) {
       const context = await browser.newContext({ viewport: { width, height: width < 700 ? 812 : 900 }, colorScheme: scheme });
       const page = await context.newPage();
@@ -34,7 +35,8 @@ try {
         for (const url of [`${mockup}${t.mock}`, `http://localhost:4174${t.app}`]) {
           await page.goto(url, { waitUntil: 'networkidle' });
           await page.evaluate(() => document.fonts.ready);
-          await page.waitForTimeout(400);
+          // 等外圈刻度淡入与连线描完。
+          await page.waitForTimeout(2200);
           shots.push(await page.screenshot({ fullPage: width < 700 }));
         }
         const sheet = await context.newPage();

@@ -203,3 +203,22 @@ export const optionNote = style({
   color: color.fg3,
   selectors: { [`${option}[data-selected] &`]: { color: color.btnFg } },
 });
+
+/** 今天所在的年份等：右上一个强调色小圆点。 */
+export const optionNow = style({
+  selectors: {
+    '&::after': {
+      content: '""',
+      position: 'absolute',
+      right: 5,
+      top: 5,
+      width: 5,
+      height: 5,
+      borderRadius: '50%',
+      background: color.accent,
+    },
+  },
+});
+
+/** 居中排列的触发钮：值与附注之间留空，箭头仍在右端。 */
+export const triggerCentered = style({ justifyContent: 'center', gap: 8 });

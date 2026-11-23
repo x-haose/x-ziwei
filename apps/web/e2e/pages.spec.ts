@@ -10,7 +10,7 @@ function watchConsole(page: Page): string[] {
   return problems;
 }
 
-const PAGES = ['/zh', '/en', '/zh/chart', '/en/chart', '/zh/method', '/en/method'];
+const PAGES = ['/zh', '/en', '/zh/chart', '/en/chart', '/zh/chart#cal=solar&d=2000-8-16&t=2&g=f', '/en/chart#cal=lunar&d=2020-4-3&leap=1&p=evening&g=m', '/zh/method', '/en/method'];
 
 for (const width of [375, 1440]) {
   for (const scheme of ['light', 'dark'] as const) {
@@ -21,6 +21,7 @@ for (const width of [375, 1440]) {
       for (const path of PAGES) {
         await page.goto(path);
         await page.waitForLoadState('networkidle');
+        if (path.includes('#')) await expect(page.getByRole('button', { name: /^命宫[，,]/ })).toBeVisible();
         await expect(page.locator('html')).toHaveAttribute('data-theme', scheme);
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
         expect(overflow, `${path} 横向溢出`).toBe(0);

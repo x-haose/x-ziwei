@@ -62,6 +62,7 @@ test('日：年月没选时不可用；月历按星期排，方向键按网格�
 });
 
 test('提交空表单：各字段报错并把焦点移到第一个出错的字段', async ({ page }) => {
+  await expect(page.getByRole('radio', { name: '农历' })).toBeEnabled();
   await page.getByRole('button', { name: '排盘', exact: true }).click();
   const year = page.getByRole('button', { name: '出生年份' });
   await expect(year).toBeFocused();
@@ -93,18 +94,48 @@ test('填好提交：生辰写进地址 # 之后并记进最近排过；带生�
   await page.getByRole('option', { name: /^8 月/ }).click();
   await page.getByRole('button', { name: '出生日' }).click();
   await page.getByRole('option', { name: '16', exact: true }).click();
+  await expect(page.getByText('对应农历 二〇〇〇年七月十七')).toBeVisible();
   await page.getByRole('button', { name: '出生时辰' }).click();
   await page.getByRole('option', { name: /^夜里/ }).click();
   await expect(page.getByText('时辰未定，排出 早子、丑、寅 三张候选盘')).toBeVisible();
   await page.getByRole('radio', { name: '女' }).click();
   await page.getByRole('button', { name: '排盘', exact: true }).click();
   await expect(page).toHaveURL('/zh/chart#cal=solar&d=2000-8-16&p=night&g=f');
+  await expect(page.getByRole('radiogroup', { name: '候选时辰' })).toBeVisible();
+
+  await page.goto('/zh/chart');
   await expect(page.getByRole('button', { name: /2000-8-16 夜里（时辰未定）/ })).toBeVisible();
 
   await page.goto('/zh/chart#cal=solar&d=1987-2-3&t=12&g=m');
+  await page.getByRole('button', { name: /修改/ }).click();
   await expect(page.getByRole('button', { name: '出生年份' })).toHaveText('1987');
   await expect(page.getByRole('button', { name: '出生时辰' })).toContainText('晚子时');
   await expect(page.getByRole('radio', { name: '男' })).toBeChecked();
+});
+
+test('农历：闰月单独一格，小月的三十不可选，换算出公历', async ({ page }) => {
+  await page.getByRole('radio', { name: '农历' }).click();
+  await page.getByRole('button', { name: '出生年份' }).click();
+  await expect(page.getByRole('option', { name: '1990' })).toContainText('庚午');
+  await page.keyboard.type('2020');
+  await page.keyboard.press('Enter');
+  await page.getByRole('button', { name: '出生月份' }).click();
+  await expect(page.getByText('2020 年有闰四月')).toBeVisible();
+  const months = (await page.getByRole('option').allTextContents()).map((m) => m.replace(/\d+ 天$/, ''));
+  expect(months.indexOf('闰四月')).toBe(months.indexOf('四月') + 1);
+  await page.getByRole('option', { name: '闰四月' }).click();
+  await page.getByRole('button', { name: '出生日' }).click();
+  await expect(page.getByText('这个月是小月，只有 29 天')).toBeVisible();
+  await expect(page.getByRole('option', { name: /^三十/ })).toHaveAttribute('aria-disabled', 'true');
+  await page.getByRole('option', { name: '初三' }).click();
+  await expect(page.getByText('对应公历 2020-5-25')).toBeVisible();
+  await page.getByRole('button', { name: '出生时辰' }).click();
+  await page.getByRole('option', { name: /^寅时/ }).click();
+  await page.getByRole('radio', { name: '女' }).click();
+  await page.getByRole('button', { name: '排盘', exact: true }).click();
+  await expect(page).toHaveURL('/zh/chart#cal=lunar&d=2020-4-3&leap=1&t=2&g=f');
+  await expect(page.getByRole('button', { name: /农历二〇二〇年闰四月初三 寅时/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
 });
 
 test('地址里的生辰不合法时明确提示', async ({ page }) => {
