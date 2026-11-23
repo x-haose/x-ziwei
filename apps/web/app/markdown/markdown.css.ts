@@ -4,6 +4,19 @@ import { color, font, motion, size, space, stroke } from '../styles/tokens.css';
 
 const hair = (c: string) => `${stroke.hair} solid ${c}`;
 
+/**
+ * 限定在 `scope` 之内的全局样式。选择器可以是逗号分隔的列表，每一项都加上作用域：
+ * 直接写成 `${scope} h3, h4` 时只有第一项受限，其余各项会作用到全站。
+ */
+const within = (scope: string) => (sel: string, rule: Parameters<typeof globalStyle>[1]) =>
+  globalStyle(
+    sel
+      .split(',')
+      .map((s) => `${scope} ${s.trim()}`)
+      .join(', '),
+    rule,
+  );
+
 /* ── 两种排版共用的部分 ── */
 
 export const tableWrap = style({ overflowX: 'auto' });
@@ -63,7 +76,7 @@ globalStyle(`${codeWrap} ${pre}`, {
 
 export const preview = style({ fontSize: size.small, lineHeight: 1.75, color: color.fg });
 
-const p = (sel: string, rule: Parameters<typeof globalStyle>[1]) => globalStyle(`${preview} ${sel}`, rule);
+const p = within(preview);
 p('h1, h2, h3, h4', { fontFamily: font.serif, fontWeight: 600, color: color.fg, lineHeight: 1.4 });
 p('h1', { fontSize: size.emphasis, margin: '0 0 .6em' });
 p('h2', { fontSize: size.body, margin: '1.4em 0 .5em', paddingTop: '.8em', borderTop: hair(color.line) });
@@ -95,7 +108,10 @@ p('th', {
   borderBottom: hair(color.line2),
   whiteSpace: 'nowrap',
 });
-p('td', { padding: '4px 8px 4px 0', borderBottom: hair(color.line), verticalAlign: 'top' });
+/* 提示词里的表格是盘面数据（「廉贞(利), 天府(庙)」），中文只在空格与标点处换行，星曜名不被拆开。 */
+p('td', { padding: '4px 8px 4px 0', borderBottom: hair(color.line), verticalAlign: 'top', wordBreak: 'keep-all' });
+/* 单元格至少约五个字宽：「103-112」这类区间不被拆开；各列加起来放不下时表格横向滚动。 */
+p('th, td', { minWidth: '5em' });
 
 /* ── 内容页正文（设计规范第 14 节） ── */
 
@@ -105,7 +121,7 @@ export const prose = style({
   color: color.fg,
 });
 
-const r = (sel: string, rule: Parameters<typeof globalStyle>[1]) => globalStyle(`${prose} ${sel}`, rule);
+const r = within(prose);
 r('p', { margin: '1em 0' });
 r('h2', {
   fontFamily: font.serif,
@@ -161,12 +177,7 @@ r('th', {
 });
 r('td', { padding: '10px 16px 10px 0', borderBottom: hair(color.line), verticalAlign: 'top' });
 r('td code', { whiteSpace: 'nowrap', wordBreak: 'normal', fontSize: size.code });
+r('th, td', { minWidth: '5em' });
 
-/* 手机上表格逐行上下堆叠。 */
-r(`${tableWrap}`, { '@media': { [media.s]: { overflow: 'visible' } } });
-r('table, tbody, tr, td', { '@media': { [media.s]: { display: 'block', width: '100%' } } });
-r('thead', { '@media': { [media.s]: { display: 'none' } } });
-r('tr', { '@media': { [media.s]: { padding: '10px 0', borderBottom: hair(color.line) } } });
-r('td', { '@media': { [media.s]: { padding: 0, border: 0 } } });
-r('td + td', { '@media': { [media.s]: { marginTop: 4 } } });
+/* 手机上表格保持行列：单元格照常换行，放不下时表格在外层容器里横向滚动，页面本身不横向溢出。 */
 r('td code', { '@media': { [media.s]: { whiteSpace: 'normal', wordBreak: 'break-all' } } });

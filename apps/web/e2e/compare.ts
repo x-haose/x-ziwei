@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { chromium } from '@playwright/test';
+import { stubAnalytics } from './test.ts';
 
 /**
  * 与对照稿并排截图：左边是 `docs/design/mockup.html` 的对应状态，右边是构建产物，
@@ -38,6 +39,7 @@ try {
   for (const width of [375, 768, 1024, 1440]) {
     for (const scheme of ['light', 'dark'] as const) {
       const context = await browser.newContext({ viewport: { width, height: width < 700 ? 812 : 900 }, colorScheme: scheme });
+      await stubAnalytics(context);
       const page = await context.newPage();
       for (const t of TARGETS) {
         const shots: Buffer[] = [];
