@@ -38,6 +38,14 @@ export class StorageUnavailableError extends Error {
   }
 }
 
+/** 本机的库比这一页的代码新（本站回退过版本，或这一页是更新之前打开的）：打不开，要刷新到新版本。 */
+export class StorageNewerError extends Error {
+  constructor(cause: unknown) {
+    super('本机知识包库的版本比这一页新', { cause });
+    this.name = 'StorageNewerError';
+  }
+}
+
 /** 浏览器给本站的存储空间满了，写入被拒绝；这次写入没有发生。 */
 export class StorageFullError extends Error {
   constructor(cause: unknown) {
@@ -167,7 +175,7 @@ export interface OpenEvents {
 }
 
 /**
- * 打开本机包库。浏览器不给用 IndexedDB 时报 `StorageUnavailableError`。
+ * 打开本机包库。浏览器不给用 IndexedDB 时报 `StorageUnavailableError`；库的版本比本页代码新时报 `StorageNewerError`。
  * 本连接收到升级请求时立即关闭，不挡别的标签页升级（见 `OpenEvents`）。
  */
 export async function openLibrary(events: OpenEvents): Promise<Library> {
@@ -192,6 +200,7 @@ export async function openLibrary(events: OpenEvents): Promise<Library> {
       },
     });
   } catch (err) {
+    if (err instanceof DOMException && err.name === 'VersionError') throw new StorageNewerError(err);
     throw new StorageUnavailableError(err);
   }
   return new Library(db);

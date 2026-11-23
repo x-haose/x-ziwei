@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_PACK_ID, DEFAULT_USE, type Use } from './library';
-import { LibraryConflictError, StorageUnavailableError, openLibrary } from './store';
+import { LibraryConflictError, StorageNewerError, StorageUnavailableError, openLibrary } from './store';
 
 /** 测试里只有一个连接，不会遇到版本协调。 */
 const NO_EVENTS = { onBlocked: () => undefined, onSuperseded: () => undefined };
@@ -136,6 +136,18 @@ describe('浏览器不给用 IndexedDB', () => {
 });
 
 describe('与其他标签页的版本协调', () => {
+  it('本机的库比本页代码新（本站回退过版本）时报 StorageNewerError，不当成存储不可用', async () => {
+    await new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open('xzw-knowledge', 50);
+      req.onsuccess = () => {
+        req.result.close();
+        resolve();
+      };
+      req.onerror = () => reject(req.error);
+    });
+    await expect(openLibrary(NO_EVENTS)).rejects.toBeInstanceOf(StorageNewerError);
+  });
+
   it('本连接收到更新版本的升级请求时立即关闭、通知本页；对方的升级得以完成', async () => {
     let superseded = 0;
     const lib = await openLibrary({ onBlocked: () => undefined, onSuperseded: () => superseded++ });

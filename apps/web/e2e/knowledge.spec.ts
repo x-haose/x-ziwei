@@ -365,7 +365,7 @@ test('别的标签页开着旧版本的库：提示关掉它们，排盘页提�
 
   await page.goto(SAMPLE);
   await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
-  await expect(page.getByText('挡住了本机知识包；释义暂用默认包')).toBeVisible();
+  await expect(page.getByText('本机知识包还没打开，释义暂用默认包')).toBeVisible();
   await page.getByRole('radio', { name: '原文' }).click();
   const preview = page.getByRole('region', { name: '提示词预览' });
   await expect(preview).toContainText('释义摘自知识包 iztro-docs 2026-08-19');
@@ -373,10 +373,10 @@ test('别的标签页开着旧版本的库：提示关掉它们，排盘页提�
 
   const other = await context.newPage();
   await other.goto('/zh/knowledge');
-  await expect(other.getByText('请关闭本站的其他标签页')).toBeVisible();
+  await expect(other.getByText('本机知识包还没打开')).toBeVisible();
 
   await old.evaluate(() => (window as unknown as { oldDb: IDBDatabase }).oldDb.close());
-  await expect(page.getByText('挡住了本机知识包；释义暂用默认包')).toHaveCount(0);
+  await expect(page.getByText('本机知识包还没打开，释义暂用默认包')).toHaveCount(0);
   await expect(other.getByRole('button', { name: '选择文件' })).toBeEnabled({ timeout: 20000 });
 });
 
@@ -398,4 +398,77 @@ test('别的标签页把库升到更新的版本：本页让出连接并提示�
   expect(upgraded).toBe(99);
   await expect(page.getByText('请刷新这一页')).toBeVisible();
   await expect(page.getByRole('button', { name: '选择文件' })).toBeDisabled();
+});
+
+test('本机的库比这一页新（本站回退过版本）：提示刷新，不说成存储不可用', async ({ page }) => {
+  await page.goto('/zh/install');
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open('xzw-knowledge', 50);
+        req.onsuccess = () => {
+          req.result.close();
+          resolve();
+        };
+        req.onerror = () => reject(req.error);
+      }),
+  );
+  await page.goto('/zh/knowledge');
+  await expect(page.getByText('请刷新这一页')).toBeVisible();
+  await expect(page.getByText('这个浏览器不让本页存数据')).toHaveCount(0);
+});
+
+test('需要改的包移出组合时写回失败：只试一次并写明原因，不反复重试', async ({ page }) => {
+  await openPage(page);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open('xzw-knowledge');
+        req.onsuccess = () => {
+          const tx = req.result.transaction(['packs', 'state'], 'readwrite');
+          const raw = { schema: 1, id: 'old', version: '1', language: 'zh-CN', extends: 'iztro-docs', source: { name: '旧包' }, stars: { ziweiMjj: { intro: '旧。' } } };
+          tx.objectStore('packs').put({ id: 'old', raw, importedAt: 1 });
+          tx.objectStore('state').put({ mode: 'stack', stack: ['old'], whole: 'iztro-docs', wholeStack: [] }, 'use');
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+  );
+  // 让本页往生效组合的每次写入都以「存满了」失败，并数一数试了几次。
+  await page.addInitScript(() => {
+    const w = window as unknown as { statePuts: number };
+    w.statePuts = 0;
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore['put']>) {
+      if (this.name !== 'state') return put.apply(this, args);
+      w.statePuts++;
+      throw new DOMException('Quota exceeded', 'QuotaExceededError');
+    };
+  });
+  await page.reload();
+  await expect(page.getByRole('status').filter({ hasText: '没能保存：这台设备给本站的存储空间满了' })).toBeVisible();
+  await expect(row(page, 'old')).toContainText('需要改');
+  await page.waitForTimeout(2000);
+  expect(await page.evaluate(() => (window as unknown as { statePuts: number }).statePuts)).toBe(1);
+});
+
+test('底包需要改的整包上不能导入覆盖包', async ({ page }) => {
+  await openPage(page);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open('xzw-knowledge');
+        req.onsuccess = () => {
+          const tx = req.result.transaction('packs', 'readwrite');
+          const raw = { schema: 1, id: 'school', version: '1', language: 'zh-CN', source: { name: '某门派' }, stars: { ziweiMjj: { intro: '旧。' } } };
+          tx.objectStore('packs').put({ id: 'school', raw, importedAt: 1 });
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+  );
+  await page.reload();
+  await expect(row(page, 'school')).toContainText('需要改');
+  await paste(page, { ...overlay('on-school', '门内笔记', '门内又说。'), extends: 'school' });
+  await expect(page.locator('[aria-live="polite"]').filter({ hasText: '没能导入' })).toContainText('底包 school 需要先改好');
 });

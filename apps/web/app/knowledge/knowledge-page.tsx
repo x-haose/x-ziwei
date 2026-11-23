@@ -61,6 +61,7 @@ function UsePanel({
   packs,
   defaultPack,
   blocked,
+  brokenIds,
   onChange,
 }: {
   t: Messages;
@@ -69,6 +70,8 @@ function UsePanel({
   defaultPack: Pack;
   /** 存储不可用或读库失败：组合改不了，只有默认包。 */
   blocked: boolean;
+  /** 「需要改」的包（`packs` 里已不含它们）：基于它们的覆盖包要等底包改好才能叠加。 */
+  brokenIds: ReadonlySet<string>;
   /** 改组合：传入由库里此刻的组合算出新组合的函数（见 `updateUse`）。 */
   onChange: (next: (use: Use) => Use) => void;
 }) {
@@ -98,8 +101,10 @@ function UsePanel({
   // 叠加模式下，基于本机整包的覆盖包要到整包切换里选那个整包才能叠加。
   const onWhole = (p: Pack) => p.extends !== null && p.extends !== DEFAULT_PACK_ID;
   const elsewhere = use.mode === 'stack' ? packs.filter((p) => onWhole(p) && packs.some((b) => b.id === p.extends)) : [];
-  // 底包已被删掉的覆盖包：留在本机，重新导入底包后才能叠加。
-  const orphans = packs.filter((p) => onWhole(p) && !packs.some((b) => b.id === p.extends));
+  // 底包已被删掉的覆盖包：留在本机，重新导入底包后才能叠加。底包「需要改」的另行说明。
+  const brokenBase = (p: Pack) => p.extends !== null && brokenIds.has(p.extends);
+  const baseBroken = packs.filter((p) => onWhole(p) && brokenBase(p));
+  const orphans = packs.filter((p) => onWhole(p) && !brokenBase(p) && !packs.some((b) => b.id === p.extends));
   // 整包模式选的是默认包时不叠加（叠加默认包用叠加模式）。
   const canLayer = use.mode === 'stack' || base.id !== DEFAULT_PACK_ID;
   return (
@@ -196,6 +201,7 @@ function UsePanel({
           ))}
         {elsewhere.length > 0 && <span>{fmt(u.otherBase, { names: elsewhere.map((p) => p.name).join(t.knowledge.diff.sep) })}</span>}
         {orphans.length > 0 && <span>{fmt(u.orphans, { names: orphans.map((p) => p.name).join(t.knowledge.diff.sep) })}</span>}
+        {baseBroken.length > 0 && <span>{fmt(u.baseBroken, { names: baseBroken.map((p) => p.name).join(t.knowledge.diff.sep) })}</span>}
       </p>
     </section>
   );
@@ -551,7 +557,7 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
           </Button>
         </p>
       )}
-      <UsePanel t={t} use={use} packs={usable} defaultPack={defaultPack} blocked={blocked} onChange={changeUse} />
+      <UsePanel t={t} use={use} packs={usable} defaultPack={defaultPack} blocked={blocked} brokenIds={new Set(broken.keys())} onChange={changeUse} />
       <div className={css.grid}>
         <PackList
           t={t}

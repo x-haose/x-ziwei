@@ -34,6 +34,7 @@ describe('本机包库的导入规则', () => {
     expect(libraryProblems({ id: 'a', extends: 'school' }, packs)).toEqual([]);
     expect(libraryProblems({ id: 'a', extends: 'nowhere' }, packs)).toEqual([{ code: 'extendsMissing', target: 'nowhere' }]);
     expect(libraryProblems({ id: 'a', extends: 'notes' }, packs)).toEqual([{ code: 'extendsOverlay', target: 'notes' }]);
+    expect(libraryProblems({ id: 'a', extends: 'school' }, packs, new Set(['school']))).toEqual([{ code: 'extendsBroken', target: 'school' }]);
   });
 });
 

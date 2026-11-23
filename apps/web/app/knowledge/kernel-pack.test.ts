@@ -43,9 +43,11 @@ describe('导入校验', () => {
     const r = checkImport(kernel, JSON.stringify({ ...overlay('notes', 'y'), extends: 'notes' }), [notes]);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors.map((p) => p.code).slice(0, 2)).toEqual(['idTaken', 'extendsOverlay']);
-    const noId = checkImport(kernel, JSON.stringify({ schema: 1, version: '1', language: 'zh-CN' }), []);
-    expect(noId.ok).toBe(false);
-    if (!noId.ok) expect(noId.errors.map((p) => (p.code === 'issue' ? p.issue.code : p.code))).toEqual(['required_missing']);
+    for (const id of [undefined, 5]) {
+      const r = checkImport(kernel, JSON.stringify({ schema: 1, id, version: '1', language: 'zh-CN' }), []);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.errors.map((p) => (p.code === 'issue' ? p.issue.code : p.code))).toEqual([id === undefined ? 'required_missing' : 'wrong_type']);
+    }
   });
 
   it('合格的覆盖包与整包通过', () => {
@@ -124,6 +126,15 @@ describe('旧版本导入、现在需要改的包', () => {
     const broken = brokenPacks(kernel, [ok, bad]);
     expect([...broken.keys()]).toEqual(['bad']);
     expect(broken.get('bad')?.map((i) => i.code)).toEqual(['unknown_key']);
+  });
+});
+
+describe('底包需要改', () => {
+  it('基于「需要改」的本机整包的覆盖包不能导入', () => {
+    const school = describePack({ schema: 1, id: 'school', version: '1', language: 'zh-CN', stars: { ziweiMjj: {} } }, 1);
+    const r = checkImport(kernel, JSON.stringify({ ...overlay('on-school', 'x'), extends: 'school' }), [school]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.errors.map((p) => p.code)).toContain('extendsBroken');
   });
 });
 

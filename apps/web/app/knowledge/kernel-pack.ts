@@ -107,9 +107,10 @@ export function checkImport(kernel: Kernel, text: string, packs: readonly Pack[]
   const warnings: ImportProblem[] = [];
   for (const issue of issues) (issue.level === 'error' ? errors : warnings).push({ code: 'issue', issue });
   const isObject = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed);
-  // 缺 id 内核已报（required_missing），本机包库的同一条不再重复列。
-  const idReported = issues.some((i) => i.code === 'required_missing' && i.path.length === 1 && i.path[0] === 'id');
-  const library = isObject ? libraryProblems(parsed as PackRaw, packs).filter((p) => !(p.code === 'idMissing' && idReported)) : [];
+  // id 上内核已报了问题（缺失、类型不对等）时，本机包库的「缺少 id」不再重复列。
+  const idReported = issues.some((i) => i.path.length === 1 && i.path[0] === 'id');
+  const broken = new Set(brokenPacks(kernel, packs).keys());
+  const library = isObject ? libraryProblems(parsed as PackRaw, packs, broken).filter((p) => !(p.code === 'idMissing' && idReported)) : [];
   errors.unshift(...library);
   return errors.length ? { ok: false, errors, warnings } : { ok: true, raw: parsed as PackRaw, warnings };
 }

@@ -247,13 +247,15 @@ export type LibraryProblem =
   | { code: 'idDefault' }
   | { code: 'idTaken'; id: string }
   | { code: 'extendsMissing'; target: string }
-  | { code: 'extendsOverlay'; target: string };
+  | { code: 'extendsOverlay'; target: string }
+  | { code: 'extendsBroken'; target: string };
 
 /**
  * 本机包库的导入规则：本机按 `id` 存包，`id` 必须是非空字符串且不与默认包、本机已有的包重复；
- * 覆盖包只能基于独立整包，`extends` 指向的包必须在本机（或是默认包）且自己不是覆盖包。
+ * 覆盖包只能基于独立整包，`extends` 指向的包必须在本机（或是默认包）、自己不是覆盖包，且不在 `broken` 里
+ * （「需要改」的整包不能生效，基于它的覆盖包也用不上）。`broken` 由排盘内核的校验得出，没有内核时（存库事务里）传空。
  */
-export function libraryProblems(raw: PackRaw, packs: readonly Pack[]): LibraryProblem[] {
+export function libraryProblems(raw: PackRaw, packs: readonly Pack[], broken: ReadonlySet<string> = new Set()): LibraryProblem[] {
   const out: LibraryProblem[] = [];
   const id = str(raw.id);
   if (!id) out.push({ code: 'idMissing' });
@@ -264,6 +266,7 @@ export function libraryProblems(raw: PackRaw, packs: readonly Pack[]): LibraryPr
     const base = packs.find((p) => p.id === target);
     if (!base) out.push({ code: 'extendsMissing', target });
     else if (base.extends !== null) out.push({ code: 'extendsOverlay', target });
+    else if (broken.has(target)) out.push({ code: 'extendsBroken', target });
   }
   return out;
 }

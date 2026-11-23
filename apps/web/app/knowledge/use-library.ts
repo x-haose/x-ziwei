@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import type { Pack, PackRaw, Use } from './library';
-import { type Library, type Snapshot, StorageUnavailableError, openLibrary } from './store';
+import { type Library, type Snapshot, StorageNewerError, StorageUnavailableError, openLibrary } from './store';
 
 /**
  * 本机知识包库在页面里的状态，知识包页与排盘页共用一份。改动一律经 `Library` 在读写事务里按库里此刻的数据校验并写入，
@@ -14,7 +14,7 @@ export type LibraryState =
   | { status: 'failed'; message: string }
   /** 别的标签页开着旧版本的连接，挡住了库的升级：关掉它们后会自动继续。 */
   | { status: 'blocked' }
-  /** 别的标签页把库升到了更新的版本，本页的连接已关闭：刷新后才能继续。 */
+  /** 别的标签页把库升到了更新的版本，本页的连接已关闭；或本机的库本来就比这一页的代码新。刷新后才能继续。 */
   | { status: 'superseded' }
   /** `repaired`：最近一次读库时从组合里移出的包（组合与包库对不上时，见 `Library.load`）。 */
   | { status: 'ready'; packs: Pack[]; use: Use; repaired: string[] };
@@ -67,6 +67,10 @@ async function load(): Promise<void> {
     opening = null;
     if (err instanceof StorageUnavailableError) {
       set({ status: 'unavailable' });
+      return;
+    }
+    if (err instanceof StorageNewerError) {
+      set({ status: 'superseded' });
       return;
     }
     console.error(err);

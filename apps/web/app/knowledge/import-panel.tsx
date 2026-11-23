@@ -41,6 +41,8 @@ export function problemText(p: Problem, t: Messages): { where: string; text: str
       return { where: w.extends, text: fmt(m.extendsMissing, { target: p.target }) };
     case 'extendsOverlay':
       return { where: w.extends, text: fmt(m.extendsOverlay, { target: p.target }) };
+    case 'extendsBroken':
+      return { where: w.extends, text: fmt(m.extendsBroken, { target: p.target }) };
     case 'full':
       return { where: w.storage, text: m.full };
     case 'storage':

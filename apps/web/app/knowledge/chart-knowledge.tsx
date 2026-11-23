@@ -22,9 +22,12 @@ export function useBrokenPacks(kernel: Kernel | null, lib: LibraryState): Map<st
   return useMemo(() => (kernel && lib.status === 'ready' ? brokenPacks(kernel, lib.packs) : new Map()), [kernel, lib]);
 }
 
+/** 本页已尝试写回移出的包组（排序后以换行连接）。放在模块里，组件重新挂载也不重复尝试。 */
+const retireAttempts = new Set<string>();
+
 /**
  * 生效组合里有「需要改」的包时（旧版本里导入、现在过不了校验），按删包的规则把它们移出组合并写回，提示一句。
- * 它们留在本机，可以查看、导出、删除。
+ * 它们留在本机，可以查看、导出、删除。同一组包只尝试一次，失败时如实提示原因（释义照样不用它们，见 `useActiveKnowledge`）。
  */
 export function useRetireBroken(lib: LibraryState, broken: ReadonlyMap<string, KnowledgeIssue[]>, t: Messages): void {
   const toast = useToast();
@@ -33,6 +36,10 @@ export function useRetireBroken(lib: LibraryState, broken: ReadonlyMap<string, K
     const u = lib.use;
     const referenced = [...broken.keys()].filter((id) => u.stack.includes(id) || u.wholeStack.includes(id) || u.whole === id);
     if (referenced.length === 0) return;
+    // 同一组包只写回一次：写回失败（如存满了）后库会重读、本 effect 会再跑，不能因此反复重试。
+    const attempt = referenced.toSorted().join('\n');
+    if (retireAttempts.has(attempt)) return;
+    retireAttempts.add(attempt);
     const names = referenced.map((id) => lib.packs.find((p) => p.id === id)?.name ?? id).join(t.knowledge.diff.sep);
     updateUse((now) => withoutPacks(now, referenced)).then(
       () => toast(fmt(t.knowledge.use.retired, { names })),
