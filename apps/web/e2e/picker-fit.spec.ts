@@ -1,4 +1,4 @@
-import { type Locator, expect, test } from '@playwright/test';
+import { type Locator, expect, test } from './test';
 
 /**
  * 选择器弹层在矮窗口里：弹层整个在视口内、内容区能滚到最后一项、选项文字不溢出各自的边框；

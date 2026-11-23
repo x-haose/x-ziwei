@@ -113,6 +113,16 @@
 
 - `ziwei.x-haose.com` 从 Vercel 项目 `x-ziwei` 切到正式站 Worker `x-ziwei-web`（构建命令 `pnpm build:production`，部署命令 `pnpm deploy:production`）。
 - 下线 `site/` 与它的 Vercel 项目：`site/content` 搬进 `apps/web` 并改内容源路径，AGENTS.md「站点」一节随之改写。
+- 隐私政策（`privacy.mdx` 与 `privacy.en.mdx`，改生效日期）按渠道分述，草稿：
+  - 适用范围：公开服务 `https://ziwei-mcp.x-haose.com`（插件、MCP 与 HTTP 接口）和网站 `https://ziwei.x-haose.com`。
+  - 「服务会收到什么」「怎么处理」两节不变，标题注明是插件、MCP 与 HTTP 接口；末尾加一句：服务不做访问统计。
+  - 「经手的第三方」：Cloudflare 一条改为「公开服务的网络代理；网站的托管与访问统计（Cloudflare Web Analytics）」；删去 Vercel。
+  - 「本站」一节改名「网站」，正文：
+    > 网站用 Cloudflare Web Analytics 汇总访问量、来源页面、浏览器与设备类型和页面加载速度。它只记录页面的路径，不使用 Cookie，不建立跨站的访客档案。网站不投放广告。
+    >
+    > 排盘用的生辰写在网址 `#` 之后：这部分只在你的浏览器里使用，不会发给服务器，也不进访问统计。最近排过的生辰与明暗主题只存在你浏览器的本地存储里，清除网站数据即删除。
+    >
+    > 站内搜索在浏览器里进行：网站下载一份搜索索引，搜索词不会发出。
 
 ## 暂缓
 

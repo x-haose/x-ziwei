@@ -7,6 +7,7 @@ import * as errorCss from './components/not-found.css';
 import { ToastProvider } from './components/toast';
 import { DEFAULT_LANG, HTML_LANG, langOfPath, languageAlternates } from './i18n/lang';
 import { rootRedirectScript } from './i18n/redirect';
+import { analyticsBeacon } from './lib/deploy';
 import { site } from './lib/site';
 import { themeBootScript } from './theme/theme';
 import './styles/global.css';
@@ -35,6 +36,7 @@ const restFontsScript = `(function(){var l=document.createElement("link");l.rel=
  * 接着是内联的关键字体 @font-face（首屏只等这些）与插入其余切片样式表的脚本。
  * `<html>` 的 `data-theme`、`data-pref` 由引导脚本在水合前写入，不经 React 渲染，
  * 所以 `suppressHydrationWarning` 只作用于这一层的属性差异。
+ * 部署目标带统计时，`<body>` 末尾是 Cloudflare Web Analytics 的统计脚本（不用 Cookie；生辰在 `#` 之后，不进统计）。
  * 404 等不是真实页面的地址不输出语言对照链接；对照链接用绝对地址，路径不带末尾斜杠
  * （预渲染时请求的是 `/zh/install/`，部署后的规范地址是 `/zh/install`）。
  */
@@ -45,6 +47,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const lang = langOfPath(pathname);
   const rest = lang ? pathname.slice(lang.length + 1).replace(/\/$/, '') : '';
   const htmlLang = useHtmlLang(HTML_LANG[lang ?? DEFAULT_LANG]);
+  const beacon = analyticsBeacon(site());
   return (
     <html lang={htmlLang} suppressHydrationWarning>
       <head>
@@ -67,6 +70,7 @@ export function Layout({ children }: { children: ReactNode }) {
         {children}
         <ScrollRestoration />
         <Scripts />
+        {beacon && <script defer {...beacon} />}
       </body>
     </html>
   );

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 
 /** 帮助页内容的唯一来源：仓库里的 site/content。按 meta 列出 slug，读各页 frontmatter 的标题。 */
 const CONTENT = path.resolve(import.meta.dirname, '../../../site/content');

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { SITES, type Site, type SiteName } from '../../app/lib/deploy.ts';
+import { SITES, type Site, type SiteName, WEB_ANALYTICS } from '../../app/lib/deploy.ts';
 
 /** 构建目录里记录本次产物部署目标的文件（在 `client/` 之外，不会被上传）。部署脚本据此核对（见 `deploy.ts`）。 */
 export const TARGET_FILE = 'deploy-target.json';
@@ -20,7 +20,7 @@ export async function postBuild({ buildDir, name }: { buildDir: string; name: Si
   for (const file of await listFiles(clientDir)) {
     if (!file.endsWith('.html')) continue;
     const full = path.join(clientDir, file);
-    await writeFile(full, withCsp(await readFile(full, 'utf8')));
+    await writeFile(full, withCsp(await readFile(full, 'utf8'), site));
   }
   await writeFile(path.join(clientDir, '_headers'), headersFile(site));
   await writeFile(path.join(buildDir, TARGET_FILE), `${JSON.stringify({ site: name })}\n`);
@@ -66,17 +66,19 @@ const REACT_ARIA_PRESS_STYLE = '@layer {\n  [data-react-aria-pressable] {\n    t
  * 一个页面的内容安全策略。内联脚本与样式逐段按 SHA-256 放行：主题引导、根路径跳转、插入字体样式表的脚本，
  * 以及 React Router 每页不同的水合数据与入口脚本；关键字体的 @font-face 样式与 React Aria 运行时插入的样式。
  * `'wasm-unsafe-eval'` 供排盘内核编译 WebAssembly；`style-src-attr 'unsafe-inline'` 供预渲染 HTML 里 React 写出的 `style` 属性。
+ * 部署目标带统计时另放行统计脚本的来源与它的上报地址（Cloudflare 文档「What do I need to add to my CSP」）。
  */
-export function contentSecurityPolicy(html: string): string {
+export function contentSecurityPolicy(html: string, site: Site): string {
   const { scripts, styles } = inlineBlocks(html);
+  const stats = site.analytics !== null;
   return [
     "default-src 'self'",
-    ["script-src 'self' 'wasm-unsafe-eval'", ...scripts.map(sha256)].join(' '),
+    ["script-src 'self' 'wasm-unsafe-eval'", ...(stats ? [WEB_ANALYTICS.scriptOrigin] : []), ...scripts.map(sha256)].join(' '),
     ["style-src 'self'", ...[...styles, REACT_ARIA_PRESS_STYLE].map(sha256)].join(' '),
     "style-src-attr 'unsafe-inline'",
     "img-src 'self'",
     "font-src 'self'",
-    "connect-src 'self'",
+    ["connect-src 'self'", ...(stats ? [WEB_ANALYTICS.reportOrigin] : [])].join(' '),
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self'",
@@ -90,10 +92,10 @@ const CHARSET = '<meta charSet="utf-8"/>';
  * 用 `<meta>` 而不是响应头：内联脚本每页不同（水合数据），404 页又会出现在任意地址上，按路径配响应头对不上；
  * `<meta>` 跟着文件走。`<meta>` 不支持的 `frame-ancestors` 放在 `_headers` 里。
  */
-export function withCsp(html: string): string {
+export function withCsp(html: string, site: Site): string {
   const at = html.indexOf(CHARSET);
   if (at < 0) throw new Error('页面里没有字符集声明，CSP 无处插入');
-  const meta = `<meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicy(html)}"/>`;
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicy(html, site)}"/>`;
   const end = at + CHARSET.length;
   return html.slice(0, end) + meta + html.slice(end);
 }

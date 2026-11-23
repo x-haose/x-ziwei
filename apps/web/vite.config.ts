@@ -6,16 +6,13 @@ import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 import { fumadocsMdx } from 'fumadocs-mdx/vite';
 import remarkCjkFriendly from 'remark-cjk-friendly';
 import { defineConfig } from 'vite';
-import { type Site, siteOf } from './app/lib/deploy.ts';
+import { DEV_SITE, siteOf } from './app/lib/deploy.ts';
 import { fontsPlugin } from './scripts/fonts/plugin.ts';
 import { rehypeCodeMeta } from './scripts/mdx/rehype-code-meta.ts';
 
 const wasm = createRequire(import.meta.url).resolve('x-iztro/x_iztro.wasm');
 
 const root = fileURLToPath(new URL('.', import.meta.url));
-
-/** 开发服务器：页面里的绝对地址指向本机，不允许收录。 */
-const DEV_SITE: Site = { origin: 'http://localhost:5173', indexable: false };
 
 export default defineConfig(({ command }) => ({
   define: {

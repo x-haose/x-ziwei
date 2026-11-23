@@ -1,4 +1,4 @@
-import { type Page, expect, test } from '@playwright/test';
+import { type Page, expect, stubAnalytics, test } from './test';
 
 /** 收集页面的控制台错误、警告与未捕获异常；测试结束时断言为空。 */
 function watchConsole(page: Page): string[] {
@@ -71,6 +71,7 @@ for (const [locale, lang] of [
 ] as const) {
   test(`根路径按浏览器语言跳转：${locale} → /${lang}`, async ({ browser }) => {
     const context = await browser.newContext({ locale });
+    await stubAnalytics(context);
     const page = await context.newPage();
     await page.goto('/');
     await expect(page).toHaveURL(`/${lang}`);

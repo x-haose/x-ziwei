@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 
 /** 金标里的一张盘：每宫的地支、宫名与主星（见文件里的 source）。 */
 const gold = JSON.parse(readFileSync(path.join(import.meta.dirname, 'fixtures', 'gold-chart.json'), 'utf8')) as {
