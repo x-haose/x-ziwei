@@ -37,8 +37,14 @@ describe('内核提供的农历', () => {
     expect(cal.toSolar({ year: 2000, month: 7, leap: false, day: 30 })).toBeNull();
   });
 
+  it('2023 年闰二月：闰月初一与公历互换', () => {
+    expect(cal.toSolar({ year: 2023, month: 2, leap: true, day: 1 })).toEqual({ year: 2023, month: 3, day: 22 });
+    expect(cal.toLunar({ year: 2023, month: 3, day: 22 })).toEqual({ year: 2023, month: 2, leap: true, day: 1 });
+  });
+
   it('年份干支', () => {
     expect(cal.yearGanzhi(2000)).toBe('庚辰');
+    expect(cal.yearGanzhi(2024)).toBe('甲辰');
     expect(cal.yearGanzhi(2026)).toBe('丙午');
   });
 });

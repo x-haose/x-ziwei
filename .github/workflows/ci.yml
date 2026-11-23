@@ -64,9 +64,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       # 端到端测试按测试站的形态断言（禁止收录、测试站域名）。
-      - run: pnpm build
-        env:
-          XZW_SITE: beta
+      - run: pnpm build:beta
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm e2e
 

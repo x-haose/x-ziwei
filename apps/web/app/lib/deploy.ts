@@ -14,8 +14,15 @@ export const SITES = {
   beta: { origin: 'https://ziwei-beta.x-haose.com', indexable: false },
 } as const satisfies Record<string, Site>;
 
-/** 按 `XZW_SITE` 的取值找部署目标；没设或取值不认识时报错，不猜。 */
-export function siteOf(name: string | undefined): Site {
-  if (name && Object.hasOwn(SITES, name)) return SITES[name as keyof typeof SITES];
+export type SiteName = keyof typeof SITES;
+
+/** 核对 `XZW_SITE` 的取值；没设或取值不认识时报错，不猜。 */
+export function siteNameOf(name: string | undefined): SiteName {
+  if (name !== undefined && Object.hasOwn(SITES, name)) return name as SiteName;
   throw new Error(`构建须设环境变量 XZW_SITE 为 ${Object.keys(SITES).join(' 或 ')}，实际为 ${JSON.stringify(name)}`);
+}
+
+/** 按 `XZW_SITE` 的取值找部署目标。 */
+export function siteOf(name: string | undefined): Site {
+  return SITES[siteNameOf(name)];
 }

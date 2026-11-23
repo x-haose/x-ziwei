@@ -85,7 +85,7 @@ x-ziwei：让 AI 解读紫微斗数的产品。排盘、运限、格局判定由
 
 ## 站点
 
-`site/` 是现行的说明站（安装、工具、知识包、接口、隐私与条款等，属于产品帮助，不是开发文档），部署在 `https://ziwei.x-haose.com`：Vercel 项目 `x-ziwei`，Root Directory 为 `site`，推到 `main` 即发布。它与服务分开部署，改站点不需要重新构建服务。产品站 `apps/web` 已经内置同样的帮助页，构建时直接读 `site/content`（内容单一来源，不复制）；上线时 `apps/web` 接管这个域名，再把 `site/content` 搬进 `apps/web` 并下线 `site/`。所以 `site/` 不再加新功能，只维护内容的正确性，改内容只改 `site/content`，两站同时生效。产品站部署在 Cloudflare Workers（静态资源加一个 Worker，配置 `apps/web/wrangler.jsonc`；测试站 `ziwei-beta.x-haose.com`），构建须设 `XZW_SITE=production` 或 `beta`，决定绝对地址与是否禁止收录。真正的开发文档是 x-iztro 的文档站。排盘库的文档站是另一个 Vercel 项目 `x-iztro`（仓库 `x-haose/x-iztro`，目录 `docs`，域名 `x-iztro.x-haose.com`）。
+`site/` 是现行的说明站（安装、工具、知识包、接口、隐私与条款等，属于产品帮助，不是开发文档），部署在 `https://ziwei.x-haose.com`：Vercel 项目 `x-ziwei`，Root Directory 为 `site`，推到 `main` 即发布。它与服务分开部署，改站点不需要重新构建服务。产品站 `apps/web` 已经内置同样的帮助页，构建时直接读 `site/content`（内容单一来源，不复制）；上线时 `apps/web` 接管这个域名，再把 `site/content` 搬进 `apps/web` 并下线 `site/`。所以 `site/` 不再加新功能，只维护内容的正确性，改内容只改 `site/content`，两站同时生效。产品站部署在 Cloudflare Workers（静态资源加一个 Worker，配置 `apps/web/wrangler.jsonc`；测试站 `ziwei-beta.x-haose.com`），构建与部署成对使用 `pnpm build:beta` 与 `pnpm deploy:beta`（正式站为 `:production`）：构建目标决定绝对地址与是否禁止收录，部署脚本先核对产物的构建目标与要部署的一致。真正的开发文档是 x-iztro 的文档站。排盘库的文档站是另一个 Vercel 项目 `x-iztro`（仓库 `x-haose/x-iztro`，目录 `docs`，域名 `x-iztro.x-haose.com`）。
 
 - 技术栈照抄 x-iztro 文档站：Next.js + Fumadocs + Tailwind，版本见 `site/package.json`。中文是默认语言，`content/` 里无后缀为中文，`.en.mdx` 为英文，两种语言成对维护。
 - 页面直接挂在语言段之下（`/zh/install`），不带 `/docs`。`/{lang}/docs/*` 是排盘库文档的旧地址，永久跳转到 `https://x-iztro.x-haose.com`；旧的 MCP 说明页跳到本站安装页。

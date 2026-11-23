@@ -1,13 +1,19 @@
 import { createHash } from 'node:crypto';
 import { readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { Site } from '../../app/lib/deploy.ts';
+import { SITES, type Site, type SiteName } from '../../app/lib/deploy.ts';
+
+/** 构建目录里记录本次产物部署目标的文件（在 `client/` 之外，不会被上传）。部署脚本据此核对（见 `deploy.ts`）。 */
+export const TARGET_FILE = 'deploy-target.json';
 
 /**
  * 构建之后、部署之前对 `build/client` 的处理（由 `react-router.config.ts` 的 `buildEnd` 调用）。
  * 产物按 Cloudflare Workers 静态资源的约定准备：`404.html`、`_headers`；`_redirects` 是 `public/` 里的静态文件。
+ * 最后在 `build/` 下写入部署目标。
  */
-export async function postBuild({ clientDir, site }: { clientDir: string; site: Site }): Promise<void> {
+export async function postBuild({ buildDir, name }: { buildDir: string; name: SiteName }): Promise<void> {
+  const site = SITES[name];
+  const clientDir = path.join(buildDir, 'client');
   const files = await listFiles(clientDir);
   await dropResourceData(clientDir, files);
   await rename(path.join(clientDir, '__spa-fallback.html'), path.join(clientDir, '404.html'));
@@ -17,6 +23,7 @@ export async function postBuild({ clientDir, site }: { clientDir: string; site: 
     await writeFile(full, withCsp(await readFile(full, 'utf8')));
   }
   await writeFile(path.join(clientDir, '_headers'), headersFile(site));
+  await writeFile(path.join(buildDir, TARGET_FILE), `${JSON.stringify({ site: name })}\n`);
 }
 
 /** 目录下全部文件的相对路径（`/` 分隔）。 */

@@ -1,6 +1,7 @@
 // 网页的 Cloudflare Worker：`build/client` 作为静态资源，`worker/index.ts` 只处理静态文件做不到的几件事。
 // 顶层是正式站（ziwei.x-haose.com，上线时在控制台绑定域名）；`--env beta` 是测试站 x-ziwei-web-beta。
-// 两者的构建须分别设 XZW_SITE=production / beta（见 app/lib/deploy.ts），决定绝对地址与是否禁止收录。
+// 构建与部署成对使用：pnpm build:beta + pnpm deploy:beta，pnpm build:production + pnpm deploy:production；
+// 部署脚本先核对产物的构建目标（见 scripts/deploy/deploy.ts），不直接调 wrangler deploy。
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "x-ziwei-web",

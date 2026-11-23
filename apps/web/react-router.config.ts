@@ -1,6 +1,5 @@
-import path from 'node:path';
 import type { Config } from '@react-router/dev/config';
-import { siteOf } from './app/lib/deploy.ts';
+import { siteNameOf } from './app/lib/deploy.ts';
 import { postBuild } from './scripts/deploy/post-build.ts';
 
 /**
@@ -12,6 +11,5 @@ import { postBuild } from './scripts/deploy/post-build.ts';
 export default {
   ssr: false,
   prerender: ({ getStaticPaths }) => getStaticPaths(),
-  buildEnd: ({ reactRouterConfig }) =>
-    postBuild({ clientDir: path.join(reactRouterConfig.buildDirectory, 'client'), site: siteOf(process.env.XZW_SITE) }),
+  buildEnd: ({ reactRouterConfig }) => postBuild({ buildDir: reactRouterConfig.buildDirectory, name: siteNameOf(process.env.XZW_SITE) }),
 } satisfies Config;

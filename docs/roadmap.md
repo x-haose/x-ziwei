@@ -55,14 +55,14 @@
 
 ## 1. x-iztro 的 JS 包
 
-代码完成，经独立审查与三轮复审，在 x-iztro 的 dev 分支，待随 x-iztro 0.7.0 发布。`wasm32-unknown-unknown` + 现有 alloc/free 与 JSON 协议（可行性验证见 x-iztro 的 `docs/plan/2026-11-11-js-wasm-feasibility.md`），能力与 Python、Go 绑定一致，读同一批金标与快照。发布到 npm 需要维护者的 npm 账号。
+已发布到 npm：0.7.0 起提供，0.8.0 加了历法查询（`calendar`）。`wasm32-unknown-unknown` + 现有 alloc/free 与 JSON 协议（可行性验证见 x-iztro 的 `docs/plan/2026-11-11-js-wasm-feasibility.md`），能力与 Python、Go 绑定一致，读同一批金标与快照。
 
 ## 2. 网页第一期：排盘与提示词
 
-已完成（`apps/web`，排盘内核为 npm 包 x-iztro 0.7.0）：路由与语言前缀、设计令牌与明暗主题、字体管线、首页（内核排出的示例盘与引线）、排盘页、生辰表单（公历与农历含闰月）、命盘（十二宫、中宫、外圈刻度、三方四正连线、宫内收起、读数区）、四层运限、提示词（勾选各段、渲染与原文、复制原文与链接）、分享链接与最近排过、方法页（内容页模板）。
+已完成（`apps/web`，排盘内核为 npm 包 x-iztro 0.8.0）：路由与语言前缀、设计令牌与明暗主题、字体管线、首页（内核排出的示例盘与引线）、排盘页、生辰表单（公历与农历含闰月）、命盘（十二宫、中宫、外圈刻度、三方四正连线、宫内收起、读数区）、四层运限、提示词（勾选各段、渲染与原文、复制原文与链接）、分享链接与最近排过、解读方法页（内容页模板）。
 
 - 内核在浏览器里装载：页面打开后在 effect 里取 wasm（约 1.7 MB，gzip 约 0.5 MB），边下载边计数显示进度；失败显示原因并可重试。预渲染不触发装载。
-- 农历：月份、闰月、月长、公历农历互换与年份干支都取自内核（流月一览、按日排盘、按农历排盘、流年干支），本仓库不做农历换算。x-iztro 没有直接的历法查询入口，这里借参照盘的流月一览取月长；在 x-iztro 补上历法入口后改用它。
+- 农历：月份、闰月、月长、公历农历互换与年份干支都取自内核 x-iztro 0.8.0 的历法查询（`calendar.lunarMonths`、`solarToLunar`、`lunarToSolar`、`lunarYearPillar`），本仓库不做农历换算。
 - 盘面文字一律按 zh-CN 排，英文界面上的盘也是中文，与 reading.en.md「盘面是中文」的说明一致。
 - 八字反推这一期用不到，没有做，也没有建 Worker。
 - 根路径 `/`：纯静态站与桌面端都没有服务端读 `Accept-Language`，由预渲染页 `<head>` 里的脚本在绘制前按 `navigator.languages` 跳到 `/zh` 或 `/en`（找不到受支持的语言去中文），禁用脚本时页面上是两种语言的入口。比较过：托管平台按请求头改写（只在 Vercel 上有，桌面端没有）、一律去中文（忽略浏览器语言）。
@@ -111,7 +111,7 @@
 
 上线时做：
 
-- `ziwei.x-haose.com` 从 Vercel 项目 `x-ziwei` 切到正式站 Worker `x-ziwei-web`（构建设 `XZW_SITE=production`）。
+- `ziwei.x-haose.com` 从 Vercel 项目 `x-ziwei` 切到正式站 Worker `x-ziwei-web`（构建命令 `pnpm build:production`，部署命令 `pnpm deploy:production`）。
 - 下线 `site/` 与它的 Vercel 项目：`site/content` 搬进 `apps/web` 并改内容源路径，AGENTS.md「站点」一节随之改写。
 
 ## 暂缓
