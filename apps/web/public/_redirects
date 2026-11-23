@@ -1,0 +1,8 @@
+# x-iztro 的文档搬到了自己的域名，本站 /{lang}/docs/* 的旧地址永久跳过去，路径不变。
+# 例外是原来的 MCP 说明页：它讲的是本服务，内容在本站的安装页。规则自上而下取第一条匹配。
+/zh/docs/guide/mcp /zh/install 301
+/en/docs/guide/mcp /en/install 301
+/zh/docs https://x-iztro.x-haose.com/zh/docs 301
+/en/docs https://x-iztro.x-haose.com/en/docs 301
+/zh/docs/* https://x-iztro.x-haose.com/zh/docs/:splat 301
+/en/docs/* https://x-iztro.x-haose.com/en/docs/:splat 301

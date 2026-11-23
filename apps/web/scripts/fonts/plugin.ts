@@ -7,7 +7,7 @@ const RESOLVED = `\0${ID}`;
 
 /**
  * 在 Vite 启动（开发服务器与构建）时生成字体切片，并以虚拟模块 `virtual:xzw-fonts`
- * 把样式表与预载文件的地址交给页面（类型见 `app/virtual-fonts.d.ts`）。
+ * 把内联的关键 @font-face、其余切片的样式表地址与预载文件交给页面（类型见 `app/virtual-fonts.d.ts`）。
  *
  * 切片写进 `public/fonts/`，由 Vite 原样拷进产物；输入没变时直接复用上次的结果。
  * 一次构建里客户端与预渲染两轮共用同一个结果。
@@ -25,8 +25,8 @@ export function fontsPlugin({ root }: { root: string }): Plugin {
     },
     async load(id) {
       if (id !== RESOLVED) return null;
-      const { css, preload } = await ensure();
-      return `export default ${JSON.stringify({ css, preload })};`;
+      const { critical, rest, preload } = await ensure();
+      return `export default ${JSON.stringify({ critical, rest, preload })};`;
     },
   };
 }

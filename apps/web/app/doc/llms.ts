@@ -1,15 +1,15 @@
 import { structure } from 'fumadocs-core/mdx-plugins/remark-structure';
-import { createI18nSearchAPI } from 'fumadocs-core/search/server';
+import { createSearchAPI } from 'fumadocs-core/search/server';
 import { type Lang, LANGS, localePath } from '../i18n/lang';
 import { MESSAGES } from '../i18n/messages';
 import { READING_METHOD } from '../prompt/method';
 import { docNav } from './nav';
-import { docsI18n, source } from './source';
+import { source } from './source';
 
 /**
  * 给模型读的文本：每页的 Markdown 原文、各语言的索引与全文，以及站内搜索的索引。
- * 只在构建时（预渲染资源路由）执行。帮助页的原文是 fumadocs-mdx 处理后的 Markdown（MDX 组件已转成 Markdown），
- * 方法页的原文就是 `reading.<lang>.md`。
+ * 只在构建时（预渲染资源路由）执行。帮助页的原文是 fumadocs-mdx 处理后的 Markdown：普通 Markdown 原样保留，
+ * 内容里的 MDX 组件标签（`<Callout>`、`<Steps>` 等）也原样留在文中；方法页的原文就是 `reading.<lang>.md`。
  */
 
 /** 某页的 Markdown 原文：标题与地址、导语、正文。`id` 是 slug（方法页为 method）。 */
@@ -57,20 +57,18 @@ export async function llmsFull(lang: Lang): Promise<string> {
 }
 
 /**
- * 站内搜索：构建时把全部内容页（两种语言）编成一份索引，浏览器下载后在本地检索。
+ * 某个语言的站内搜索：构建时把该语言的全部内容页编成一份索引，浏览器下载后在本地检索。
  * 默认的多语言分词按 Unicode 词边界切分，中文同样可搜。
  */
-export function searchServer() {
-  return createI18nSearchAPI('advanced', {
-    i18n: docsI18n,
-    indexes: LANGS.flatMap((lang) => [
+export function searchServer(lang: Lang) {
+  return createSearchAPI('advanced', {
+    indexes: [
       {
         id: localePath(lang, '/method'),
         url: localePath(lang, '/method'),
         title: MESSAGES[lang].doc.methodTitle,
         description: MESSAGES[lang].method.lede,
         structuredData: structure(READING_METHOD[lang]),
-        locale: lang,
       },
       ...source.getPages(lang).map((page) => ({
         id: page.url,
@@ -78,8 +76,7 @@ export function searchServer() {
         title: page.data.title,
         description: page.data.description,
         structuredData: page.data.structuredData,
-        locale: lang,
       })),
-    ]),
+    ],
   });
 }

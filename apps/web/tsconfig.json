@@ -1,6 +1,6 @@
 {
   "include": ["**/*", ".react-router/types/**/*"],
-  "exclude": ["node_modules", "build", "test-results", "playwright-report"],
+  "exclude": ["node_modules", "build", "test-results", "playwright-report", "worker/index.ts"],
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ES2024"],
     "types": ["node", "vite/client"],

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useLocation } from 'react-router';
 import { DocPage, type DocTocItem } from '../doc/doc-page';
 import { mdxComponents } from '../doc/mdx';
@@ -18,9 +19,13 @@ export default function HelpRoute() {
   const { pathname } = useLocation();
   const page = helpPageOf(pathname);
   const Body = page.data.body;
-  const toc: DocTocItem[] = page.data.toc
-    .filter((item) => item.depth === 2 || item.depth === 3)
-    .map((item) => ({ id: decodeURIComponent(item.url.replace(/^#/, '')), depth: item.depth as 2 | 3, title: item.title }));
+  const toc = useMemo<DocTocItem[]>(
+    () =>
+      page.data.toc
+        .filter((item) => item.depth === 2 || item.depth === 3)
+        .map((item) => ({ id: decodeURIComponent(item.url.replace(/^#/, '')), depth: item.depth as 2 | 3, title: item.title })),
+    [page],
+  );
   return (
     <DocPage current={page.slugs.join('/')} title={page.data.title} lede={page.data.description} toc={toc}>
       <div className={markdownCss.prose}>

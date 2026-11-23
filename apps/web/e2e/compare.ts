@@ -6,7 +6,7 @@ import { chromium } from '@playwright/test';
  * 与对照稿并排截图：左边是 `docs/design/mockup.html` 的对应状态，右边是构建产物，
  * 宽度 375、768、1024、1440，明暗两套，写进 `e2e/shots/`。用于逐项走查，不做像素断言。
  *
- * 先 `pnpm build`，再 `node e2e/compare.ts`（会自己起静态服务器）。
+ * 先 `XZW_SITE=beta pnpm build`，再 `node e2e/compare.ts`（会自己起 `wrangler dev`）。
  */
 const here = import.meta.dirname;
 const mockup = `file://${path.resolve(here, '../../../docs/design/mockup.html')}?clean`;
@@ -22,8 +22,16 @@ const TARGETS = [
 ];
 
 const { spawn } = await import('node:child_process');
-const server = spawn(process.execPath, [path.join(here, 'serve.ts')], { stdio: 'ignore', env: { ...process.env, PORT: '4174' } });
-await new Promise((r) => setTimeout(r, 500));
+const server = spawn(path.resolve(here, '../node_modules/.bin/wrangler'), ['dev', '--port', '4174'], {
+  cwd: path.resolve(here, '..'),
+  stdio: 'ignore',
+  env: { ...process.env, WRANGLER_SEND_METRICS: 'false' },
+});
+for (let i = 0; ; i++) {
+  if (await fetch('http://localhost:4174/zh').then((r) => r.ok, () => false)) break;
+  if (i === 60) throw new Error('wrangler dev 60 秒内没有就绪');
+  await new Promise((r) => setTimeout(r, 1000));
+}
 
 const browser = await chromium.launch();
 try {

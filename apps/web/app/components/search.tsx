@@ -14,6 +14,7 @@ import {
 } from 'react-aria-components';
 import { fmt } from '../i18n/messages';
 import { useLang, useMessages } from '../i18n/use-lang';
+import { visuallyHidden } from './controls.css';
 import { CloseIcon } from './icons';
 import * as css from './search.css';
 
@@ -34,21 +35,29 @@ function SearchIcon() {
 }
 
 /**
- * 搜索面板的内容：输入即在浏览器里检索构建时生成的索引（`/search.json`，第一次检索时下载），
- * 只搜当前语言。结果按页面分组，页面下列出命中的标题与段落；方向键在结果间移动，回车打开。
+ * 搜索面板的内容：输入即在浏览器里检索构建时生成的当前语言索引（`/{lang}/search.json`，第一次检索时下载）。
+ * 结果按页面分组，页面下列出命中的标题与段落（表格按行命中）；方向键在结果间移动，回车打开。
+ *
+ * 状态行常驻（读屏只播报已挂载的 live region 里的变化）：载入、无结果、失败时显示，
+ * 有结果时只给读屏念条数。
  */
 function SearchPanel({ close }: { close: () => void }) {
   const t = useMessages();
   const lang = useLang();
-  const { search, onSearchChange, isLoading, data, error } = useStaticSearch({ from: '/search.json', locale: lang });
+  const { search, onSearchChange, isLoading, data, error } = useStaticSearch({ from: `/${lang}/search.json` });
   useEffect(() => {
     if (error) console.error(error);
   }, [error]);
   const items = (data?.items ?? []).flatMap((it) => (it.type === 'table' ? it.rows : [it]));
-  let status: string | null = null;
+  let status = '';
+  let shown = true;
   if (error) status = fmt(t.search.failed, { reason: error.message });
   else if (search && isLoading && !data) status = t.search.loading;
   else if (search && data && items.length === 0) status = t.search.none;
+  else if (search && items.length > 0) {
+    status = items.length === 1 ? t.search.foundOne : fmt(t.search.found, { n: items.length });
+    shown = false;
+  }
   return (
     <Dialog className={css.dialog} aria-label={t.search.title}>
       <Autocomplete inputValue={search} onInputChange={onSearchChange}>
@@ -58,23 +67,20 @@ function SearchPanel({ close }: { close: () => void }) {
             <CloseIcon />
           </Button>
         </SearchField>
-        {status && (
-          <p className={css.note} role="status">
-            {status}
-          </p>
-        )}
+        <p className={status && shown ? css.note : visuallyHidden} role="status">
+          {status}
+        </p>
         {items.length > 0 && (
           <ListBox className={css.list} aria-label={t.search.results} items={items} onAction={close}>
-            {(item) => (
-              <ListBoxItem
-                id={item.id}
-                href={item.url}
-                textValue={plain(item.hastContent)}
-                className={[css.item, item.type === 'page' ? css.itemPage : item.type === 'heading' ? css.itemHeading : css.itemText].join(' ')}
-              >
-                {plain(item.hastContent)}
-              </ListBoxItem>
-            )}
+            {(item) => {
+              const text = plain(item.hastContent);
+              const kind = item.type === 'page' ? css.itemPage : item.type === 'heading' ? css.itemHeading : css.itemText;
+              return (
+                <ListBoxItem id={item.id} href={item.url} textValue={text} className={`${css.item} ${kind}`}>
+                  {item.type === 'text' ? <span className={css.clamp}>{text}</span> : text}
+                </ListBoxItem>
+              );
+            }}
           </ListBox>
         )}
       </Autocomplete>

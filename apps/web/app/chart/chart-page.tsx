@@ -145,7 +145,16 @@ function BirthSummary({
 
 const DEFAULT_CHOICE: PromptChoice = { natal: true, know: true, year: true, decades: false, years: false };
 
-/** 已排好的盘：运限、盘、读数与提示词。换一张盘时整块重建（运限选择回到初始）。 */
+/** 提示词里用户自己填的部分：勾选的段落与问题。与哪张盘无关，换盘（含切换候选时辰）时保留。 */
+interface PromptInput {
+  choice: PromptChoice;
+  question: string;
+}
+
+/**
+ * 已排好的盘：运限、盘、读数与提示词。运限选择依赖这张盘（大限的划分随盘而变），
+ * 换一张盘时整块重建、回到初始；提示词的勾选与问题由页面持有，不随之清空。
+ */
 function ChartBody({
   kernel,
   lunar,
@@ -154,6 +163,8 @@ function ChartBody({
   today,
   t,
   lang,
+  input,
+  onInput,
 }: {
   kernel: Kernel;
   lunar: LunarCalendar;
@@ -162,11 +173,12 @@ function ChartBody({
   today: Today;
   t: Messages;
   lang: Lang;
+  input: PromptInput;
+  onInput: (next: PromptInput) => void;
 }) {
   const view = useChartView(kernel, chart, today);
   const { sel, layers, palaces } = view;
-  const [choice, setChoice] = useState<PromptChoice>(DEFAULT_CHOICE);
-  const [question, setQuestion] = useState('');
+  const { choice, question } = input;
   const knowledge = useMemo(() => kernel.KnowledgePack.builtin('zh-CN'), [kernel]);
   const decadals = useMemo(() => chart.decadalList(), [chart]);
   const todayAge = nominalAge(chart, today.year);
@@ -237,11 +249,11 @@ function ChartBody({
         text={text}
         emptyText=""
         choice={choice}
-        onChoice={setChoice}
+        onChoice={(next) => onInput({ choice: next, question })}
         yearLabel={monthItem ? fmt(t.chart.checkMonth, { y: sel.year, month: monthLabel(t, monthItem) }) : fmt(t.chart.checkYear, { y: sel.year })}
         yearsLabel={fmt(t.chart.checkYears, { a: decadal.yearRange[0], b: decadal.yearRange[1] })}
         question={question}
-        onQuestion={setQuestion}
+        onQuestion={(next) => onInput({ choice, question: next })}
         questionHeading={questionHeading(lang)}
       />
     </>
@@ -268,6 +280,7 @@ export function ChartPage() {
   const hour = birth ? chartHour(birth) : null;
   const summaryRef = useRef<HTMLButtonElement>(null);
   const focusSummary = useRef(false);
+  const [promptInput, setPromptInput] = useState<PromptInput>({ choice: DEFAULT_CHOICE, question: '' });
   const [formOpen, setFormOpen] = useState(false);
   const reported = useRef('');
 
@@ -356,7 +369,18 @@ export function ChartPage() {
         {!birth && <RecentList state={recent} t={t} onOpen={(h) => navigate({ hash: h }, { replace: true, preventScrollReset: true })} />}
       </section>
       {chart && kernel && lunar && today && birth && hour !== null ? (
-        <ChartBody key={hash} kernel={kernel} lunar={lunar} chart={chart} birth={birth} today={today} t={t} lang={lang} />
+        <ChartBody
+          key={hash}
+          kernel={kernel}
+          lunar={lunar}
+          chart={chart}
+          birth={birth}
+          today={today}
+          t={t}
+          lang={lang}
+          input={promptInput}
+          onInput={setPromptInput}
+        />
       ) : (
         <>
           <Board

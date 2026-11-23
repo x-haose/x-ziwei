@@ -1,0 +1,29 @@
+// 网页的 Cloudflare Worker：`build/client` 作为静态资源，`worker/index.ts` 只处理静态文件做不到的几件事。
+// 顶层是正式站（ziwei.x-haose.com，上线时在控制台绑定域名）；`--env beta` 是测试站 x-ziwei-web-beta。
+// 两者的构建须分别设 XZW_SITE=production / beta（见 app/lib/deploy.ts），决定绝对地址与是否禁止收录。
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "x-ziwei-web",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-11-19",
+  // 只经自定义域名访问：workers.dev 与预览地址会成为可被收录的重复站点。
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./build/client",
+    "binding": "ASSETS",
+    // 预渲染的页面是 `zh/install/index.html`，规范地址是不带末尾斜杠的 `/zh/install`。
+    "html_handling": "drop-trailing-slash",
+    // 没有对应文件的地址返回 404 状态与 `404.html`（预渲染的 SPA 回退页，在浏览器里渲染 404 页面）。
+    "not_found_handling": "404-page",
+    // 带哈希的资源与图片直接由静态资源返回，其余请求先经 Worker（语言段之下的 Markdown 协商、无语言段地址的跳转）。
+    "run_worker_first": ["/*", "!/assets/*", "!/fonts/*", "!/img/*", "!/favicon.svg"]
+  },
+  "env": {
+    "beta": {
+      "workers_dev": false,
+      "preview_urls": false,
+      "routes": [{ "pattern": "ziwei-beta.x-haose.com", "custom_domain": true }]
+    }
+  }
+}

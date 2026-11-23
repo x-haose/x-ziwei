@@ -25,7 +25,8 @@
 | 分享链接 | 生辰放在 `#` 之后，自写 `useSyncExternalStore`；非法 hash 明确报错 | nuqs 不支持 hash |
 | 中文字体 | 只用 OFL 字体（思源宋、思源黑、Geist、Geist Mono），自托管同源；原文件按固定提交的地址下载并校验 SHA-256，不进仓库；构建时用 HarfBuzz（subset-font 2.9.0、harfbuzzjs 1.6.4）按 Google Fonts 的简体中文切片策略（googlefonts/nam-files）切片，首屏预载界面文案与盘面用字的关键子集；思源黑的许可证保留了字体名「Source」，切片改名 XZW Sans SC，版权与许可证字段保留；桌面复用同一份产物并附许可证 | 阿里普惠体、HarmonyOS Sans、MiSans、OPPO Sans 禁止转换或修改，方正、汉仪嵌入要书面授权；Google Fonts、jsDelivr 在大陆不可靠。cn-font-split 7.4.3（2026-11-23 实测）：安装脚本从 GitHub Release 下载原生库、不校验且失败被吞掉（`\|\| node -v`），产物丢掉 nameID 7、13、14、16（商标、许可证描述与网址），改用可控的 HarfBuzz 子集 |
 | 包管理 | pnpm 12.21.0（`packageManager` 固定）。现阶段 `apps/web` 是独立的 pnpm 项目，自带锁文件，不建根目录工作区；出现第二个 JS 应用或 `packages/*` 时再加 workspaces 与 catalog，不用 Turborepo | npm（依赖提升致未声明依赖可用）；bun。不建根工作区的理由：`site/` 是线上 Vercel 项目，用 npm 与 package-lock 构建，又正被 OpenAI 审核引用，根目录出现 pnpm 工作区会改变它的安装与构建；它随帮助页迁入产品站下线。共享包直接导出 TS 源码，没有可缓存的构建 |
-| 测试 | Vitest 5.1.1（含 browser mode 组件截图）、Playwright 1.65.1（跑静态产物）、`@wdio/tauri-service` 1.5.1（桌面冒烟） | Storybook 说不出专门防哪个问题，不加 |
+| 托管 | Cloudflare Workers 静态资源加一个 Worker（wrangler 4.166.0，配置 `apps/web/wrangler.jsonc`）；测试站 `ziwei-beta.x-haose.com`，正式站上线时从 Vercel 切过来 | 维护者定，不用 Pages、不用 Vercel。静态资源负责路由、`_headers`、`_redirects` 与 404 页；Worker 只做静态文件做不到的 `Accept: text/markdown` 协商与无语言段地址按 `Accept-Language` 跳转 |
+| 测试 | Vitest 5.1.1（含 browser mode 组件截图）、Playwright 1.65.1（经 `wrangler dev` 跑构建产物与 Worker）、`@wdio/tauri-service` 1.5.1（桌面冒烟） | Storybook 说不出专门防哪个问题，不加 |
 | 浏览器内对话 | AI SDK 7（ai 7.0.179、@ai-sdk/react 4.0.183） | 各厂商官方 SDK（工具循环要各写一遍）、直接 fetch |
 
 仓库结构：`apps/web` 独立安装（理由见上表包管理一行），`site/` 下线、出现共享包后根目录再加 pnpm workspace（成员 `apps/*`、`packages/*`）；`apps/web` 是第二个 Vercel 项目；`apps/desktop/src-tauri` 是独立的 Cargo 项目，不加入根 crate（Dockerfile 只拷根 crate，并入 workspace 会让服务端镜像构建失败）；`packages/*` 只放被两个以上应用用到的代码。
@@ -103,13 +104,15 @@
 产品站已内置帮助页，内容单一来源：`apps/web` 构建时直接读仓库里的 `site/content/*.mdx` 与 `meta.json`（fumadocs-mdx 15.6.4 的 Vite 插件编译，fumadocs-core 16.19.7 出页面树与搜索索引，2026-11-23 查），不复制文件；界面是产品站自己的内容页模板，不用 fumadocs-ui。`site/` 仍在线上并被插件审核引用，在它下线之前两站读同一份内容，改内容只改 `site/content`。
 
 - 地址与旧站一致：`/{lang}/install`、`tools`、`knowledge`、`api`、`self-host`、`privacy`、`terms`、`support`，全部预渲染；上架时填的网站、支持、隐私、条款四个地址不变。
-- 给模型读的入口在构建时生成静态文件：`/llms.txt`（默认语言）、`/{lang}/llms.txt`、`/{lang}/llms-full.txt`，每页加 `.md` 取原文（含方法页）。
-- 站内搜索：构建时生成索引 `/search.json`（两种语言一份），浏览器第一次搜索时下载，本地检索；中文按 Unicode 词边界分词。
+- 给模型读的入口在构建时生成静态文件：`/llms.txt` 与 `/llms-full.txt`（默认语言）、`/{lang}/llms.txt`、`/{lang}/llms-full.txt`，每页加 `.md` 取原文（含方法页）。加 `.mdx` 或请求头带 `Accept: text/markdown` 也取原文，由 Worker 改取对应的 `.md`，约定与旧站 `site/proxy.ts` 一致。
+- 站内搜索：构建时每种语言生成一份索引 `/{lang}/search.json`，浏览器第一次搜索时下载，本地检索；中文按 Unicode 词边界分词。
+- `robots.txt`、带 hreflang 的 `sitemap.xml` 按部署目标生成（构建时 `XZW_SITE=production|beta`）；测试站 robots 禁止抓取、全站带 `X-Robots-Tag: noindex, nofollow`。
+- 旧地址：不带语言段的地址（`/install`）按 `Accept-Language` 302 到对应语言；`/{lang}/docs/*` 永久跳 x-iztro 文档站，`/{lang}/docs/guide/mcp` 永久跳安装页（`public/_redirects`）。
 
 上线时做：
 
-- 把 `site/content` 搬进 `apps/web`，改内容源路径；`site/` 与它的 Vercel 项目下线，AGENTS.md「站点」一节随之改写。
-- 按请求头 `Accept: text/markdown` 返回原文：纯静态站做不到，在托管侧配置条件改写到对应的 `.md`，要实测。
+- `ziwei.x-haose.com` 从 Vercel 项目 `x-ziwei` 切到正式站 Worker `x-ziwei-web`（构建设 `XZW_SITE=production`）。
+- 下线 `site/` 与它的 Vercel 项目：`site/content` 搬进 `apps/web` 并改内容源路径，AGENTS.md「站点」一节随之改写。
 
 ## 暂缓
 

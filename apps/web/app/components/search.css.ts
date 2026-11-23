@@ -80,3 +80,6 @@ export const item = style({
 export const itemPage = style({ fontFamily: font.serif, fontWeight: 600, fontSize: size.body, color: color.fg });
 export const itemHeading = style({ paddingLeft: 22, fontFamily: font.serif, fontSize: size.small });
 export const itemText = style({ paddingLeft: 22, fontSize: size.aux, lineHeight: 1.6 });
+
+/** 段落与表格行的命中文字最多两行，超出以省略号截断；完整内容在打开的页面里。 */
+export const clamp = style({ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' });

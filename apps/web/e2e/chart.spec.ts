@@ -122,16 +122,21 @@ test('提示词：内核文本、方法正文与问题，复制原文与链接',
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${new URL(page.url()).origin}${SAMPLE}`);
 });
 
-test('只知道大概时间：夜里有四个候选，所选候选写进地址，提示词写明时辰未定', async ({ page, context }) => {
+test('只知道大概时间：夜里有四个候选，所选候选写进地址，换候选不清空问题与勾选，提示词写明时辰未定', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/zh/chart#cal=solar&d=2000-8-16&p=night&h=1&g=f');
   await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
   const cands = page.getByRole('radiogroup', { name: '候选时辰' });
   await expect(cands.getByRole('radio')).toHaveText(['早子', '丑', '寅', '晚子']);
   await expect(cands.getByRole('radio', { name: '丑' })).toBeChecked();
+  await page.getByRole('textbox', { name: '你的问题' }).fill('今年适合换工作吗');
+  await page.locator('label').filter({ hasText: '大限一览' }).click();
   await cands.getByRole('radio', { name: '寅' }).click();
   await expect(page).toHaveURL('/zh/chart#cal=solar&d=2000-8-16&p=night&h=2&g=f');
   await expect(page.getByRole('button', { name: /^命宫，壬午，主星紫微$/ })).toBeVisible();
+  // 换候选是换一张盘，已写的问题与勾选留着。
+  await expect(page.getByRole('textbox', { name: '你的问题' })).toHaveValue('今年适合换工作吗');
+  await expect(page.getByRole('checkbox', { name: '大限一览' })).toBeChecked();
   await page.getByRole('radio', { name: '原文' }).click();
   await expect(page.getByRole('radio', { name: '原文' })).toBeChecked();
   await expect(page.getByRole('region', { name: '提示词预览' })).toContainText(

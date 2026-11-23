@@ -28,3 +28,14 @@ export function localePath(lang: Lang, path: string): string {
   if (path !== '' && !path.startsWith('/')) throw new Error(`站内路径须以 / 开头：${path}`);
   return `/${lang}${path}`;
 }
+
+/**
+ * 一处内容在各语言下的绝对地址，供 `<link rel="alternate">` 与 sitemap 共用。
+ * `rest` 是语言段之后的路径（首页为空串），不带末尾斜杠。除各语言外附一条 `x-default` 指向默认语言。
+ */
+export function languageAlternates(origin: string, rest: string): { hreflang: string; href: string }[] {
+  return [
+    ...LANGS.map((l) => ({ hreflang: HTML_LANG[l], href: `${origin}/${l}${rest}` })),
+    { hreflang: 'x-default', href: `${origin}/${DEFAULT_LANG}${rest}` },
+  ];
+}

@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
 
@@ -10,14 +10,6 @@ const PAGES = slugs.flatMap((slug) => [
   { url: `/zh/${slug}`, title: titleOf(`${slug}.mdx`) },
   { url: `/en/${slug}`, title: titleOf(`${slug}.en.mdx`) },
 ]);
-
-test('meta.json 列的每一页都有中英文两份', () => {
-  const files = readdirSync(CONTENT).filter((f) => f.endsWith('.mdx'));
-  for (const slug of slugs) {
-    expect(files).toContain(`${slug}.mdx`);
-    expect(files).toContain(`${slug}.en.mdx`);
-  }
-});
 
 test('每个帮助页能打开，站内链接都有页面、锚点都有标题，没有指向旧说明站的链接', async ({ page, request }) => {
   const checked = new Set<string>();
@@ -64,7 +56,10 @@ test('站内搜索：按 / 打开，输入即搜，回车跳到结果', async ({
   await page.keyboard.press('/');
   const dialog = page.getByRole('dialog', { name: '搜索帮助与方法' });
   await expect(dialog).toBeVisible();
+  // 状态行在输入之前就已挂载，读屏才会播报之后的变化。
+  await expect(dialog.getByRole('status')).toHaveText('');
   await page.keyboard.type('隐私政策');
+  await expect(dialog.getByRole('status')).toHaveText(/^\d+ 条结果$/);
   const first = dialog.getByRole('option').first();
   await expect(first).toContainText('隐私政策');
   await page.keyboard.press('ArrowDown');

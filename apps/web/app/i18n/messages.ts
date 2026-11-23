@@ -245,6 +245,8 @@ const zh = {
     results: '搜索结果',
     loading: '正在载入索引',
     none: '没有找到',
+    found: '{n} 条结果',
+    foundOne: '1 条结果',
     failed: '索引载入失败：{reason}',
   },
   footer: {
@@ -509,6 +511,8 @@ const en: Messages = {
     results: 'Search results',
     loading: 'Loading the index',
     none: 'Nothing found',
+    found: '{n} results',
+    foundOne: '1 result',
     failed: 'The index failed to load: {reason}',
   },
   footer: {

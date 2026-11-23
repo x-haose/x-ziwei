@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "lib": ["ES2024"],
+    "types": ["@cloudflare/workers-types"],
+    "target": "ES2022",
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true
+  },
+  "files": ["index.ts"]
+}

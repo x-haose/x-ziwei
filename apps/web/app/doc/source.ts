@@ -14,7 +14,7 @@ export const docs = defineDocs({
 });
 
 /** 帮助页的语言配置：与站点语言一致，中文是默认语言。 */
-export const docsI18n = defineI18n({ defaultLanguage: DEFAULT_LANG, languages: [...LANGS] });
+const docsI18n = defineI18n({ defaultLanguage: DEFAULT_LANG, languages: [...LANGS] });
 
 export const source = loader({
   baseUrl: '/',

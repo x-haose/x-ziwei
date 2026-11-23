@@ -96,3 +96,14 @@ test('方法页：目录点击滚到标题并把焦点移过去，不改地址',
   await expect(page).toHaveURL('/zh/method');
   await expect(page.getByRole('heading', { name: '盘面与材料' })).toBeInViewport();
 });
+
+test('字体：关键子集的 @font-face 内联在页面里，其余切片的样式表不阻塞渲染，载入后生效', async ({ page, request }) => {
+  const html = await (await request.get('/zh/install')).text();
+  const head = html.slice(0, html.indexOf('</head>')).replace(/<noscript>[\s\S]*?<\/noscript>/g, '');
+  expect(head).toMatch(/<style>@font-face\{font-family:"Noto Serif SC";src:url\("\/fonts\/serif-critical-/);
+  expect(head).not.toMatch(/<link rel="stylesheet" href="\/fonts\//);
+  await page.goto('/zh/install');
+  await expect
+    .poll(() => page.evaluate(() => [...document.fonts].filter((f) => f.family.replace(/"/g, '') === 'XZW Sans SC').length))
+    .toBeGreaterThan(10);
+});

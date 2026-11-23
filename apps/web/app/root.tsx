@@ -5,8 +5,9 @@ import fonts from 'virtual:xzw-fonts';
 import type { Route } from './+types/root';
 import * as errorCss from './components/not-found.css';
 import { ToastProvider } from './components/toast';
-import { DEFAULT_LANG, HTML_LANG, LANGS, langOfPath } from './i18n/lang';
+import { DEFAULT_LANG, HTML_LANG, langOfPath, languageAlternates } from './i18n/lang';
 import { rootRedirectScript } from './i18n/redirect';
+import { site } from './lib/site';
 import { themeBootScript } from './theme/theme';
 import './styles/global.css';
 
@@ -19,22 +20,30 @@ export const links: Route.LinksFunction = () => [
     type: 'font/woff2',
     crossOrigin: 'anonymous' as const,
   })),
-  { rel: 'stylesheet', href: fonts.css },
 ];
+
+/**
+ * 其余字体切片的样式表由脚本插入：脚本插入的样式表不阻塞首次绘制，切片到了再补上关键子集之外的字。
+ * 禁用脚本时由 `<noscript>` 里的同一张样式表补上。
+ */
+const restFontsScript = `(function(){var l=document.createElement("link");l.rel="stylesheet";l.href=${JSON.stringify(fonts.rest)};document.head.appendChild(l)})()`;
 
 /**
  * 每个页面共用的文档外壳。
  *
  * `<head>` 最前面是主题引导脚本，首帧前写好明暗；根路径页面另有语言跳转脚本。
+ * 接着是内联的关键字体 @font-face（首屏只等这些）与插入其余切片样式表的脚本。
  * `<html>` 的 `data-theme`、`data-pref` 由引导脚本在水合前写入，不经 React 渲染，
- * 所以 `suppressHydrationWarning` 只作用于这一层的属性差异。404 等不是真实页面的地址不输出语言对照链接。
+ * 所以 `suppressHydrationWarning` 只作用于这一层的属性差异。
+ * 404 等不是真实页面的地址不输出语言对照链接；对照链接用绝对地址，路径不带末尾斜杠
+ * （预渲染时请求的是 `/zh/install/`，部署后的规范地址是 `/zh/install`）。
  */
 export function Layout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const matches = useMatches();
   const notFound = matches.some((m) => m.id === 'routes/not-found');
   const lang = langOfPath(pathname);
-  const rest = lang ? pathname.slice(lang.length + 1) : '';
+  const rest = lang ? pathname.slice(lang.length + 1).replace(/\/$/, '') : '';
   const htmlLang = useHtmlLang(HTML_LANG[lang ?? DEFAULT_LANG]);
   return (
     <html lang={htmlLang} suppressHydrationWarning>
@@ -43,9 +52,14 @@ export function Layout({ children }: { children: ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
         {pathname === '/' && <script dangerouslySetInnerHTML={{ __html: rootRedirectScript }} />}
+        <style dangerouslySetInnerHTML={{ __html: fonts.critical }} />
+        <script dangerouslySetInnerHTML={{ __html: restFontsScript }} />
+        <noscript>
+          <link rel="stylesheet" href={fonts.rest} />
+        </noscript>
         {lang &&
           !notFound &&
-          LANGS.map((l) => <link key={l} rel="alternate" hrefLang={HTML_LANG[l]} href={`/${l}${rest}`} />)}
+          languageAlternates(site().origin, rest).map((a) => <link key={a.hreflang} rel="alternate" hrefLang={a.hreflang} href={a.href} />)}
         <Meta />
         <Links />
       </head>
