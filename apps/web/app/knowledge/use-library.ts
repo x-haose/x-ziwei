@@ -12,13 +12,24 @@ export type LibraryState =
   | { status: 'unavailable' }
   /** 读库出错（IndexedDB 本身的故障或数据损坏）。 */
   | { status: 'failed'; message: string }
+  /** 别的标签页开着旧版本的连接，挡住了库的升级：关掉它们后会自动继续。 */
+  | { status: 'blocked' }
+  /** 别的标签页把库升到了更新的版本，本页的连接已关闭：刷新后才能继续。 */
+  | { status: 'superseded' }
   /** `repaired`：最近一次读库时从组合里移出的包（组合与包库对不上时，见 `Library.load`）。 */
   | { status: 'ready'; packs: Pack[]; use: Use; repaired: string[] };
 
 const LOADING: LibraryState = { status: 'loading' };
 const CHANNEL = 'xzw-knowledge';
+/**
+ * 打开库超过这么久（毫秒）仍没完成，按「被别的标签页挡住」处理。挡住时浏览器只给排在最前的那个打开请求发 blocked 事件，
+ * 排在它后面的请求（同时开着的几个新版本标签页）收不到，只能按等待时间判断；正常打开只需几毫秒。
+ */
+const OPEN_PATIENCE_MS = 3000;
 let state: LibraryState = LOADING;
 let library: Library | null = null;
+/** 正在打开的库：被别的标签页挡住时会等很久，期间再次读库共用这一次。 */
+let opening: Promise<Library> | null = null;
 let channel: BroadcastChannel | null = null;
 let started = false;
 const listeners = new Set<() => void>();
@@ -35,9 +46,25 @@ function apply(snap: Snapshot): void {
 /** 读库（含修复组合）。另一个标签页改了库时也走这里。 */
 async function load(): Promise<void> {
   try {
-    library ??= await openLibrary();
+    opening ??= openLibrary({
+      onBlocked: () => set({ status: 'blocked' }),
+      onSuperseded: () => {
+        library = null;
+        opening = null;
+        set({ status: 'superseded' });
+      },
+    });
+    const slow = setTimeout(() => {
+      if (state.status === 'loading') set({ status: 'blocked' });
+    }, OPEN_PATIENCE_MS);
+    try {
+      library ??= await opening;
+    } finally {
+      clearTimeout(slow);
+    }
     apply(await library.load());
   } catch (err) {
+    opening = null;
     if (err instanceof StorageUnavailableError) {
       set({ status: 'unavailable' });
       return;
@@ -52,7 +79,9 @@ function start(): void {
   started = true;
   if (typeof BroadcastChannel === 'function') {
     channel = new BroadcastChannel(CHANNEL);
-    channel.onmessage = () => void load();
+    channel.onmessage = () => {
+      if (state.status !== 'superseded') void load();
+    };
   }
   void load();
 }

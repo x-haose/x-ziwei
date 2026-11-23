@@ -466,7 +466,8 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
   // 「需要改」的包不能生效：组合与可选的包都不算它们（组合里的引用另由 useRetireBroken 写回移出）。
   const usable = packs.filter((p) => !broken.has(p.id));
   const use = ready ? withoutPacks(lib.use, broken.keys()) : DEFAULT_USE;
-  const blocked = lib.status === 'unavailable' || lib.status === 'failed';
+  // 库用不了（不可用、读库失败、被别的标签页挡住、已被更新的版本接管）：导入与改组合都关闭，只有默认包。
+  const blocked = lib.status === 'unavailable' || lib.status === 'failed' || lib.status === 'blocked' || lib.status === 'superseded';
   const activeSet = new Set(activeIds(use));
 
   const act = async (run: () => Promise<void>) => {
@@ -528,6 +529,18 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
         <p className={css.notice} role="alert">
           <b className={css.noticeTitle}>{t.knowledge.failedTitle}</b>
           {fmt(t.knowledge.failedBody, { reason: lib.message })}
+        </p>
+      )}
+      {lib.status === 'blocked' && (
+        <p className={css.notice} role="alert">
+          <b className={css.noticeTitle}>{t.knowledge.blockedByTabsTitle}</b>
+          {t.knowledge.blockedByTabsBody}
+        </p>
+      )}
+      {lib.status === 'superseded' && (
+        <p className={css.notice} role="alert">
+          <b className={css.noticeTitle}>{t.knowledge.supersededTitle}</b>
+          {t.knowledge.supersededBody}
         </p>
       )}
       {kstate.status === 'error' && (

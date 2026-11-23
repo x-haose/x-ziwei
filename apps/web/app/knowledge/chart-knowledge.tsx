@@ -46,17 +46,26 @@ export function useRetireBroken(lib: LibraryState, broken: ReadonlyMap<string, K
 
 /**
  * 按本机当前生效的组合合出释义用的包。分享链接不带知识包，打开别人的链接也用这台设备上的组合。
- * 「需要改」的包不参与（写回组合之前也不用）。本机包库还在读取时为 null；存储不可用或读库失败时只有默认包
- * （读库失败时标记下方写明原因）。
+ * 「需要改」的包不参与（写回组合之前也不用）。提示词不等本机包库：库没读好时（读取中、存储不可用、读库失败、
+ * 被别的标签页挡住或已被更新的版本接管）先用默认包，读好后按生效组合重算；用默认包的原因写在标记下方（见 `libraryNote`）。
+ * 内核没装好时为 null。
  */
 export function useActiveKnowledge(kernel: Kernel | null, lib: LibraryState, broken: ReadonlyMap<string, KnowledgeIssue[]>): ActiveKnowledge | null {
   return useMemo(() => {
-    if (!kernel || lib.status === 'loading') return null;
+    if (!kernel) return null;
     const def = defaultPackInfo(kernel);
     if (lib.status !== 'ready') return { pack: builtinPack(kernel), source: provenance([def]) };
     const use = withoutPacks(lib.use, broken.keys());
     return { pack: activePack(kernel, use, lib.packs), source: provenance(activePacks(use, lib.packs, def)) };
   }, [kernel, lib, broken]);
+}
+
+/** 释义暂用默认包的原因（读库失败、被别的标签页挡住、已被更新的版本接管）；读取中、存储不可用与读好时为 null。 */
+export function libraryNote(lib: LibraryState, t: Messages): string | null {
+  if (lib.status === 'failed') return fmt(t.chart.knowFailed, { reason: lib.message });
+  if (lib.status === 'blocked') return t.chart.knowBlocked;
+  if (lib.status === 'superseded') return t.chart.knowSuperseded;
+  return null;
 }
 
 /** 提示词区的释义标记，本机包库读取失败时下方写明原因。`onPick` 收到算新组合的函数与新组合名。 */
@@ -76,6 +85,7 @@ export function ChartKnowledgeMark({
   onPick: (next: (use: Use) => Use, label: string) => void;
 }) {
   const def = defaultPackInfo(kernel);
+  const note = libraryNote(lib, t);
   const use = lib.status === 'ready' ? withoutPacks(lib.use, broken.keys()) : DEFAULT_USE;
   const packs = lib.status === 'ready' ? lib.packs.filter((p) => !broken.has(p.id)) : [];
   return (
@@ -88,9 +98,9 @@ export function ChartKnowledgeMark({
         defaultPack={def}
         onPick={onPick}
       />
-      {lib.status === 'failed' && (
+      {note && (
         <p className={css.failed} role="alert">
-          {fmt(t.chart.knowFailed, { reason: lib.message })}
+          {note}
         </p>
       )}
     </div>

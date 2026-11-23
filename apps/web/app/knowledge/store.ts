@@ -158,8 +158,19 @@ export class Library {
   }
 }
 
-/** 打开本机包库。浏览器不给用 IndexedDB 时报 `StorageUnavailableError`。 */
-export async function openLibrary(): Promise<Library> {
+/** 打开库时与其他标签页的版本协调。 */
+export interface OpenEvents {
+  /** 别的标签页还开着旧版本的连接，挡住了这次升级；那些连接关掉后打开会自动继续。 */
+  onBlocked: () => void;
+  /** 别的标签页要把库升到更新的版本：本连接已关闭，这一页要刷新才能继续用本机的包。 */
+  onSuperseded: () => void;
+}
+
+/**
+ * 打开本机包库。浏览器不给用 IndexedDB 时报 `StorageUnavailableError`。
+ * 本连接收到升级请求时立即关闭，不挡别的标签页升级（见 `OpenEvents`）。
+ */
+export async function openLibrary(events: OpenEvents): Promise<Library> {
   let db: IDBPDatabase<Schema>;
   try {
     db = await openDB<Schema>(DB_NAME, DB_VERSION, {
@@ -173,6 +184,11 @@ export async function openLibrary(): Promise<Library> {
           const use = await state.get('use');
           if (use !== undefined) await state.put({ ...use, wholeStack: [] }, 'use');
         }
+      },
+      blocked: events.onBlocked,
+      blocking() {
+        db.close();
+        events.onSuperseded();
       },
     });
   } catch (err) {

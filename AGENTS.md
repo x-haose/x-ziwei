@@ -92,6 +92,7 @@ x-ziwei：让 AI 解读紫微斗数的产品。排盘、运限、格局判定由
 - 两站互为入口：本站顶栏、页脚、首页指向 x-iztro 文档；x-iztro 文档的「给 AI 用」指向本站。紫微斗数概念、数据结构、准确性说明只在 x-iztro 文档里写，本站不重复。
 - 隐私政策、服务条款、支持三页是上架要填的链接，写的都是服务的实际行为；服务的数据处理方式有变化时要同步改这三页。
 - 检查：`cd site && npm ci && npm run types:check && npm run build`，CI 的 `site` 任务跑同一组命令。
+- 产品站检查：`cd apps/web && pnpm check`（类型检查、单测、`build:beta` 构建、端到端测试）。端到端测试含依赖外网的 `external` 项目（用 Cloudflare 线上的统计脚本复验上报里不带生辰），本机完整跑一次包括它；离线时用 `pnpm e2e --project=chromium`。CI 的 `web` 任务把两个项目分两步跑。
 
 ## 发版
 

@@ -342,3 +342,60 @@ test('旧版本导入、现在需要改的包：标为需要改并列出问题�
   await page.getByRole('button', { name: /^释义：iztro-docs \+ 好包/ }).click();
   await expect(page.getByRole('dialog', { name: '释义用哪套知识包' }).getByRole('option', { name: /旧包/ })).toHaveCount(0);
 });
+
+test('别的标签页开着旧版本的库：提示关掉它们，排盘页提示词先用默认包并写明原因；关掉后自动继续', async ({ context, page }) => {
+  // 旧版本页面持有版本 1 的连接，且不处理升级请求。
+  const old = await context.newPage();
+  await old.goto('/zh/install');
+  await old.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open('xzw-knowledge', 1);
+        req.onupgradeneeded = () => {
+          req.result.createObjectStore('packs', { keyPath: 'id' });
+          req.result.createObjectStore('state');
+        };
+        req.onsuccess = () => {
+          (window as unknown as { oldDb: IDBDatabase }).oldDb = req.result;
+          resolve();
+        };
+        req.onerror = () => reject(req.error);
+      }),
+  );
+
+  await page.goto(SAMPLE);
+  await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
+  await expect(page.getByText('挡住了本机知识包；释义暂用默认包')).toBeVisible();
+  await page.getByRole('radio', { name: '原文' }).click();
+  const preview = page.getByRole('region', { name: '提示词预览' });
+  await expect(preview).toContainText('释义摘自知识包 iztro-docs 2026-08-19');
+  await expect(page.getByRole('button', { name: '复制提示词' })).toBeEnabled();
+
+  const other = await context.newPage();
+  await other.goto('/zh/knowledge');
+  await expect(other.getByText('请关闭本站的其他标签页')).toBeVisible();
+
+  await old.evaluate(() => (window as unknown as { oldDb: IDBDatabase }).oldDb.close());
+  await expect(page.getByText('挡住了本机知识包；释义暂用默认包')).toHaveCount(0);
+  await expect(other.getByRole('button', { name: '选择文件' })).toBeEnabled({ timeout: 20000 });
+});
+
+test('别的标签页把库升到更新的版本：本页让出连接并提示刷新，对方的升级得以完成', async ({ context, page }) => {
+  await openPage(page);
+  const newer = await context.newPage();
+  await newer.goto('/zh/install');
+  const upgraded = await newer.evaluate(
+    () =>
+      new Promise<number>((resolve, reject) => {
+        const req = indexedDB.open('xzw-knowledge', 99);
+        req.onsuccess = () => {
+          resolve(req.result.version);
+          req.result.close();
+        };
+        req.onerror = () => reject(req.error);
+      }),
+  );
+  expect(upgraded).toBe(99);
+  await expect(page.getByText('请刷新这一页')).toBeVisible();
+  await expect(page.getByRole('button', { name: '选择文件' })).toBeDisabled();
+});
