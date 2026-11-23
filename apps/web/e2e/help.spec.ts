@@ -1,14 +1,15 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { docPathOf, docTitle } from '../app/doc/paths';
 import { expect, test } from './test';
 
-/** 帮助页内容的唯一来源：仓库里的 site/content。按 meta 列出 slug，读各页 frontmatter 的标题。 */
+/** 帮助页内容的唯一来源：仓库里的 site/content。按 meta 列出 slug，读各页 frontmatter 的标题（地址与标题的改动见 `app/doc/paths.ts`）。 */
 const CONTENT = path.resolve(import.meta.dirname, '../../../site/content');
 const slugs = (JSON.parse(readFileSync(path.join(CONTENT, 'meta.json'), 'utf8')) as { pages: string[] }).pages.filter((p) => !p.startsWith('---'));
 const titleOf = (file: string) => /^title:\s*"?(.+?)"?\s*$/m.exec(readFileSync(path.join(CONTENT, file), 'utf8'))![1]!;
 const PAGES = slugs.flatMap((slug) => [
-  { url: `/zh/${slug}`, title: titleOf(`${slug}.mdx`) },
-  { url: `/en/${slug}`, title: titleOf(`${slug}.en.mdx`) },
+  { url: `/zh/${docPathOf(slug)}`, title: docTitle(slug, 'zh', titleOf(`${slug}.mdx`)) },
+  { url: `/en/${docPathOf(slug)}`, title: docTitle(slug, 'en', titleOf(`${slug}.en.mdx`)) },
 ]);
 
 test('每个帮助页能打开，站内链接都有页面、锚点都有标题，没有指向旧说明站的链接', async ({ page, request }) => {
@@ -41,7 +42,7 @@ test('给模型读的文本：llms 索引、全文与每页的 .md 原文', asyn
   expect(en).toContain('- [Install](/en/install.md)');
   const full = await (await request.get('/zh/llms-full.txt')).text();
   expect(full).toContain('# 解读方法 (/zh/method)');
-  for (const slug of slugs) expect(full).toContain(`(/zh/${slug})`);
+  for (const slug of slugs) expect(full).toContain(`(/zh/${docPathOf(slug)})`);
   for (const p of PAGES) {
     const res = await request.get(`${p.url}.md`);
     expect(res.status()).toBe(200);
@@ -74,4 +75,15 @@ test('顶栏的「装进 AI」在安装页标为当前，内容页里的站内�
   await page.getByRole('article').getByRole('link', { name: '没有 Skill 时' }).first().click();
   await expect(page).toHaveURL('/zh/install');
   await expect(page.getByRole('heading', { name: '没有 Skill 时' })).toBeFocused();
+});
+
+test('知识包格式说明在 /{lang}/knowledge/format；旧地址的锚点与原文跟过去', async ({ page, request }) => {
+  await page.goto('/zh/knowledge#主题');
+  await expect(page).toHaveURL(/\/zh\/knowledge\/format#%E4%B8%BB%E9%A2%98$/);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('知识包格式');
+  const md = await request.get('/zh/knowledge.md', { maxRedirects: 0 });
+  expect(md.status()).toBe(301);
+  expect(md.headers().location).toBe('/zh/knowledge/format.md');
+  await page.goto('/zh/tools');
+  await expect(page.locator('a[href^="/zh/knowledge/format#"]')).toHaveCount(1);
 });

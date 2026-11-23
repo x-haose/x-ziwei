@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useLocation } from 'react-router';
 import { DocPage, type DocTocItem } from '../doc/doc-page';
 import { mdxComponents } from '../doc/mdx';
+import { docTitle } from '../doc/paths';
 import { helpPageOf } from '../doc/source';
 import { MESSAGES } from '../i18n/messages';
 import { metaLang, pageMeta } from '../lib/meta';
@@ -10,14 +11,15 @@ import type { Route } from './+types/help';
 
 export const meta: Route.MetaFunction = ({ location }) => {
   const page = helpPageOf(location.pathname);
-  const t = MESSAGES[metaLang(location.pathname)];
-  return pageMeta(`${page.data.title}：${t.brand.name}`, page.data.description);
+  const lang = metaLang(location.pathname);
+  return pageMeta(`${docTitle(page.slugs.join('/'), lang, page.data.title)}：${MESSAGES[lang].brand.name}`, page.data.description);
 };
 
 /** 帮助页：内容取自 `site/content` 的 MDX，用内容页模板展示。 */
 export default function HelpRoute() {
   const { pathname } = useLocation();
   const page = helpPageOf(pathname);
+  const lang = metaLang(pathname);
   const Body = page.data.body;
   const toc = useMemo<DocTocItem[]>(
     () =>
@@ -27,7 +29,7 @@ export default function HelpRoute() {
     [page],
   );
   return (
-    <DocPage current={page.slugs.join('/')} title={page.data.title} lede={page.data.description} toc={toc}>
+    <DocPage current={page.slugs.join('/')} title={docTitle(page.slugs.join('/'), lang, page.data.title)} lede={page.data.description} toc={toc}>
       <div className={markdownCss.prose}>
         <Body components={mdxComponents} />
       </div>

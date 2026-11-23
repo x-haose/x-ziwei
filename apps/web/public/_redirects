@@ -6,3 +6,8 @@
 /en/docs https://x-iztro.x-haose.com/en/docs 301
 /zh/docs/* https://x-iztro.x-haose.com/zh/docs/:splat 301
 /en/docs/* https://x-iztro.x-haose.com/en/docs/:splat 301
+# 知识包格式说明从 /{lang}/knowledge 搬到 /{lang}/knowledge/format（/{lang}/knowledge 改为知识包页），旧的原文地址跟过去。
+/zh/knowledge.md /zh/knowledge/format.md 301
+/en/knowledge.md /en/knowledge/format.md 301
+/zh/knowledge.mdx /zh/knowledge/format.md 301
+/en/knowledge.mdx /en/knowledge/format.md 301

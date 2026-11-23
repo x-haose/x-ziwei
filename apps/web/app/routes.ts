@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { type RouteConfig, index, route } from '@react-router/dev/routes';
 import { helpSlugs } from './doc/content-files';
+import { docPathOf } from './doc/paths';
 import { LANGS } from './i18n/lang';
 
 /** 帮助页内容目录：仓库里的 site/content（内容单一来源）。 */
@@ -16,6 +17,7 @@ const HELP_SLUGS = readHelpSlugs();
 
 /**
  * 全部是静态路径，预渲染时逐个生成文件。每种语言各注册一份同样的页面，路由 id 带语言前缀以示区分。
+ * 帮助页的地址见 `doc/paths.ts`（知识包格式说明在 `/{lang}/knowledge/format`，`/{lang}/knowledge` 是知识包功能页）。
  *
  * 除页面外还有几个只出文本的资源路由，预渲染成静态文件：
  * 每个内容页的 `.md` 原文、`llms.txt` 与 `llms-full.txt`（根路径取默认语言）与各语言的同名文件、
@@ -35,9 +37,10 @@ export default [
     route(`${lang}/llms.txt`, 'routes/llms-index.ts', { id: `${lang}/llms` }),
     route(`${lang}/llms-full.txt`, 'routes/llms-full.ts', { id: `${lang}/llms-full` }),
     route(`${lang}/search.json`, 'routes/search-index.ts', { id: `${lang}/search` }),
+    route(`${lang}/knowledge`, 'routes/knowledge.tsx', { id: `${lang}/knowledge` }),
     ...HELP_SLUGS.flatMap((slug) => [
-      route(`${lang}/${slug}`, 'routes/help.tsx', { id: `${lang}/${slug}` }),
-      route(`${lang}/${slug}.md`, 'routes/doc-markdown.ts', { id: `${lang}/${slug}.md` }),
+      route(`${lang}/${docPathOf(slug)}`, 'routes/help.tsx', { id: `${lang}/doc/${slug}` }),
+      route(`${lang}/${docPathOf(slug)}.md`, 'routes/doc-markdown.ts', { id: `${lang}/doc/${slug}.md` }),
     ]),
   ]),
   route('*', 'routes/not-found.tsx'),

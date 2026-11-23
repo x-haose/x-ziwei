@@ -15,6 +15,8 @@ import { fmt, type Messages } from '../i18n/messages';
 import { useLang, useMessages } from '../i18n/use-lang';
 import { type Kernel, loadKernel, useKernelState } from '../kernel/kernel';
 import { createLunarCalendar } from '../kernel/lunar';
+import { type ActiveKnowledge, ChartKnowledgeMark, useActiveKnowledge } from '../knowledge/chart-knowledge';
+import { setUse, useLibrary } from '../knowledge/use-library';
 import { useHydrated } from '../lib/media';
 import { buildPrompt, questionHeading } from '../prompt/build';
 import { READING_METHOD } from '../prompt/method';
@@ -165,6 +167,8 @@ function ChartBody({
   lang,
   input,
   onInput,
+  knowledge,
+  mark,
 }: {
   kernel: Kernel;
   lunar: LunarCalendar;
@@ -175,11 +179,14 @@ function ChartBody({
   lang: Lang;
   input: PromptInput;
   onInput: (next: PromptInput) => void;
+  /** 释义用的包与出处；本机包库还在读取时为 null（提示词暂不出）。 */
+  knowledge: ActiveKnowledge | null;
+  /** 提示词区的释义标记。 */
+  mark: ReactNode;
 }) {
   const view = useChartView(kernel, chart, today);
   const { sel, layers, palaces } = view;
   const { choice, question } = input;
-  const knowledge = useMemo(() => kernel.KnowledgePack.builtin('zh-CN'), [kernel]);
   const decadals = useMemo(() => chart.decadalList(), [chart]);
   const todayAge = nominalAge(chart, today.year);
   const nowDecadal = decadals[decadalOfAge(chart, todayAge)]?.index ?? null;
@@ -206,9 +213,11 @@ function ChartBody({
     : null;
 
   const text = useMemo(() => {
+    if (!knowledge) return null;
     const note = approxNote(t, birth);
-    const sections = chartSections({ chart, sel, choice, knowledge, lunar });
-    return buildPrompt({ lang, method: READING_METHOD[lang], sections: note ? [note, ...sections] : sections, question });
+    const source = choice.know ? fmt(t.chart.knowSource, { packs: knowledge.source }) : null;
+    const sections = chartSections({ chart, sel, choice, knowledge: knowledge.pack, lunar });
+    return buildPrompt({ lang, method: READING_METHOD[lang], sections: [note, source, ...sections].filter((x) => x !== null), question });
   }, [t, birth, chart, sel, choice, knowledge, lunar, lang, question]);
 
   const hitTitles = palaces.map((p) => fmt(t.layer.pickDecadal, { a: p.decadal[0], b: p.decadal[1], palace: p.name }));
@@ -255,6 +264,7 @@ function ChartBody({
         question={question}
         onQuestion={(next) => onInput({ choice, question: next })}
         questionHeading={questionHeading(lang)}
+        mark={mark}
       />
     </>
   );
@@ -281,6 +291,25 @@ export function ChartPage() {
   const summaryRef = useRef<HTMLButtonElement>(null);
   const focusSummary = useRef(false);
   const [promptInput, setPromptInput] = useState<PromptInput>({ choice: DEFAULT_CHOICE, question: '' });
+  const lib = useLibrary();
+  const knowledge = useActiveKnowledge(kernel, lib);
+  const mark = kernel && (
+    <ChartKnowledgeMark
+      t={t}
+      lang={lang}
+      kernel={kernel}
+      lib={lib}
+      onPick={(next, label) =>
+        setUse(next).then(
+          () => toast(fmt(t.chart.knowToast, { label })),
+          (err: unknown) => {
+            console.error(err);
+            toast(fmt(t.knowledge.actionFailed, { reason: err instanceof Error ? err.message : String(err) }));
+          },
+        )
+      }
+    />
+  );
   const [formOpen, setFormOpen] = useState(false);
   const reported = useRef('');
 
@@ -380,6 +409,8 @@ export function ChartPage() {
           lang={lang}
           input={promptInput}
           onInput={setPromptInput}
+          knowledge={knowledge}
+          mark={mark}
         />
       ) : (
         <>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Checkbox, TextArea } from 'react-aria-components';
 import * as controls from '../components/controls.css';
 import { CheckIcon } from '../components/icons';
@@ -58,6 +58,7 @@ export function PromptPanel({
   question,
   onQuestion,
   questionHeading,
+  mark,
 }: {
   t: Messages;
   lang: Lang;
@@ -73,6 +74,8 @@ export function PromptPanel({
   onQuestion: (q: string) => void;
   /** 原文里「我的问题」一节的标题行，用于原文视图着色。 */
   questionHeading: string;
+  /** 勾选项下方的释义标记（知识包组合与更换）。 */
+  mark?: ReactNode;
 }) {
   const [mode, setMode] = useState<'md' | 'raw'>('md');
   const [copy, setCopy] = useState<CopyState>({ kind: 'idle' });
@@ -138,6 +141,7 @@ export function PromptPanel({
           </Checkbox>
         ))}
       </div>
+      {mark}
       <div className={css.ask}>
         <TextArea
           className={css.textarea}

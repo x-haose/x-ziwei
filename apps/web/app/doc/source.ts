@@ -2,6 +2,7 @@ import { defineI18n } from 'fumadocs-core/i18n';
 import { loader } from 'fumadocs-core/source';
 import { defineDocs } from 'fumadocs-mdx/macro';
 import { DEFAULT_LANG, LANGS } from '../i18n/lang';
+import { docPathOf } from './paths';
 
 /**
  * 帮助页的内容：直接读仓库里的 `site/content`（与线上说明站同一份 MDX，内容单一来源）。
@@ -20,12 +21,13 @@ export const source = loader({
   baseUrl: '/',
   source: docs.toFumadocsSource(),
   i18n: docsI18n,
+  url: (slugs, locale) => `/${locale}/${docPathOf(slugs.join('/'))}`,
 });
 
-/** 地址里的帮助页：`/zh/install` → 该页。路由表只为存在的页面注册地址，取不到即是代码写错。 */
+/** 地址里的帮助页：`/zh/install`、`/zh/knowledge/format`（加 `.md` 或末尾斜杠亦可）→ 该页。路由表只为存在的页面注册地址，取不到即是代码写错。 */
 export function helpPageOf(pathname: string) {
-  const [, lang, slug] = pathname.replace(/\.md$/, '').split('/');
-  const page = lang && slug ? source.getPage([slug], lang) : undefined;
+  const [, lang, ...rest] = pathname.replace(/\.md$/, '').replace(/\/$/, '').split('/');
+  const page = lang ? source.getPages(lang).find((p) => p.url === `/${lang}/${rest.join('/')}`) : undefined;
   if (!page) throw new Error(`地址没有对应的帮助页：${pathname}`);
   return page;
 }

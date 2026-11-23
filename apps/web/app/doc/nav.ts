@@ -1,6 +1,7 @@
 import type { Lang } from '../i18n/lang';
 import { localePath } from '../i18n/lang';
 import type { Messages } from '../i18n/messages';
+import { docTitle } from './paths';
 import { source } from './source';
 
 /** 内容页侧栏的一项。`id` 是地址里语言段之后的 slug。 */
@@ -32,7 +33,7 @@ export function docNav(lang: Lang, t: Messages): DocNavGroup[] {
     if (!page) throw new Error(`侧栏项没有对应的页面：${node.url}`);
     const group = groups.at(-1);
     if (!group) throw new Error('meta.json 的第一项应是分隔符');
-    group.items.push({ id: page.slugs.join('/'), title: page.data.title, url: page.url });
+    group.items.push({ id: page.slugs.join('/'), title: docTitle(page.slugs.join('/'), lang, page.data.title), url: page.url });
   }
   const first = groups[0];
   if (!first) throw new Error('帮助页没有任何分组');

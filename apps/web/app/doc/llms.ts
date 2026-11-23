@@ -4,6 +4,7 @@ import { type Lang, LANGS, localePath } from '../i18n/lang';
 import { MESSAGES } from '../i18n/messages';
 import { READING_METHOD } from '../prompt/method';
 import { docNav } from './nav';
+import { currentDocHref, docTitle } from './paths';
 import { source } from './source';
 
 /**
@@ -20,7 +21,8 @@ export async function docMarkdown(lang: Lang, id: string): Promise<string> {
   }
   const page = source.getPage([id], lang);
   if (!page) throw new Error(`没有这一页：${lang}/${id}`);
-  return `# ${page.data.title} (${page.url})\n\n${page.data.description ?? ''}\n\n${(await page.data.getText('processed')).trim()}\n`;
+  const body = (await page.data.getText('processed')).trim().replace(/\]\((\/[^)\s]+)\)/g, (_, href: string) => `](${currentDocHref(href)})`);
+  return `# ${docTitle(id, lang, page.data.title)} (${page.url})\n\n${page.data.description ?? ''}\n\n${body}\n`;
 }
 
 /** 索引末尾互相指路：本语言的全文与其余语言的索引、全文。文案带英文括注，抓到中文那份的模型未必读中文。 */
@@ -73,7 +75,7 @@ export function searchServer(lang: Lang) {
       ...source.getPages(lang).map((page) => ({
         id: page.url,
         url: page.url,
-        title: page.data.title,
+        title: docTitle(page.slugs.join('/'), lang, page.data.title),
         description: page.data.description,
         structuredData: page.data.structuredData,
       })),

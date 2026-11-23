@@ -15,23 +15,13 @@ import {
 import { fmt } from '../i18n/messages';
 import { useLang, useMessages } from '../i18n/use-lang';
 import { visuallyHidden } from './controls.css';
-import { CloseIcon } from './icons';
+import { CloseIcon, SearchIcon } from './icons';
 import * as css from './search.css';
 
 /** hast 节点下的纯文字：结果里的行内标记（加粗、代码）只取文字。 */
 function plain(node: { type: string; value?: string; children?: unknown[] }): string {
   if (node.type === 'text') return node.value ?? '';
   return (node.children ?? []).map((c) => plain(c as Parameters<typeof plain>[0])).join('');
-}
-
-/** 搜索图标：一圈加一道斜柄，线宽 1px。 */
-function SearchIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-      <circle cx="7.5" cy="7.5" r="5.5" fill="none" stroke="currentColor" />
-      <path d="M11.5 11.5 16 16" stroke="currentColor" />
-    </svg>
-  );
 }
 
 /**

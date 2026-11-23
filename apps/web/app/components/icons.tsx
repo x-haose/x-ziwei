@@ -78,3 +78,43 @@ export function PageIcon({ dir }: { dir: -1 | 1 }) {
     </svg>
   );
 }
+
+/** 搜索图标：一圈加一道斜柄，线宽 1px。 */
+export function SearchIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <circle cx="7.5" cy="7.5" r="5.5" fill="none" stroke="currentColor" />
+      <path d="M11.5 11.5 16 16" stroke="currentColor" />
+    </svg>
+  );
+}
+
+/** 方向箭头：知识包叠加里前移、后移（横排左右、纵排上下）。 */
+export function ChevronIcon({ dir }: { dir: 'left' | 'right' | 'up' | 'down' }) {
+  const d = { left: 'M8 2 4 6l4 4', right: 'M4 2l4 4-4 4', up: 'M2 8l4-4 4 4', down: 'M2 4l4 4 4-4' }[dir];
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+      <path d={d} fill="none" stroke="currentColor" />
+    </svg>
+  );
+}
+
+/** 文件线稿：知识包导入的放置区。 */
+export function FileIcon() {
+  return (
+    <svg width="28" height="34" viewBox="0 0 28 34" aria-hidden="true">
+      <path d="M1.5 1.5h17l8 8v23h-25z" fill="none" stroke="currentColor" />
+      <path d="M18.5 1.5v8h8M7 17h14M7 21.5h14M7 26h9" fill="none" stroke="currentColor" />
+    </svg>
+  );
+}
+
+/** 锁形线稿：「只存在这台设备」的说明。 */
+export function LockIcon() {
+  return (
+    <svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true">
+      <rect x="1.5" y="7" width="11" height="8" fill="none" stroke="currentColor" />
+      <path d="M4 7V4.5a3 3 0 0 1 6 0V7" fill="none" stroke="currentColor" />
+    </svg>
+  );
+}

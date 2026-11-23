@@ -41,7 +41,7 @@ test('375 宽：提示词预览渲染态的表格保持行列', async ({ page })
   await checkTables(page, '提示词预览');
 });
 
-for (const path of ['/zh/tools', '/en/api', '/zh/knowledge', '/zh/self-host']) {
+for (const path of ['/zh/tools', '/en/api', '/zh/knowledge/format', '/zh/self-host']) {
   test(`375 宽：帮助页 ${path} 的表格保持行列`, async ({ page }) => {
     await page.goto(path);
     await page.waitForLoadState('networkidle');

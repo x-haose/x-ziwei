@@ -1,6 +1,7 @@
 import { type ComponentProps, type ReactElement, type ReactNode, isValidElement } from 'react';
 import { Link } from 'react-router';
 import { scrollToAnchor } from '../lib/scroll';
+import { currentDocHref } from './paths';
 import { CodeBlock } from '../markdown/markdown';
 import * as markdownCss from '../markdown/markdown.css';
 import * as css from './mdx.css';
@@ -13,7 +14,7 @@ function codeText(children: ReactNode): string {
   return '';
 }
 
-/** 站内链接走前端路由，页内锚点平滑滚动且不改地址，站外链接在新标签页打开。 */
+/** 站内链接走前端路由（内容里的旧地址改写到现址，见 `currentDocHref`），页内锚点平滑滚动且不改地址，站外链接在新标签页打开。 */
 function Anchor({ href, children }: ComponentProps<'a'>) {
   if (!href) throw new Error('MDX 里的链接没有地址');
   if (href.startsWith('#')) {
@@ -30,7 +31,7 @@ function Anchor({ href, children }: ComponentProps<'a'>) {
       </a>
     );
   }
-  if (href.startsWith('/')) return <Link to={href}>{children}</Link>;
+  if (href.startsWith('/')) return <Link to={currentDocHref(href)}>{children}</Link>;
   return (
     <a href={href} target="_blank" rel="noopener">
       {children}
