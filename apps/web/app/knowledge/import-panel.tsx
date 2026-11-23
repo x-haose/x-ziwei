@@ -2,10 +2,11 @@ import { type RefObject, useState } from 'react';
 import { Button, DropZone, FileTrigger, Tab, TabList, TabPanel, Tabs, TextArea } from 'react-aria-components';
 import { LoadingBar } from '../chart/centre';
 import * as controls from '../components/controls.css';
-import { FileIcon, LockIcon } from '../components/icons';
+import { CaretIcon, FileIcon, LockIcon } from '../components/icons';
 import { fmt, type Messages } from '../i18n/messages';
 import type { KernelState } from '../kernel/kernel';
 import type { ImportState, Problem } from './import';
+import { issuePath, issueText } from './issues';
 import * as css from './knowledge.css';
 import { type Pack, diffAgainst } from './library';
 import { diffText, totalOf } from './parts';
@@ -28,8 +29,8 @@ export function problemText(p: Problem, t: Messages): { where: string; text: str
         where: p.line === null || p.column === null ? w.json : fmt(w.jsonAt, { line: p.line, column: p.column }),
         text: fmt(m.syntax, { detail: p.detail }),
       };
-    case 'kernel':
-      return { where: w.kernel, text: fmt(m.kernel, { detail: p.detail }) };
+    case 'issue':
+      return { where: issuePath(p.issue.path, t), text: issueText(p.issue, t) };
     case 'idMissing':
       return { where: w.id, text: m.idMissing };
     case 'idDefault':
@@ -50,7 +51,7 @@ export function problemText(p: Problem, t: Messages): { where: string; text: str
 }
 
 /** 一组原因：错误（赭红左线）或提醒（`--line-3` 左线）。 */
-function ProblemList({ problems, warn = false, t }: { problems: Problem[]; warn?: boolean; t: Messages }) {
+export function ProblemList({ problems, warn = false, t }: { problems: Problem[]; warn?: boolean; t: Messages }) {
   return (
     <ul className={css.problems}>
       {problems.map((p, i) => {
@@ -85,6 +86,7 @@ function Result({
   onReset: () => void;
 }) {
   const k = t.knowledge.imp;
+  const [showWarnings, setShowWarnings] = useState(false);
   if (state.phase === 'idle') return null;
   if (state.phase === 'busy') {
     return (
@@ -142,8 +144,13 @@ function Result({
       </dl>
       {state.warnings.length > 0 && (
         <>
-          <p className={css.warnLabel}>{fmt(k.warnings, { n: state.warnings.length })}</p>
-          <ProblemList problems={state.warnings} warn t={t} />
+          <button type="button" className={css.warnToggle} aria-expanded={showWarnings} onClick={() => setShowWarnings((v) => !v)}>
+            {fmt(k.warnings, { n: state.warnings.length })}
+            <span className={css.warnCaret}>
+              <CaretIcon />
+            </span>
+          </button>
+          {showWarnings && <ProblemList problems={state.warnings} warn t={t} />}
         </>
       )}
       <div className={css.resultActions}>

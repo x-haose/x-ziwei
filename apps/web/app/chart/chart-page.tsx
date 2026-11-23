@@ -15,7 +15,7 @@ import { fmt, type Messages } from '../i18n/messages';
 import { useLang, useMessages } from '../i18n/use-lang';
 import { type Kernel, loadKernel, useKernelState } from '../kernel/kernel';
 import { createLunarCalendar } from '../kernel/lunar';
-import { type ActiveKnowledge, ChartKnowledgeMark, useActiveKnowledge, useRepairNotice } from '../knowledge/chart-knowledge';
+import { type ActiveKnowledge, ChartKnowledgeMark, useActiveKnowledge, useBrokenPacks, useRepairNotice, useRetireBroken } from '../knowledge/chart-knowledge';
 import { updateUse, useLibrary } from '../knowledge/use-library';
 import { useHydrated } from '../lib/media';
 import { buildPrompt, questionHeading } from '../prompt/build';
@@ -293,13 +293,16 @@ export function ChartPage() {
   const [promptInput, setPromptInput] = useState<PromptInput>({ choice: DEFAULT_CHOICE, question: '' });
   const lib = useLibrary();
   useRepairNotice(lib, t);
-  const knowledge = useActiveKnowledge(kernel, lib);
+  const broken = useBrokenPacks(kernel, lib);
+  useRetireBroken(lib, broken, t);
+  const knowledge = useActiveKnowledge(kernel, lib, broken);
   const mark = kernel && (
     <ChartKnowledgeMark
       t={t}
       lang={lang}
       kernel={kernel}
       lib={lib}
+      broken={broken}
       onPick={(next, label) =>
         updateUse(next).then(
           () => toast(fmt(t.chart.knowToast, { label })),

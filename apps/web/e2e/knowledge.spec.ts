@@ -53,15 +53,20 @@ test('导入失败逐条列出位置与改法：JSON 语法、内核拒绝、本
   await expect(result).toContainText('JSON 第 4 行第 1 列');
   await page.getByRole('button', { name: '重新选择' }).click();
 
-  await paste(page, { schema: 1, id: 'iztro-docs', extends: 'nowhere', stars: { ziweiMaj: 3 } });
+  await paste(page, { ...overlay('iztro-docs', '同名', 'x'), extends: 'nowhere' });
   await expect(result).toContainText('2 处要改');
   await expect(result).toContainText('id 不能是 iztro-docs');
   await expect(result).toContainText('指向的包 nowhere 不在本机');
   await page.getByRole('button', { name: '重新选择' }).click();
 
-  await paste(page, { schema: 1, id: 'bad', extends: 'iztro-docs', stars: { ziweiMaj: 3 } });
-  await expect(result).toContainText('排盘内核');
-  await expect(result).toContainText('expected struct StarEntry');
+  // 包格式的问题由内核的 check 逐条给出：字段路径、原因与最接近的写法；提醒另列一组。
+  await paste(page, { schema: 1, id: 'bad', language: 'zh-CN', extends: 'iztro-docs', stars: { ziweiMjj: { intro: 'x' }, tianjiMaj: { intor: 'y' } } });
+  await expect(result).toContainText('2 处要改');
+  await expect(result).toContainText('version');
+  await expect(result).toContainText('stars.ziweiMjj');
+  await expect(result).toContainText('「ziweiMjj」不是内核认识的标识，这一条不会生效。最接近的写法是「ziweiMaj」。');
+  await expect(result).toContainText('另有 1 条提醒，不影响导入');
+  await expect(result).toContainText('stars.tianjiMaj.intor');
 
   await page.getByRole('tab', { name: '选文件' }).click();
   await page.locator('input[type="file"]').setInputFiles({ name: 'pack.txt', mimeType: 'text/plain', buffer: Buffer.from('{}') });
@@ -291,4 +296,49 @@ test('id 里带逗号的包也能在排盘页「更换」里选用', async ({ pa
   await page.getByRole('button', { name: /^释义：iztro-docs/ }).click();
   await page.getByRole('dialog', { name: '释义用哪套知识包' }).getByRole('option', { name: 'iztro-docs + 逗号，叠加' }).click();
   await expect(page.getByRole('region', { name: '提示词预览' })).toContainText('逗号说紫微。');
+});
+
+test('导入成功时提醒可以展开查看', async ({ page }) => {
+  await openPage(page);
+  await paste(page, { ...overlay('my-notes', '我的笔记', '笔记。'), stars: { ziweiMaj: { intro: '笔记。', intor: 'x' } } });
+  const toggle = page.getByRole('button', { name: '1 条提醒' });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
+  await expect(page.locator('[aria-live="polite"]').filter({ hasText: '已导入' })).toContainText('stars.ziweiMaj.intor');
+});
+
+test('旧版本导入、现在需要改的包：标为需要改并列出问题，移出生效组合，排盘照常', async ({ page }) => {
+  await openPage(page);
+  await paste(page, overlay('good', '好包', '好包说紫微。'));
+  await expect(page.getByText('已导入「好包」')).toBeVisible();
+  // 绕过导入直接写库，模拟 0.8 时导入、0.9 不再接受的包，并让生效组合引用它。
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open('xzw-knowledge');
+        req.onsuccess = () => {
+          const tx = req.result.transaction(['packs', 'state'], 'readwrite');
+          const raw = { schema: 1, id: 'old', version: '1', language: 'zh-CN', extends: 'iztro-docs', source: { name: '旧包' }, stars: { ziweiMjj: { intro: '旧。' } } };
+          tx.objectStore('packs').put({ id: 'old', raw, importedAt: 1 });
+          tx.objectStore('state').put({ mode: 'stack', stack: ['old', 'good'], whole: 'iztro-docs', wholeStack: [] }, 'use');
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+  );
+  await page.reload();
+  await expect(page.getByRole('status').filter({ hasText: '旧包 按现在的格式规则需要改' })).toBeVisible();
+  const old = row(page, 'old');
+  await expect(old).toContainText('需要改');
+  await expect(old).toContainText('stars.ziweiMjj');
+  await expect(page.getByRole('region', { name: '当前生效' })).toContainText('iztro-docs + 好包');
+  await expect(page.getByRole('button', { name: '把 旧包 叠加到最后' })).toHaveCount(0);
+  const [file] = await Promise.all([page.waitForEvent('download'), old.getByRole('button', { name: '导出' }).click()]);
+  expect(JSON.parse(readFileSync((await file.path())!, 'utf8')).stars).toEqual({ ziweiMjj: { intro: '旧。' } });
+
+  await page.goto(SAMPLE);
+  await page.getByRole('radio', { name: '原文' }).click();
+  await expect(page.getByRole('region', { name: '提示词预览' })).toContainText('好包说紫微。');
+  await page.getByRole('button', { name: /^释义：iztro-docs \+ 好包/ }).click();
+  await expect(page.getByRole('dialog', { name: '释义用哪套知识包' }).getByRole('option', { name: /旧包/ })).toHaveCount(0);
 });

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Dialog, Heading, Link, Modal, ModalOverlay, Radio, RadioGroup } from 'react-aria-components';
 import { useLocation, useNavigate } from 'react-router';
+import type { KnowledgeIssue } from 'x-iztro';
 import * as controls from '../components/controls.css';
 import { ChevronIcon, CloseIcon } from '../components/icons';
 import { Segmented } from '../components/segmented';
@@ -10,7 +11,7 @@ import { fmt, type Messages } from '../i18n/messages';
 import { useLang, useMessages } from '../i18n/use-lang';
 import { type Kernel, loadKernel, useKernelState } from '../kernel/kernel';
 import { type ImportState, fileProblems, runImport } from './import';
-import { ImportPanel } from './import-panel';
+import { ImportPanel, ProblemList } from './import-panel';
 import { defaultPackInfo, packRaw } from './kernel-pack';
 import * as css from './knowledge.css';
 import {
@@ -30,10 +31,11 @@ import {
   usePack,
   wholes,
   withoutPack,
+  withoutPacks,
 } from './library';
 import { CountList, activePacks, diffText, importedText, totalOf, useLabel } from './parts';
 import { addPack, removePack, updateUse, useLibrary } from './use-library';
-import { useRepairNotice } from './chart-knowledge';
+import { useBrokenPacks, useRepairNotice, useRetireBroken } from './chart-knowledge';
 import { ViewDrawer } from './view-drawer';
 
 /** 下载一个包的原文：`id-版本.json`。 */
@@ -262,6 +264,7 @@ function PackList({
   packs,
   defaultPack,
   activeSet,
+  broken,
   blocked,
   canReadDefault,
   onView,
@@ -272,6 +275,8 @@ function PackList({
   packs: readonly Pack[];
   defaultPack: Pack;
   activeSet: ReadonlySet<string>;
+  /** 过不了内核校验的包（「需要改」）及其 error 级问题。 */
+  broken: ReadonlyMap<string, KnowledgeIssue[]>;
   blocked: boolean;
   /** 默认包的全文在内核里：内核装好之前查看、导出不可用。 */
   canReadDefault: boolean;
@@ -295,6 +300,7 @@ function PackList({
           const isDefault = p.id === DEFAULT_PACK_ID;
           const base = p.extends === null ? null : p.extends === DEFAULT_PACK_ID ? defaultPack : (packs.find((x) => x.id === p.extends) ?? null);
           const readable = !isDefault || canReadDefault;
+          const issues = broken.get(p.id);
           return (
             <li key={p.id} className={css.pack}>
               <div>
@@ -304,6 +310,7 @@ function PackList({
                   <span className={css.tags}>
                     {isDefault && <span className={css.tag}>{l.default}</span>}
                     {activeSet.has(p.id) && <span className={`${css.tag} ${css.tagOn}`}>{l.active}</span>}
+                    {issues && <span className={css.tag}>{l.broken}</span>}
                   </span>
                 </div>
                 <div className={css.meta}>
@@ -330,6 +337,12 @@ function PackList({
                 ) : base ? (
                   <p className={css.packSource}>{fmt(l.overlaySource, { diff: diffText(diffAgainst(p, base), t), base: base.name })}</p>
                 ) : null}
+                {issues && (
+                  <>
+                    <p className={css.problemLabel}>{fmt(l.brokenNote, { n: issues.length })}</p>
+                    <ProblemList problems={issues.map((issue) => ({ code: 'issue' as const, issue }))} t={t} />
+                  </>
+                )}
               </div>
               <div className={css.packActions} role="group" aria-label={fmt(l.actionsLabel, { name: p.name })}>
                 <Button className={css.packAction} isDisabled={!readable} onPress={() => onView(p)}>
@@ -438,6 +451,8 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
     loadKernel().catch(() => undefined);
   }, []);
   useRepairNotice(lib, t);
+  const broken = useBrokenPacks(kernel, lib);
+  useRetireBroken(lib, broken, t);
 
   // 格式说明搬到 /{lang}/knowledge/format 之前，带锚点的旧链接指向这里；把锚点带过去。
   useEffect(() => {
@@ -448,7 +463,9 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
   const viewingRaw = useMemo(() => (viewing ? (viewing.raw ?? (kernel ? packRaw(kernel, viewing) : null)) : null), [viewing, kernel]);
   const ready = lib.status === 'ready';
   const packs = ready ? lib.packs : [];
-  const use = ready ? lib.use : DEFAULT_USE;
+  // 「需要改」的包不能生效：组合与可选的包都不算它们（组合里的引用另由 useRetireBroken 写回移出）。
+  const usable = packs.filter((p) => !broken.has(p.id));
+  const use = ready ? withoutPacks(lib.use, broken.keys()) : DEFAULT_USE;
   const blocked = lib.status === 'unavailable' || lib.status === 'failed';
   const activeSet = new Set(activeIds(use));
 
@@ -521,13 +538,14 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
           </Button>
         </p>
       )}
-      <UsePanel t={t} use={use} packs={packs} defaultPack={defaultPack} blocked={blocked} onChange={changeUse} />
+      <UsePanel t={t} use={use} packs={usable} defaultPack={defaultPack} blocked={blocked} onChange={changeUse} />
       <div className={css.grid}>
         <PackList
           t={t}
           packs={packs}
           defaultPack={defaultPack}
           activeSet={activeSet}
+          broken={broken}
           blocked={blocked}
           canReadDefault={kernel !== null}
           onView={setViewing}

@@ -417,6 +417,24 @@ export const problemLabel = style({ marginTop: 12, fontSize: size.aux, color: co
 
 export const warnLabel = style([problemLabel, { color: color.fg2 }]);
 
+/** 导入成功时的「N 条提醒」：点开看各条。 */
+export const warnToggle = style({
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  minHeight: space.hit,
+  marginTop: 4,
+  fontSize: size.aux,
+  color: color.fg2,
+  selectors: { '&:hover': { color: color.fg }, '&:focus-visible': { outline: `${stroke.hair} solid ${color.fg}`, outlineOffset: 2 } },
+});
+
+export const warnCaret = style({
+  display: 'inline-flex',
+  transition: `transform ${motion.base}`,
+  selectors: { [`${warnToggle}[aria-expanded="true"] &`]: { transform: 'rotate(180deg)' } },
+});
+
 export const problems = style({ listStyle: 'none', margin: '8px 0 0', padding: 0 });
 
 export const problem = style({

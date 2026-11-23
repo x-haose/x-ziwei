@@ -2,7 +2,10 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import * as kernel from 'x-iztro';
 import { type ImportState, runImport } from './import';
 import { jsonErrorPosition } from './json-position';
-import { activePack, builtinPack, checkImport, defaultPackInfo } from './kernel-pack';
+import type { KnowledgeIssue } from 'x-iztro';
+import { MESSAGES } from '../i18n/messages';
+import { issuePath, issueText } from './issues';
+import { activePack, brokenPacks, builtinPack, checkImport, defaultPackInfo } from './kernel-pack';
 import { DEFAULT_PACK_ID, DEFAULT_USE, describePack } from './library';
 
 beforeAll(async () => {
@@ -20,19 +23,29 @@ describe('导入校验', () => {
     expect(r.errors[0]).toMatchObject({ code: 'syntax', line: 4, column: 1 });
   });
 
-  it('包格式交给内核：不是对象、没有 schema、条目类型不对', () => {
-    for (const text of ['[1]', '{"id":"a"}', JSON.stringify({ schema: 1, id: 'a', extends: DEFAULT_PACK_ID, stars: { ziweiMaj: 3 } })]) {
+  it('包格式交给内核的 check：逐条给出级别、路径与代码', () => {
+    const issueCodes = (text: string) => {
       const r = checkImport(kernel, text, []);
-      expect(r.ok, text).toBe(false);
-      if (!r.ok) expect(r.errors.map((p) => p.code)).toContain('kernel');
-    }
+      if (r.ok) return { errors: [], warnings: r.warnings.map((p) => (p.code === 'issue' ? `${p.issue.code}@${p.issue.path.join('.')}` : p.code)) };
+      const f = (p: (typeof r.errors)[number]) => (p.code === 'issue' ? `${p.issue.code}@${p.issue.path.join('.')}` : p.code);
+      return { errors: r.errors.map(f), warnings: r.warnings.map(f) };
+    };
+    expect(issueCodes('[1]').errors).toEqual(['not_object@']);
+    expect(issueCodes('{"id":"a","version":"1","language":"zh-CN"}').errors).toEqual(['schema_missing@schema']);
+    const pack = { schema: 1, id: 'a', version: '1', language: 'zh-CN', extends: DEFAULT_PACK_ID, stars: { ziweiMjj: { intro: 'x' }, tianjiMaj: { intor: 'y' } } };
+    const r = issueCodes(JSON.stringify(pack));
+    expect(r.errors).toEqual(['unknown_key@stars.ziweiMjj']);
+    expect(r.warnings).toContain('unknown_field@stars.tianjiMaj.intor');
   });
 
-  it('本机包库的规则与内核的合并检查一起列出', () => {
+  it('本机包库的规则与内核的问题一起列出；缺 id 只由内核报一次', () => {
     const notes = describePack(overlay('notes', 'x'), 1);
-    const r = checkImport(kernel, JSON.stringify({ schema: 1, id: 'notes', extends: 'notes', stars: { ziweiMaj: 3 } }), [notes]);
+    const r = checkImport(kernel, JSON.stringify({ ...overlay('notes', 'y'), extends: 'notes' }), [notes]);
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.errors.map((p) => p.code)).toEqual(['idTaken', 'extendsOverlay']);
+    if (!r.ok) expect(r.errors.map((p) => p.code).slice(0, 2)).toEqual(['idTaken', 'extendsOverlay']);
+    const noId = checkImport(kernel, JSON.stringify({ schema: 1, version: '1', language: 'zh-CN' }), []);
+    expect(noId.ok).toBe(false);
+    if (!noId.ok) expect(noId.errors.map((p) => (p.code === 'issue' ? p.issue.code : p.code))).toEqual(['required_missing']);
   });
 
   it('合格的覆盖包与整包通过', () => {
@@ -101,5 +114,32 @@ describe('深层嵌套', () => {
     const states: ImportState[] = [];
     await runImport({ file: 'p', read: async () => '中'.repeat(700_000), kernel, packs: [], save: async () => { throw new Error('不该走到存入'); }, onState: (s) => states.push(s) });
     expect(states.at(-1)).toMatchObject({ phase: 'error', errors: [{ code: 'tooLarge' }] });
+  });
+});
+
+describe('旧版本导入、现在需要改的包', () => {
+  it('error 级问题按包列出；合格的包不在其中', () => {
+    const ok = describePack(overlay('ok', '好'), 1);
+    const bad = describePack({ ...overlay('bad', '坏'), stars: { ziweiMjj: { intro: 'x' } } }, 2);
+    const broken = brokenPacks(kernel, [ok, bad]);
+    expect([...broken.keys()]).toEqual(['bad']);
+    expect(broken.get('bad')?.map((i) => i.code)).toEqual(['unknown_key']);
+  });
+});
+
+describe('问题的原因与改法', () => {
+  it('内核的每种 code 中英文都有文案；参数填进去，有 suggestion 时补一句', () => {
+    for (const code of Object.values(kernel.KnowledgeIssueCode)) {
+      for (const lang of ['zh', 'en'] as const) expect(Object.hasOwn(MESSAGES[lang].knowledge.issues, code), `${lang} ${code}`).toBe(true);
+    }
+    const issue = kernel.KnowledgePack.check({ schema: 1, id: 'a', version: '1', language: 'zh-CN', stars: { ziweiMjj: {} } })[0]!;
+    expect(issuePath(issue.path, MESSAGES.zh)).toBe('stars.ziweiMjj');
+    expect(issueText(issue, MESSAGES.zh)).toBe('「ziweiMjj」不是内核认识的标识，这一条不会生效。最接近的写法是「ziweiMaj」。');
+  });
+
+  it('不认识的 code 如实显示内核的说明', () => {
+    const issue = { level: 'error', path: [], code: 'brand_new', params: {}, message: 'something new' } as unknown as KnowledgeIssue;
+    expect(issueText(issue, MESSAGES.en)).toBe('something new');
+    expect(issuePath([], MESSAGES.zh)).toBe('（整个包）');
   });
 });

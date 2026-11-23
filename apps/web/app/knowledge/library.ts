@@ -149,6 +149,13 @@ export function withoutPack(use: Use, id: string): Use {
   return { ...use, stack: use.stack.filter((x) => x !== id), wholeStack: use.wholeStack.filter((x) => x !== id) };
 }
 
+/** 依次删掉几个包之后的组合（规则同 `withoutPack`）。 */
+export function withoutPacks(use: Use, ids: Iterable<string>): Use {
+  let next = use;
+  for (const id of ids) next = withoutPack(next, id);
+  return next;
+}
+
 /** 当前模式的叠加里把 `id` 前移（-1）或后移（1）一位；不在叠加里或已到头时报错。 */
 export function moveInStack(use: Use, id: string, dir: -1 | 1): Use {
   const layers = [...current(use).layers];
