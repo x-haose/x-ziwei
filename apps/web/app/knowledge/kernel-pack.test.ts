@@ -15,15 +15,15 @@ describe('导入校验', () => {
     const r = checkImport(kernel, '{\n  "schema": 1,\n  "id": \n}', []);
     expect(r.ok).toBe(false);
     if (r.ok) return;
-    expect(r.problems).toHaveLength(1);
-    expect(r.problems[0]).toMatchObject({ code: 'syntax', line: 4, column: 1 });
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]).toMatchObject({ code: 'syntax', line: 4, column: 1 });
   });
 
   it('包格式交给内核：不是对象、没有 schema、条目类型不对', () => {
     for (const text of ['[1]', '{"id":"a"}', JSON.stringify({ schema: 1, id: 'a', extends: DEFAULT_PACK_ID, stars: { ziweiMaj: 3 } })]) {
       const r = checkImport(kernel, text, []);
       expect(r.ok, text).toBe(false);
-      if (!r.ok) expect(r.problems.map((p) => p.code)).toContain('kernel');
+      if (!r.ok) expect(r.errors.map((p) => p.code)).toContain('kernel');
     }
   });
 
@@ -31,7 +31,7 @@ describe('导入校验', () => {
     const notes = describePack(overlay('notes', 'x'), 1);
     const r = checkImport(kernel, JSON.stringify({ schema: 1, id: 'notes', extends: 'notes', stars: { ziweiMaj: 3 } }), [notes]);
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.problems.map((p) => p.code)).toEqual(['idTaken', 'extendsOverlay']);
+    if (!r.ok) expect(r.errors.map((p) => p.code)).toEqual(['idTaken', 'extendsOverlay']);
   });
 
   it('合格的覆盖包与整包通过', () => {

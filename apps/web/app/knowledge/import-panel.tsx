@@ -18,8 +18,8 @@ export type Problem = ImportProblem | { code: 'full' } | { code: 'storage'; reas
 export type ImportState =
   | { phase: 'idle' }
   | { phase: 'busy'; file: string; step: 0 | 1 | 2 | 3 }
-  | { phase: 'error'; file: string; problems: Problem[] }
-  | { phase: 'done'; file: string; pack: Pack };
+  | { phase: 'error'; file: string; errors: Problem[]; warnings: Problem[] }
+  | { phase: 'done'; file: string; pack: Pack; warnings: Problem[] };
 
 /** 选的文件本身的问题：不是 .json、超过 2 MB。 */
 export function fileProblems(file: File): Problem[] {
@@ -91,37 +91,38 @@ export async function runImport({
     text = await read();
   } catch (err) {
     console.error(err);
-    onState({ phase: 'error', file, problems: [{ code: 'unreadable' }] });
+    onState({ phase: 'error', file, errors: [{ code: 'unreadable' }], warnings: [] });
     return;
   }
   onState({ phase: 'busy', file, step: 1 });
   const checked = checkImport(kernel, text, packs);
   if (!checked.ok) {
-    onState({ phase: 'error', file, problems: checked.problems });
+    onState({ phase: 'error', file, errors: checked.errors, warnings: checked.warnings });
     return;
   }
   onState({ phase: 'busy', file, step: 3 });
   try {
     const pack = await save(checked.raw);
-    onState({ phase: 'done', file, pack });
+    onState({ phase: 'done', file, pack, warnings: checked.warnings });
   } catch (err) {
     if (err instanceof StorageFullError) {
-      onState({ phase: 'error', file, problems: [{ code: 'full' }] });
+      onState({ phase: 'error', file, errors: [{ code: 'full' }], warnings: checked.warnings });
       return;
     }
     console.error(err);
-    onState({ phase: 'error', file, problems: [{ code: 'storage', reason: err instanceof Error ? err.message : String(err) }] });
+    onState({ phase: 'error', file, errors: [{ code: 'storage', reason: err instanceof Error ? err.message : String(err) }], warnings: checked.warnings });
   }
 }
 
-function ProblemList({ problems, t }: { problems: Problem[]; t: Messages }) {
+/** 一组原因：错误（赭红左线）或提醒（`--line-3` 左线）。 */
+function ProblemList({ problems, warn = false, t }: { problems: Problem[]; warn?: boolean; t: Messages }) {
   return (
     <ul className={css.problems}>
       {problems.map((p, i) => {
         const { where, text } = problemText(p, t);
         return (
           // 原因按出现顺序排列，同一次结果里不会变动。
-          <li key={i} className={css.problem}>
+          <li key={i} className={warn ? `${css.problem} ${css.problemWarn}` : css.problem}>
             <code className={css.problemWhere}>{where}</code>
             <p className={css.problemText}>{text}</p>
           </li>
@@ -171,8 +172,14 @@ function Result({
       <>
         <h3 className={css.resultTitle}>{k.failed}</h3>
         <p className={css.resultFile}>{state.file}</p>
-        <p className={css.problemLabel}>{fmt(k.mustFix, { n: state.problems.length })}</p>
-        <ProblemList problems={state.problems} t={t} />
+        <p className={css.problemLabel}>{fmt(k.mustFix, { n: state.errors.length })}</p>
+        <ProblemList problems={state.errors} t={t} />
+        {state.warnings.length > 0 && (
+          <>
+            <p className={css.warnLabel}>{fmt(k.alsoWarnings, { n: state.warnings.length })}</p>
+            <ProblemList problems={state.warnings} warn t={t} />
+          </>
+        )}
         <div className={css.resultActions}>
           <Button className={`${controls.ghost} ${css.resultButton}`} onPress={onReset}>
             {k.again}
@@ -198,6 +205,12 @@ function Result({
           {b ? fmt(k.overlayOn, { base: b.name, diff: diffText(diffAgainst(p, b), t) }) : fmt(k.wholeTotal, { n: totalOf(p.counts) })}
         </dd>
       </dl>
+      {state.warnings.length > 0 && (
+        <>
+          <p className={css.warnLabel}>{fmt(k.warnings, { n: state.warnings.length })}</p>
+          <ProblemList problems={state.warnings} warn t={t} />
+        </>
+      )}
       <div className={css.resultActions}>
         {inUse(p.id) ? (
           <span className={`${css.tag} ${css.tagOn}`}>{k.inUse}</span>

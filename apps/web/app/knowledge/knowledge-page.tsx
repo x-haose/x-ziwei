@@ -529,7 +529,7 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
             firstControl={firstControl}
             onFile={(file) => {
               const problems = fileProblems(file);
-              if (problems.length) setImp({ phase: 'error', file: file.name, problems });
+              if (problems.length) setImp({ phase: 'error', file: file.name, errors: problems, warnings: [] });
               else startImport(file.name, () => file.text());
             }}
             onPaste={(text) => startImport(t.knowledge.imp.pasted, async () => text)}
