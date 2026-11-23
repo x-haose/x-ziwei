@@ -86,8 +86,8 @@ x-ziwei stdio --allow-pack-dir ./packs
 
 包的格式见 x-iztro 的[知识包格式规范](https://github.com/x-haose/x-iztro/blob/main/knowledge/SCHEMA.md)。`extends` 写 `iztro-docs` 的包会合并到默认包之上，只需写要改的条目；包里 `topics` 段的选宫定义直接决定 `ziwei_get_topic_palaces` 取哪些宫。
 
-## License
+## 许可
 
-The code is licensed under the [MIT License](LICENSE): you are free to use, modify and distribute it, including commercially.
+代码按 [MIT 许可](LICENSE) 开放，可以自由使用、修改、分发，包括商用。
 
-The MIT License covers the code only and does not grant trademark rights. The name "x-ziwei", its icon, and the "Star Map" visual design (the overall look presented by the design specification and mockups in `docs/design`) are not part of that license. If you build a separate product or service on this project, please use your own name and marks, and avoid presenting it in a way that suggests it is this project or an official version of it.
+MIT 只覆盖代码，不授予商标权。「x-ziwei」名称、图标与「星图」视觉设计（`docs/design` 中的设计规范与对照稿所呈现的整体视觉）不在 MIT 授权范围内。基于本项目做独立的产品或服务时，请使用自己的名称与标识，不要让人误以为是本项目或其官方版本。
