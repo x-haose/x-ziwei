@@ -54,7 +54,7 @@ test('站内搜索：按 / 打开，输入即搜，回车跳到结果', async ({
   await page.goto('/zh/install');
   await page.waitForLoadState('networkidle');
   await page.keyboard.press('/');
-  const dialog = page.getByRole('dialog', { name: '搜索帮助与方法' });
+  const dialog = page.getByRole('dialog', { name: '搜索帮助与解读方法' });
   await expect(dialog).toBeVisible();
   // 状态行在输入之前就已挂载，读屏才会播报之后的变化。
   await expect(dialog.getByRole('status')).toHaveText('');

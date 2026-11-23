@@ -15,7 +15,8 @@ export default defineConfig({
   webServer: {
     command: 'wrangler dev --port 4173',
     url: 'http://localhost:4173/zh',
-    reuseExistingServer: !process.env.CI,
+    // 不复用已在跑的服务：wrangler dev 在启动时读入产物，复用上一次留下的进程会拿旧产物测试；端口被占时直接报错。
+    reuseExistingServer: false,
     env: { WRANGLER_SEND_METRICS: 'false' },
   },
 });

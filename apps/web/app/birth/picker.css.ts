@@ -54,6 +54,8 @@ export const popoverWidth = createVar();
 
 export const popover = style({
   vars: { [popoverWidth]: '264px' },
+  display: 'flex',
+  flexDirection: 'column',
   width: `max(var(--trigger-width), ${popoverWidth})`,
   maxWidth: 'calc(100vw - 16px)',
   background: color.bg,
@@ -73,17 +75,25 @@ export const sheet = style({
   left: 0,
   right: 0,
   bottom: 0,
+  display: 'flex',
+  flexDirection: 'column',
   maxHeight: '78vh',
-  overflow: 'auto',
   background: color.bg,
   boxShadow: `0 calc(-1 * ${stroke.hair}) 0 ${color.line3}`,
   paddingBottom: 'max(10px, env(safe-area-inset-bottom))',
   outline: 'none',
 });
 
-export const dialog = style({ paddingBottom: 6, outline: 'none' });
+/** 对话框与其内层占满弹层，可被压缩到弹层的最大高度以内。 */
+export const dialog = style({ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0, outline: 'none' });
+
+export const frame = style({ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 });
+
+/** 标题行之下的内容区：超出弹层高度时在这里滚动。 */
+export const body = style({ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', paddingBottom: 6 });
 
 export const head = style({
+  flex: 'none',
   display: 'flex',
   alignItems: 'center',
   height: space.hit,
@@ -189,10 +199,27 @@ export const option = style({
   },
 });
 
-/** 列表式选项（时辰）：一行里左边名字、右边钟点。 */
-export const optionRow = style({ flexDirection: 'row', justifyContent: 'space-between', padding: '0 10px' });
+/**
+ * 列表式选项（时辰）：一行里左边名字、右边钟点。名字与钟点各自不折行；一行放不下时钟点整体换到第二行，
+ * 不挤压名字。
+ */
+export const optionRow = style({
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  justifyContent: 'space-between',
+  alignItems: 'baseline',
+  alignContent: 'center',
+  columnGap: 12,
+  padding: '4px 10px',
+});
 
-export const optionMain = style({ fontFamily: font.serif, fontWeight: 500, fontSize: size.small });
+export const optionMain = style({
+  fontFamily: font.serif,
+  fontWeight: 500,
+  fontSize: size.small,
+  whiteSpace: 'nowrap',
+  selectors: { [`${optionRow} &`]: { flex: 'none' } },
+});
 
 /** 选项里的数字（年份、日）用 Geist。 */
 export const optionNumber = style({ fontFamily: font.num, fontWeight: 400, fontSize: size.small });
@@ -201,7 +228,11 @@ export const optionNote = style({
   fontFamily: font.num,
   fontSize: size.label,
   color: color.fg3,
-  selectors: { [`${option}[data-selected] &`]: { color: color.btnFg } },
+  whiteSpace: 'nowrap',
+  selectors: {
+    [`${option}[data-selected] &`]: { color: color.btnFg },
+    [`${optionRow} &`]: { marginLeft: 'auto' },
+  },
 });
 
 /** 今天所在的年份等：右上一个强调色小圆点。 */

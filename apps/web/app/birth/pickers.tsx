@@ -421,7 +421,7 @@ export function HourPicker({
           <p className={css.section}>{t.picker.approx}</p>
           <OptionGrid
             label={t.picker.periodsList}
-            columns={2}
+            columns={1}
             row
             autoFocus={value?.kind === 'period'}
             options={periods}

@@ -12,7 +12,7 @@ const zh = {
     label: '主导航',
     home: '首页',
     chart: '排盘',
-    method: '方法',
+    method: '解读方法',
     knowledge: '知识包',
     install: '装进 AI',
   },
@@ -35,7 +35,7 @@ const zh = {
   },
   home: {
     title: ['把紫微斗数', '完整交给你的 AI'],
-    lede: ['盘面、知识、方法全部公开，', '可以换成你自己的。'],
+    lede: ['盘面、知识、解读方法全部公开，', '可以换成你自己的。'],
     ctaChart: '在线排盘',
     ctaInstall: '装进 ChatGPT / Claude',
     facts: {
@@ -240,8 +240,8 @@ const zh = {
   },
   search: {
     open: '搜索',
-    title: '搜索帮助与方法',
-    placeholder: '搜索帮助与方法',
+    title: '搜索帮助与解读方法',
+    placeholder: '搜索帮助与解读方法',
     results: '搜索结果',
     loading: '正在载入索引',
     none: '没有找到',
@@ -280,7 +280,7 @@ const en: Messages = {
     label: 'Main',
     home: 'Home',
     chart: 'Chart',
-    method: 'Method',
+    method: 'Reading method',
     knowledge: 'Knowledge',
     install: 'Add to AI',
   },
@@ -303,7 +303,7 @@ const en: Messages = {
   },
   home: {
     title: ['Give your AI', 'all of Zi Wei Dou Shu'],
-    lede: ['Chart, knowledge and method are all open, ', 'and you can swap in your own.'],
+    lede: ['Chart, knowledge and reading method are all open, ', 'and you can swap in your own.'],
     ctaChart: 'Cast a chart',
     ctaInstall: 'Add to ChatGPT / Claude',
     facts: {
@@ -506,8 +506,8 @@ const en: Messages = {
   },
   search: {
     open: 'Search',
-    title: 'Search help and method',
-    placeholder: 'Search help and method',
+    title: 'Search help and reading method',
+    placeholder: 'Search help and reading method',
     results: 'Search results',
     loading: 'Loading the index',
     none: 'Nothing found',

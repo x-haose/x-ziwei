@@ -20,6 +20,9 @@ export interface Paging {
  * 自绘选择器（设计规范第 11 节「选择器」）：触发钮加弹层，桌面弹层贴在触发钮下方 4px，
  * 手机改为底部面板（背后铺半透明遮罩）。
  *
+ * 尺寸：桌面弹层的最大高度由 React Aria 按触发钮上下的可用空间算出并写进行内样式（下方放不下且上方更宽裕时翻到上方），
+ * 底部面板最高 78% 视口；两者都是标题行固定、下面的内容区在弹层内滚动，任何窗口高度下都不越出视口和弹层边框。
+ *
  * 读屏与键盘：触发钮带 `aria-haspopup="dialog"` 与 `aria-expanded`；弹层是带标题的对话框；
  * Enter 或空格打开，Esc、点弹层外或选中后关闭，关闭后焦点回到触发钮。
  * 翻页键（PageUp、PageDown）在有分页的弹层里换页。
@@ -79,7 +82,7 @@ export function Picker({
   const dialog = (
     <Dialog className={css.dialog} aria-label={title}>
       {({ close }) => (
-        <div onKeyDownCapture={onKeys}>
+        <div className={css.frame} onKeyDownCapture={onKeys}>
           <div className={css.head}>
             {paging && (
               <Button className={css.headButton} aria-label={t.picker.prev} isDisabled={!paging.canPrev} onPress={paging.onPrev}>
@@ -96,7 +99,7 @@ export function Picker({
               <CloseIcon />
             </Button>
           </div>
-          {children(close)}
+          <div className={css.body}>{children(close)}</div>
         </div>
       )}
     </Dialog>
