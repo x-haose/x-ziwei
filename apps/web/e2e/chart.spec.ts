@@ -95,8 +95,10 @@ test('流月含闰月：2020 年的闰四月拆成前后两段', async ({ page }
 test('提示词：内核文本、方法正文与问题，复制原文与链接', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto(SAMPLE);
+  await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
   await page.getByRole('textbox', { name: '你的问题' }).fill('今年适合换工作吗');
   await page.getByRole('radio', { name: '原文' }).click();
+  await expect(page.getByRole('radio', { name: '原文' })).toBeChecked();
   const preview = page.getByRole('region', { name: '提示词预览' });
   await expect(preview).toContainText('你在陪用户聊紫微斗数');
   await expect(preview).toContainText('# 命盘 2000-8-16 寅时 女');
@@ -123,6 +125,7 @@ test('提示词：内核文本、方法正文与问题，复制原文与链接',
 test('只知道大概时间：夜里有四个候选，所选候选写进地址，提示词写明时辰未定', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/zh/chart#cal=solar&d=2000-8-16&p=night&h=1&g=f');
+  await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
   const cands = page.getByRole('radiogroup', { name: '候选时辰' });
   await expect(cands.getByRole('radio')).toHaveText(['早子', '丑', '寅', '晚子']);
   await expect(cands.getByRole('radio', { name: '丑' })).toBeChecked();
@@ -130,6 +133,7 @@ test('只知道大概时间：夜里有四个候选，所选候选写进地址�
   await expect(page).toHaveURL('/zh/chart#cal=solar&d=2000-8-16&p=night&h=2&g=f');
   await expect(page.getByRole('button', { name: /^命宫，壬午，主星紫微$/ })).toBeVisible();
   await page.getByRole('radio', { name: '原文' }).click();
+  await expect(page.getByRole('radio', { name: '原文' })).toBeChecked();
   await expect(page.getByRole('region', { name: '提示词预览' })).toContainText(
     '时辰未定：出生在所填日期的夜里（00:00–04:59、23:00–23:59），候选 早子（00:00–00:59）、丑（01:00–02:59）、寅（03:00–04:59）、晚子（23:00–23:59）；这张盘按寅时排。',
   );
@@ -139,7 +143,9 @@ test('只知道大概时间：夜里有四个候选，所选候选写进地址�
 
 test('提示词：选在流月层时勾选项写到流月；按年时附流月一览', async ({ page }) => {
   await page.goto(SAMPLE);
+  await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
   await page.getByRole('radio', { name: '原文' }).click();
+  await expect(page.getByRole('radio', { name: '原文' })).toBeChecked();
   const preview = page.getByRole('region', { name: '提示词预览' });
   await expect(page.getByRole('checkbox', { name: /^\d{4} 年运限$/ })).toBeChecked();
   await expect(preview).toContainText('# 流月一览');
