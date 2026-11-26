@@ -19,7 +19,7 @@ export interface ActiveKnowledge {
 
 /** 本机过不了内核校验的包（「需要改」）及其 error 级问题；内核或包库没就绪时为空。 */
 export function useBrokenPacks(kernel: Kernel | null, lib: LibraryState): Map<string, KnowledgeIssue[]> {
-  return useMemo(() => (kernel && lib.status === 'ready' ? brokenPacks(kernel, lib.packs) : new Map()), [kernel, lib]);
+  return useMemo(() => (kernel && lib.status === 'ready' ? brokenPacks(kernel, lib.packs, lib.use) : new Map()), [kernel, lib]);
 }
 
 /** 本页已尝试写回移出的包组（排序后以换行连接）。放在模块里，组件重新挂载也不重复尝试。 */
@@ -34,7 +34,7 @@ export function useRetireBroken(lib: LibraryState, broken: ReadonlyMap<string, K
   useEffect(() => {
     if (lib.status !== 'ready' || broken.size === 0) return;
     const u = lib.use;
-    const referenced = [...broken.keys()].filter((id) => u.stack.includes(id) || u.wholeStack.includes(id) || u.whole === id);
+    const referenced = [...broken.keys()].filter((id) => u.layers.includes(id));
     if (referenced.length === 0) return;
     // 同一组包只写回一次：写回失败（如存满了）后库会重读、本 effect 会再跑，不能因此反复重试。
     const attempt = referenced.toSorted().join('\n');

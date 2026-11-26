@@ -10,6 +10,7 @@ import {
   checkUse,
   describePack,
   libraryProblems,
+  migrateUse,
   repairUse,
   withoutPack,
 } from './library';
@@ -28,8 +29,11 @@ interface Schema extends DBSchema {
 }
 
 const DB_NAME = 'xzw-knowledge';
-/** 2：生效组合加了整包模式的叠加 `wholeStack`。 */
-const DB_VERSION = 2;
+/**
+ * 3：生效组合改为有序叠放的列表 `{ layers }`（1、2 存的是叠加 / 整包两种模式，见 `migrateUse`）。
+ * 2：组合加了整包模式的叠加 `wholeStack`。
+ */
+const DB_VERSION = 3;
 
 /** 按库里此刻的包，要存的包不合本机包库的规则（如另一个标签页刚存了同 id 的包）；这次写入没有发生。 */
 export class LibraryConflictError extends Error {
@@ -50,7 +54,7 @@ function isUse(v: unknown): v is Use {
   if (typeof v !== 'object' || v === null) return false;
   const u = v as Record<string, unknown>;
   const ids = (x: unknown) => Array.isArray(x) && x.every((y) => typeof y === 'string');
-  return (u.mode === 'stack' || u.mode === 'whole') && ids(u.stack) && typeof u.whole === 'string' && ids(u.wholeStack);
+  return ids(u.layers);
 }
 
 type Tx = IDBPTransaction<Schema, ('packs' | 'state')[], 'readwrite'>;
@@ -145,10 +149,12 @@ export async function openLibrary(events: OpenEvents): Promise<Library> {
         d.createObjectStore('packs', { keyPath: 'id' });
         d.createObjectStore('state');
       }
-      if (oldVersion < 2) {
+      if (oldVersion >= 1 && oldVersion < 3) {
+        // 旧的两种模式无损转成列表。认不出的旧值原样留着：读库时按「组合损坏」报出（见 readTx），不悄悄换成默认组合。
         const state = tx.objectStore('state');
-        const use = await state.get('use');
-        if (use !== undefined) await state.put({ ...use, wholeStack: [] }, 'use');
+        const old: unknown = await state.get('use');
+        const use = old === undefined ? null : migrateUse(old);
+        if (use) await state.put(use, 'use');
       }
     },
     events,

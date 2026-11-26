@@ -5,7 +5,7 @@ import { jsonErrorPosition } from './json-position';
 import type { KnowledgeIssue } from 'x-iztro';
 import { MESSAGES } from '../i18n/messages';
 import { issuePath, issueText } from './issues';
-import { activePack, brokenPacks, builtinPack, checkImport, defaultPackInfo } from './kernel-pack';
+import { activePack, brokenPacks, builtinPack, checkImport, coverage, defaultPackInfo } from './kernel-pack';
 import { DEFAULT_PACK_ID, DEFAULT_USE, describePack } from './library';
 
 beforeAll(async () => {
@@ -42,7 +42,7 @@ describe('导入校验', () => {
     const notes = describePack(overlay('notes', 'x'), 1);
     const r = checkImport(kernel, JSON.stringify({ ...overlay('notes', 'y'), extends: 'notes' }), [notes]);
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.errors.map((p) => p.code).slice(0, 2)).toEqual(['idTaken', 'extendsOverlay']);
+    if (!r.ok) expect(r.errors.map((p) => p.code)[0]).toBe('idTaken');
     for (const id of [undefined, 5]) {
       const r = checkImport(kernel, JSON.stringify({ schema: 1, id, version: '1', language: 'zh-CN' }), []);
       expect(r.ok).toBe(false);
@@ -70,22 +70,33 @@ describe('导入校验', () => {
 describe('按生效组合合并', () => {
   const a = describePack(overlay('a', '甲说'), 1);
   const b = describePack(overlay('b', '乙说'), 2);
+  const school = describePack({ schema: 1, id: 'school', version: '1', language: 'zh-CN', stars: { ziweiMaj: { intro: '本门' } } }, 3);
 
-  it('叠加按顺序合并，排在后面的覆盖前面的', () => {
-    expect(activePack(kernel, { ...DEFAULT_USE, stack: ['a', 'b'] }, [a, b]).star('ziweiMaj')?.intro).toBe('乙说');
-    expect(activePack(kernel, { ...DEFAULT_USE, stack: ['b', 'a'] }, [a, b]).star('ziweiMaj')?.intro).toBe('甲说');
+  it('按列表顺序合并，排在后面的覆盖前面的；任意包都能放在任意位置', () => {
+    expect(activePack(kernel, { layers: [DEFAULT_PACK_ID, 'a', 'b'] }, [a, b]).star('ziweiMaj')?.intro).toBe('乙说');
+    expect(activePack(kernel, { layers: [DEFAULT_PACK_ID, 'b', 'a'] }, [a, b]).star('ziweiMaj')?.intro).toBe('甲说');
+    expect(activePack(kernel, { layers: ['a', DEFAULT_PACK_ID] }, [a]).star('ziweiMaj')?.intro).toBe(builtinPack(kernel).star('ziweiMaj')?.intro);
   });
 
-  it('没有覆盖包时就是默认包；整包以所选的包为底，只叠加基于它的覆盖包', () => {
+  it('只有默认包时就是默认包；独立包单独生效时没有默认包的条目，叠上别的包照常', () => {
     expect(activePack(kernel, DEFAULT_USE, [])).toBe(builtinPack(kernel));
-    const school = describePack({ schema: 1, id: 'school', version: '1', language: 'zh-CN', stars: { ziweiMaj: { intro: '本门' } } }, 3);
-    const p = activePack(kernel, { mode: 'whole', stack: ['a'], whole: 'school', wholeStack: [] }, [a, school]);
-    expect(p.star('ziweiMaj')?.intro).toBe('本门');
-    expect(p.star('tianjiMaj')).toBeUndefined();
-    const onSchool = describePack({ ...overlay('on-school', '门内又说'), extends: 'school' }, 4);
-    const layered = activePack(kernel, { mode: 'whole', stack: [], whole: 'school', wholeStack: ['on-school'] }, [a, school, onSchool]);
-    expect(layered.star('ziweiMaj')?.intro).toBe('门内又说');
-    expect(layered.star('tianjiMaj')).toBeUndefined();
+    const alone = activePack(kernel, { layers: ['school'] }, [school]);
+    expect(alone.star('ziweiMaj')?.intro).toBe('本门');
+    expect(alone.star('tianjiMaj')).toBeUndefined();
+    const onTop = activePack(kernel, { layers: ['school', 'a'] }, [a, school]);
+    expect(onTop.star('ziweiMaj')?.intro).toBe('甲说');
+    expect(onTop.star('tianjiMaj')).toBeUndefined();
+  });
+
+  it('覆盖度：内核认识的星曜、格局、宫位、四化里有释义的条数与缺的标识', () => {
+    const full = coverage(kernel, builtinPack(kernel));
+    expect(full.palaces).toEqual({ have: 12, total: 12, missing: [] });
+    expect(full.mutagens.missing).toEqual([]);
+    const alone = coverage(kernel, activePack(kernel, { layers: ['school'] }, [school]));
+    expect(alone.stars.have).toBe(1);
+    expect(alone.stars.missing).toContain('tianjiMaj');
+    expect(alone.palaces).toMatchObject({ have: 0, total: 12 });
+    expect(alone.topics).toEqual({ have: 0, total: null, missing: [] });
   });
 
   it('默认包信息：六段条目数取自内核', () => {
@@ -123,18 +134,36 @@ describe('旧版本导入、现在需要改的包', () => {
   it('error 级问题按包列出；合格的包不在其中', () => {
     const ok = describePack(overlay('ok', '好'), 1);
     const bad = describePack({ ...overlay('bad', '坏'), stars: { ziweiMjj: { intro: 'x' } } }, 2);
-    const broken = brokenPacks(kernel, [ok, bad]);
-    expect([...broken.keys()]).toEqual(['bad']);
-    expect(broken.get('bad')?.map((i) => i.code)).toEqual(['unknown_key']);
+    for (const use of [DEFAULT_USE, { layers: [DEFAULT_PACK_ID, 'bad', 'ok'] }]) {
+      const broken = brokenPacks(kernel, [ok, bad], use);
+      expect([...broken.keys()]).toEqual(['bad']);
+      expect(broken.get('bad')?.map((i) => i.code)).toEqual(['unknown_key']);
+    }
   });
 });
 
-describe('底包需要改', () => {
-  it('基于「需要改」的本机整包的覆盖包不能导入', () => {
-    const school = describePack({ schema: 1, id: 'school', version: '1', language: 'zh-CN', stars: { ziweiMjj: {} } }, 1);
-    const r = checkImport(kernel, JSON.stringify({ ...overlay('on-school', 'x'), extends: 'school' }), [school]);
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.errors.map((p) => p.code)).toContain('extendsBroken');
+describe('extends 只是声明', () => {
+  it('所声明的包不在本机：照常导入，另给一条提醒', () => {
+    const r = checkImport(kernel, JSON.stringify({ ...overlay('on-school', 'x'), extends: 'school' }), []);
+    expect(r.ok).toBe(true);
+    expect(r.warnings.map((p) => p.code)).toContain('extendsAbsent');
+  });
+
+  it('全新的独立包（没有 extends）可以导入、单独生效', () => {
+    const r = checkImport(kernel, JSON.stringify({ schema: 1, id: 'mine', version: '1', language: 'zh-CN', stars: { ziweiMaj: { intro: '我说' } } }), []);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const mine = describePack(r.raw, 1);
+    expect(activePack(kernel, { layers: ['mine'] }, [mine]).star('ziweiMaj')?.intro).toBe('我说');
+  });
+
+  it('在组合里的包以它下面各层合并的结果为底来查：下面已有的条目的摘要规则按合并后判断', () => {
+    const below = describePack({ schema: 1, id: 'below', version: '1', language: 'zh-CN', stars: { ziweiMaj: { intro: '短' } } }, 1);
+    const top = describePack({ schema: 1, id: 'top', version: '1', language: 'zh-CN', stars: { ziweiMaj: { summary: '摘要' } } }, 2);
+    // top 单独时「有摘要却没有正文」；叠在 below 上时正文来自 below。
+    expect(brokenPacks(kernel, [below, top], { layers: ['top'] }).has('top')).toBe(false);
+    const issuesAlone = kernel.KnowledgePack.check(top.raw!).map((i) => i.code);
+    expect(issuesAlone).toContain('summary_without_body');
   });
 });
 

@@ -1,6 +1,6 @@
 /**
- * 本机知识包库的纯规则：包的元信息与条目数、生效组合（叠加或整包）、组合的增删移、
- * 覆盖包相对底包的改动，以及本机包库自己的导入规则。包格式本身的校验与合并由排盘内核做（见 `kernel-pack.ts`）。
+ * 本机知识包库的纯规则：包的元信息与条目数、生效组合（有序叠放的列表）、组合的增删移、
+ * 一层相对下面各层的改动，以及本机包库自己的导入规则。包格式本身的校验与合并由排盘内核做（见 `kernel-pack.ts`）。
  */
 
 /** 内核内嵌的默认包的标识。 */
@@ -28,10 +28,10 @@ export interface Pack {
   name: string;
   version: string | null;
   language: string | null;
-  /** 覆盖包所基于的包；独立整包为 null。 */
+  /** 包声明的 `extends`（建议叠在哪个包之上）；没有声明为 null。 */
   extends: string | null;
   counts: Counts;
-  /** 各段的条目标识，算覆盖包相对底包的改动用。 */
+  /** 各段的条目标识，算一层相对下面各层的改动用。 */
   keys: Record<Section, string[]>;
   license: string | null;
   author: string | null;
@@ -79,196 +79,156 @@ export function describePack(raw: PackRaw, importedAt: number | null): Pack {
 }
 
 /**
- * 生效组合。`mode` 为 stack 时在默认包上按 `stack` 的顺序叠加覆盖包；为 whole 时以独立整包 `whole` 为底，
- * 按 `wholeStack` 的顺序叠加基于它的覆盖包（选的是默认包时不叠加，叠加默认包用 stack 模式）。
- * 两处叠加都是排在后面的覆盖前面的。两种模式各自的选择都保留，来回切换不丢。
+ * 生效组合：一个有序的包标识列表，从下到上叠放，排在后面的覆盖前面的（合并按列表顺序，由内核做）。
+ * 默认包 `iztro-docs` 也是普通的一层，可以移出、放在任意位置；列表至少有一层。
+ * 包的 `extends` 只是声明（建议放在所声明的包之上），不限制它能否生效、放在哪里。
  */
 export interface Use {
-  mode: 'stack' | 'whole';
-  stack: string[];
-  whole: string;
-  wholeStack: string[];
+  layers: string[];
 }
 
-export const DEFAULT_USE: Use = { mode: 'stack', stack: [], whole: DEFAULT_PACK_ID, wholeStack: [] };
+export const DEFAULT_USE: Use = { layers: [DEFAULT_PACK_ID] };
 
-/** 能叠加在 `base` 上的覆盖包：`extends` 为它。 */
-export function overlaysOf(packs: readonly Pack[], base: string): Pack[] {
-  return packs.filter((p) => p.extends === base);
-}
-
-/** 能叠加在默认包上的覆盖包。 */
-export function stackable(packs: readonly Pack[]): Pack[] {
-  return overlaysOf(packs, DEFAULT_PACK_ID);
-}
-
-/** 本机的独立整包（不含默认包）。 */
-export function wholes(packs: readonly Pack[]): Pack[] {
-  return packs.filter((p) => p.extends === null);
-}
-
-/** 当前模式的底包与叠加。 */
-function current(use: Use): { base: string; layers: string[] } {
-  return use.mode === 'stack' ? { base: DEFAULT_PACK_ID, layers: use.stack } : { base: use.whole, layers: use.wholeStack };
-}
-
-/** 换掉当前模式的叠加。 */
-function withLayers(use: Use, layers: string[]): Use {
-  return use.mode === 'stack' ? { ...use, stack: layers } : { ...use, wholeStack: layers };
+/** 列表为空时退回只有默认包：释义总要有一套。 */
+function nonEmpty(layers: string[]): Use {
+  return { layers: layers.length ? layers : [...DEFAULT_USE.layers] };
 }
 
 /**
- * 核对组合引用的包都在本机且用法对得上：两处叠加都只有基于各自底包的覆盖包、不重复；整包是默认包或本机的独立整包，
- * 选默认包时整包模式不叠加。组合与包库在同一个事务里改，对不上即是代码缺陷，直接报错。
+ * 核对组合：至少一层、不重复、每层是默认包或本机的包。组合与包库在同一个事务里改，对不上即是代码缺陷，直接报错。
  */
 export function checkUse(use: Use, packs: readonly Pack[]): void {
-  const byId = new Map(packs.map((p) => [p.id, p]));
-  if (use.whole !== DEFAULT_PACK_ID) {
-    const p = byId.get(use.whole);
-    if (!p || p.extends !== null) throw new Error(`整包 ${use.whole} 不是本机的独立整包`);
-  } else if (use.wholeStack.length) {
-    throw new Error('整包模式选默认包时不叠加');
-  }
-  for (const [base, layers] of [[DEFAULT_PACK_ID, use.stack], [use.whole, use.wholeStack]] as const) {
-    if (new Set(layers).size !== layers.length) throw new Error(`叠加里有重复的包：${layers.join(', ')}`);
-    for (const id of layers) {
-      if (byId.get(id)?.extends !== base) throw new Error(`叠加里的 ${id} 不是本机基于 ${base} 的覆盖包`);
-    }
+  if (use.layers.length === 0) throw new Error('生效组合至少要有一层');
+  if (new Set(use.layers).size !== use.layers.length) throw new Error(`生效组合里有重复的包：${use.layers.join(', ')}`);
+  for (const id of use.layers) {
+    if (id !== DEFAULT_PACK_ID && !packs.some((p) => p.id === id)) throw new Error(`生效组合里的 ${id} 不在本机`);
   }
 }
 
-/** 当前生效用到的包标识，按合并顺序；第一个是底包。 */
+/** 当前生效用到的包标识，按合并顺序（从下到上）。 */
 export function activeIds(use: Use): string[] {
-  const { base, layers } = current(use);
-  return [base, ...layers];
+  return use.layers;
 }
 
-/** 删掉一个包之后的组合：从两处叠加里去掉；它是所选整包时改回默认包（连同它的叠加）。 */
+/** 删掉一个包之后的组合：从列表里去掉；列表空了退回默认包。 */
 export function withoutPack(use: Use, id: string): Use {
-  if (use.whole === id) return { ...use, stack: use.stack.filter((x) => x !== id), whole: DEFAULT_PACK_ID, wholeStack: [] };
-  return { ...use, stack: use.stack.filter((x) => x !== id), wholeStack: use.wholeStack.filter((x) => x !== id) };
+  return nonEmpty(use.layers.filter((x) => x !== id));
 }
 
 /** 依次删掉几个包之后的组合（规则同 `withoutPack`）。 */
 export function withoutPacks(use: Use, ids: Iterable<string>): Use {
-  let next = use;
-  for (const id of ids) next = withoutPack(next, id);
-  return next;
+  const gone = new Set(ids);
+  return nonEmpty(use.layers.filter((x) => !gone.has(x)));
 }
 
-/** 当前模式的叠加里把 `id` 前移（-1）或后移（1）一位；不在叠加里或已到头时报错。 */
-export function moveInStack(use: Use, id: string, dir: -1 | 1): Use {
-  const layers = [...current(use).layers];
+/** 把 `id` 下移（-1，往底下）或上移（1，往上面）一层；不在列表里或已到头时报错。 */
+export function moveLayer(use: Use, id: string, dir: -1 | 1): Use {
+  const layers = [...use.layers];
   const i = layers.indexOf(id);
   const j = i + dir;
-  if (i < 0 || j < 0 || j >= layers.length) throw new Error(`叠加里移不动 ${id}`);
+  if (i < 0 || j < 0 || j >= layers.length) throw new Error(`生效组合里移不动 ${id}`);
   [layers[i], layers[j]] = [layers[j]!, layers[i]!];
-  return withLayers(use, layers);
+  return { layers };
 }
 
-/** 从当前模式的叠加里移出一个包。 */
-export function removeFromStack(use: Use, id: string): Use {
-  return withLayers(use, current(use).layers.filter((x) => x !== id));
-}
-
-/** 把一个覆盖包排到当前模式的叠加末尾。 */
-export function addToStack(use: Use, id: string): Use {
-  const layers = current(use).layers;
-  return layers.includes(id) ? use : withLayers(use, [...layers, id]);
-}
-
-/** 整包模式换底包：换了底包，原来的叠加随之清空（它们基于原来的底包）。 */
-export function pickWhole(use: Use, id: string): Use {
-  return id === use.whole ? use : { ...use, whole: id, wholeStack: [] };
+/** 从列表里移出一层；只剩这一层时报错（界面上不给这个动作）。 */
+export function removeLayer(use: Use, id: string): Use {
+  if (use.layers.length === 1 && use.layers[0] === id) throw new Error('生效组合至少要有一层');
+  return { layers: use.layers.filter((x) => x !== id) };
 }
 
 /**
- * 改用一个包：基于默认包的覆盖包排到默认包叠加的末尾；基于本机整包的覆盖包切到整包模式、以那个整包为底排到末尾；
- * 整包切到整包模式。
+ * 把一个包放进列表的最上面：它声明的 `extends` 若已在组合里，自然就在它下面（「放在所声明的包上面」的建议因此满足）。
+ * 已在列表里时不动。
  */
-export function usePack(use: Use, pack: Pack): Use {
-  if (pack.extends === DEFAULT_PACK_ID) return addToStack({ ...use, mode: 'stack' }, pack.id);
-  if (pack.extends !== null) return addToStack({ ...pickWhole(use, pack.extends), mode: 'whole' }, pack.id);
-  return { ...pickWhole(use, pack.id), mode: 'whole' };
+export function addLayer(use: Use, id: string): Use {
+  return use.layers.includes(id) ? use : { layers: [...use.layers, id] };
 }
 
 /** 两个组合生效的包与顺序是否相同。 */
 export function sameActive(a: Use, b: Use): boolean {
-  return activeIds(a).join('\n') === activeIds(b).join('\n');
+  return a.layers.join('\n') === b.layers.join('\n');
 }
 
 /**
- * 修复组合与包库对不上的地方（另一个标签页删了包等）：整包不在本机或不是独立整包时改回默认包并清空它的叠加；
- * 两处叠加里去掉不在本机、不基于对应底包或重复的包。返回修复后的组合与被移出的包标识（没有修复时为空）。
+ * 修复组合与包库对不上的地方（另一个标签页删了包等）：去掉不在本机或重复的层，空了退回默认包。
+ * 返回修复后的组合与被移出的包标识（没有修复时为空）。
  */
 export function repairUse(use: Use, packs: readonly Pack[]): { use: Use; dropped: string[] } {
-  const byId = new Map(packs.map((p) => [p.id, p]));
   const dropped: string[] = [];
-  const keep = (layers: readonly string[], base: string): string[] =>
-    layers.filter((id, i) => {
-      const ok = byId.get(id)?.extends === base && layers.indexOf(id) === i;
-      if (!ok) dropped.push(id);
-      return ok;
-    });
-  const wholeOk = use.whole === DEFAULT_PACK_ID || byId.get(use.whole)?.extends === null;
-  if (!wholeOk) dropped.push(use.whole);
-  const whole = wholeOk ? use.whole : DEFAULT_PACK_ID;
-  // 选默认包时整包模式不叠加；整包换回默认包时它的叠加一并移出。
-  let wholeStack: string[];
-  if (whole === DEFAULT_PACK_ID) {
-    dropped.push(...use.wholeStack);
-    wholeStack = [];
-  } else {
-    wholeStack = keep(use.wholeStack, whole);
-  }
-  return { use: { mode: use.mode, stack: keep(use.stack, DEFAULT_PACK_ID), whole, wholeStack }, dropped: [...new Set(dropped)] };
+  const layers = use.layers.filter((id, i) => {
+    const ok = (id === DEFAULT_PACK_ID || packs.some((p) => p.id === id)) && use.layers.indexOf(id) === i;
+    if (!ok) dropped.push(id);
+    return ok;
+  });
+  return { use: nonEmpty(layers), dropped: [...new Set(dropped)] };
 }
 
-/** 覆盖包相对底包的改动：同键条目算「改」，底包没有的键算「新增」。 */
+/**
+ * 旧版本存的组合（`{ mode, stack, whole, wholeStack }`，库版本 1、2）转成列表：叠加模式是默认包加它的叠加，
+ * 整包模式是所选整包加它的叠加。两种模式里没在用的那一份选择不再保留。认不出的形状返回 null。
+ */
+export function migrateUse(old: unknown): Use | null {
+  if (typeof old !== 'object' || old === null) return null;
+  const o = old as Record<string, unknown>;
+  const ids = (v: unknown): string[] | null => (Array.isArray(v) && v.every((x) => typeof x === 'string') ? (v as string[]) : null);
+  if (o.mode === 'stack') {
+    const stack = ids(o.stack);
+    return stack ? { layers: [DEFAULT_PACK_ID, ...stack] } : null;
+  }
+  if (o.mode === 'whole' && typeof o.whole === 'string') {
+    const wholeStack = o.wholeStack === undefined ? [] : ids(o.wholeStack);
+    return wholeStack ? { layers: [o.whole, ...wholeStack] } : null;
+  }
+  return null;
+}
+
+/**
+ * 一层的 `extends` 声明与它在组合里的位置对不上时的提醒：所声明的包不在本机（`absent`），
+ * 或它在组合里但所声明的包不在它下面（`notBelow`）。没有声明或对得上时为 null。只是提醒，不影响生效。
+ */
+export type ExtendsAdvice = { kind: 'absent' | 'notBelow'; target: string } | null;
+
+export function extendsAdvice(pack: Pick<Pack, 'id' | 'extends'>, use: Use, packs: readonly Pack[]): ExtendsAdvice {
+  const target = pack.extends;
+  if (target === null) return null;
+  if (target !== DEFAULT_PACK_ID && !packs.some((p) => p.id === target)) return { kind: 'absent', target };
+  const at = use.layers.indexOf(pack.id);
+  if (at < 0) return null;
+  return use.layers.slice(0, at).includes(target) ? null : { kind: 'notBelow', target };
+}
+
+/** 一层相对它下面各层的改动：同键条目算「改」，下面没有的键算「新增」。 */
 export interface Diff {
   changed: Counts;
   added: Counts;
 }
 
-export function diffAgainst(overlay: Pack, base: Pack): Diff {
+/** `below` 是这一层下面的各层（任意顺序）。 */
+export function diffAgainst(layer: Pack, below: readonly Pack[]): Diff {
   const changed = {} as Counts;
   const added = {} as Counts;
   for (const s of SECTIONS) {
-    const baseKeys = new Set(base.keys[s]);
-    changed[s] = overlay.keys[s].filter((k) => baseKeys.has(k)).length;
-    added[s] = overlay.keys[s].length - changed[s];
+    const baseKeys = new Set(below.flatMap((p) => p.keys[s]));
+    changed[s] = layer.keys[s].filter((k) => baseKeys.has(k)).length;
+    added[s] = layer.keys[s].length - changed[s];
   }
   return { changed, added };
 }
 
 /** 本机包库对导入的包的规则，不涉及包格式（包格式交给内核）。 */
-export type LibraryProblem =
-  | { code: 'idMissing' }
-  | { code: 'idDefault' }
-  | { code: 'idTaken'; id: string }
-  | { code: 'extendsMissing'; target: string }
-  | { code: 'extendsOverlay'; target: string }
-  | { code: 'extendsBroken'; target: string };
+export type LibraryProblem = { code: 'idMissing' } | { code: 'idDefault' } | { code: 'idTaken'; id: string };
 
 /**
- * 本机包库的导入规则：本机按 `id` 存包，`id` 必须是非空字符串且不与默认包、本机已有的包重复；
- * 覆盖包只能基于独立整包，`extends` 指向的包必须在本机（或是默认包）、自己不是覆盖包，且不在 `broken` 里
- * （「需要改」的整包不能生效，基于它的覆盖包也用不上）。`broken` 由排盘内核的校验得出，没有内核时（存库事务里）传空。
+ * 本机包库的导入规则：本机按 `id` 存包，`id` 必须是非空字符串且不与默认包、本机已有的包重复。
+ * `extends` 不在这里管：它只是声明，所声明的包不在本机时导入照常，另给提醒（`extendsAdvice`）。
  */
-export function libraryProblems(raw: PackRaw, packs: readonly Pack[], broken: ReadonlySet<string> = new Set()): LibraryProblem[] {
-  const out: LibraryProblem[] = [];
+export function libraryProblems(raw: PackRaw, packs: readonly Pack[]): LibraryProblem[] {
   const id = str(raw.id);
-  if (!id) out.push({ code: 'idMissing' });
-  else if (id === DEFAULT_PACK_ID) out.push({ code: 'idDefault' });
-  else if (packs.some((p) => p.id === id)) out.push({ code: 'idTaken', id });
-  const target = str(raw.extends);
-  if (target !== null && target !== DEFAULT_PACK_ID) {
-    const base = packs.find((p) => p.id === target);
-    if (!base) out.push({ code: 'extendsMissing', target });
-    else if (base.extends !== null) out.push({ code: 'extendsOverlay', target });
-    else if (broken.has(target)) out.push({ code: 'extendsBroken', target });
-  }
-  return out;
+  if (!id) return [{ code: 'idMissing' }];
+  if (id === DEFAULT_PACK_ID) return [{ code: 'idDefault' }];
+  if (packs.some((p) => p.id === id)) return [{ code: 'idTaken', id }];
+  return [];
 }
 
 /** 版本里 `+` 之后的构建信息（来源 commit）不进出处与摘要。 */

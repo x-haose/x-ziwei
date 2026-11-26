@@ -37,29 +37,29 @@ describe('本机知识包库（IndexedDB）', () => {
     expect(await lib.load()).toEqual({ packs: [], use: DEFAULT_USE, repaired: [] });
     await lib.add(overlay('b'), 2);
     await lib.add(overlay('a'), 1);
-    await lib.updateUse((u) => ({ ...u, stack: ['a'] }));
+    await lib.updateUse(() => ({ layers: ['a', DEFAULT_PACK_ID] }));
     lib.close();
     const again = await openLibrary(NO_EVENTS);
     const snap = await again.load();
     expect(snap.packs.map((p) => p.id)).toEqual(['a', 'b']);
-    expect(snap.use.stack).toEqual(['a']);
+    expect(snap.use.layers).toEqual(['a', DEFAULT_PACK_ID]);
     again.close();
   });
 
-  it('按库里此刻的包查本机包库的规则：同 id、基于不在本机的包都拒绝，库不变', async () => {
+  it('按库里此刻的包查本机包库的规则：同 id 拒绝、库不变；声明基于不在本机的包照常存入', async () => {
     const lib = await openLibrary(NO_EVENTS);
     await lib.add(overlay('a'), 1);
     await expect(lib.add({ ...overlay('a'), version: '2' }, 2)).rejects.toBeInstanceOf(LibraryConflictError);
-    await expect(lib.add(overlay('c', 'gone'), 3)).rejects.toBeInstanceOf(LibraryConflictError);
+    await lib.add(overlay('c', 'gone'), 3);
     const snap = await lib.load();
-    expect(snap.packs.map((p) => [p.id, p.version])).toEqual([['a', '1']]);
+    expect(snap.packs.map((p) => [p.id, p.version])).toEqual([['a', '1'], ['c', '1']]);
     lib.close();
   });
 
   it('删包与按删包规则改组合在同一个事务里', async () => {
     const lib = await openLibrary(NO_EVENTS);
     await lib.add(overlay('a'), 1);
-    await lib.updateUse((u) => ({ ...u, stack: ['a'] }));
+    await lib.updateUse(() => ({ layers: ['a'] }));
     const snap = await lib.remove('a');
     expect(snap).toEqual({ packs: [], use: DEFAULT_USE, repaired: [] });
     lib.close();
@@ -69,23 +69,23 @@ describe('本机知识包库（IndexedDB）', () => {
     const lib = await openLibrary(NO_EVENTS);
     await lib.add(overlay('p1'), 1);
     await lib.add(overlay('p2'), 2);
-    const stale: Use = { ...DEFAULT_USE, stack: ['p1'] };
+    const stale: Use = { layers: [DEFAULT_PACK_ID, 'p1'] };
     await lib.updateUse(() => stale);
     await lib.remove('p1');
-    await expect(lib.updateUse(() => ({ ...stale, stack: ['p1', 'p2'] }))).rejects.toThrow();
-    expect((await lib.load()).use.stack).toEqual([]);
-    const snap = await lib.updateUse((u) => ({ ...u, stack: [...u.stack, 'p2'] }));
-    expect(snap.use.stack).toEqual(['p2']);
+    await expect(lib.updateUse(() => ({ layers: [...stale.layers, 'p2'] }))).rejects.toThrow();
+    expect((await lib.load()).use).toEqual(DEFAULT_USE);
+    const snap = await lib.updateUse((u) => ({ layers: [...u.layers, 'p2'] }));
+    expect(snap.use.layers).toEqual([DEFAULT_PACK_ID, 'p2']);
     lib.close();
   });
 
   it('读到的组合引用了不在本机的包：按删包规则移出、写回，并列出移出的包', async () => {
     const lib = await openLibrary(NO_EVENTS);
     await lib.add(overlay('p2'), 2);
-    await putUseRaw({ mode: 'stack', stack: ['p1', 'p2'], whole: 'gone', wholeStack: ['x'] });
+    await putUseRaw({ layers: ['p1', 'p2', 'p2'] });
     const snap = await lib.load();
-    expect(snap.use).toEqual({ mode: 'stack', stack: ['p2'], whole: DEFAULT_PACK_ID, wholeStack: [] });
-    expect(snap.repaired.sort()).toEqual(['gone', 'p1', 'x']);
+    expect(snap.use).toEqual({ layers: ['p2'] });
+    expect(snap.repaired.sort()).toEqual(['p1', 'p2']);
     expect((await lib.load()).repaired).toEqual([]);
     lib.close();
   });
@@ -99,13 +99,15 @@ describe('本机知识包库（IndexedDB）', () => {
 });
 
 describe('库的版本升级', () => {
-  it('版本 1 存的生效组合补上整包模式的叠加', async () => {
-    await new Promise<void>((resolve, reject) => {
-      const req = indexedDB.open('xzw-knowledge', 1);
+  /** 按旧版本建库并写入组合（与包），模拟旧版本的网页留下的数据。 */
+  const legacy = (version: number, use: unknown, packs: unknown[] = []) =>
+    new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open('xzw-knowledge', version);
       req.onupgradeneeded = () => {
         const db = req.result;
-        db.createObjectStore('packs', { keyPath: 'id' });
-        db.createObjectStore('state').put({ mode: 'whole', stack: [], whole: 'iztro-docs' }, 'use');
+        const store = db.createObjectStore('packs', { keyPath: 'id' });
+        for (const p of packs) store.put(p);
+        db.createObjectStore('state').put(use, 'use');
       };
       req.onsuccess = () => {
         req.result.close();
@@ -113,8 +115,32 @@ describe('库的版本升级', () => {
       };
       req.onerror = () => reject(req.error);
     });
+
+  it('版本 2 的叠加模式 → 默认包加叠加；整包模式 → 整包加它的叠加', async () => {
+    const packs = ['a', 'b'].map((id, i) => ({ id, raw: overlay(id), importedAt: i }));
+    await legacy(2, { mode: 'stack', stack: ['a', 'b'], whole: 'iztro-docs', wholeStack: [] }, packs);
+    let lib = await openLibrary(NO_EVENTS);
+    expect((await lib.load()).use).toEqual({ layers: [DEFAULT_PACK_ID, 'a', 'b'] });
+    lib.close();
+    globalThis.indexedDB = new IDBFactory();
+    const whole = [{ id: 'school', raw: { schema: 1, id: 'school', version: '1' }, importedAt: 1 }, { id: 'on', raw: overlay('on', 'school'), importedAt: 2 }];
+    await legacy(2, { mode: 'whole', stack: [], whole: 'school', wholeStack: ['on'] }, whole);
+    lib = await openLibrary(NO_EVENTS);
+    expect((await lib.load()).use).toEqual({ layers: ['school', 'on'] });
+    lib.close();
+  });
+
+  it('版本 1 的组合（没有 wholeStack）同样转换', async () => {
+    await legacy(1, { mode: 'whole', stack: [], whole: 'iztro-docs' });
     const lib = await openLibrary(NO_EVENTS);
-    expect((await lib.load()).use).toEqual({ mode: 'whole', stack: [], whole: 'iztro-docs', wholeStack: [] });
+    expect((await lib.load()).use).toEqual(DEFAULT_USE);
+    lib.close();
+  });
+
+  it('认不出的旧组合不悄悄换成默认组合：读库时报损坏', async () => {
+    await legacy(2, { mode: 'oops' });
+    const lib = await openLibrary(NO_EVENTS);
+    await expect(lib.load()).rejects.toThrow(/损坏/);
     lib.close();
   });
 });

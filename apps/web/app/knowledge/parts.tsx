@@ -9,17 +9,20 @@ export function CountList({
   marks,
   t,
   className,
+  label,
 }: {
   counts: Counts;
-  /** 默认包的各段条目数，比例条的分母。 */
+  /** 比例条的分母：默认包的各段条目数，或（生效卡片里）内核认识的标识数。 */
   base: Counts;
+  /** 列表的无障碍名称，缺省「各段条目数」。 */
+  label?: string;
   /** 数字后的小字（生效卡片里的「改 N」）。 */
   marks?: Partial<Record<Section, string>>;
   t: Messages;
   className?: string;
 }) {
   return (
-    <dl className={className ? `${css.counts} ${className}` : css.counts} aria-label={t.knowledge.countsLabel}>
+    <dl className={className ? `${css.counts} ${className}` : css.counts} aria-label={label ?? t.knowledge.countsLabel}>
       {SECTIONS.map((s) => {
         const n = counts[s];
         const ratio = base[s] ? Math.min(1, n / base[s]) : 0;
@@ -55,7 +58,7 @@ export function totalOf(c: Counts): number {
   return SECTIONS.reduce((sum, s) => sum + c[s], 0);
 }
 
-/** 当前生效的包，按合并顺序（第一个是底包）。 */
+/** 当前生效的包，按合并顺序（从下到上）。 */
 export function activePacks(use: Use, packs: readonly Pack[], defaultPack: Pack): Pack[] {
   return activeIds(use).map((id) => {
     if (id === defaultPack.id) return defaultPack;

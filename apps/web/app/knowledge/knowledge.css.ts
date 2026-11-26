@@ -71,8 +71,6 @@ export const useHead = style([
   { alignItems: 'center', '@media': { [media.s]: { flexDirection: 'column', alignItems: 'stretch', gap: 10 } } },
 ]);
 
-export const useMode = style({ width: 300, '@media': { [media.s]: { width: '100%' } } });
-
 export const row = style({
   display: 'flex',
   alignItems: 'stretch',
@@ -81,15 +79,6 @@ export const row = style({
     [media.mDown]: { flexWrap: 'wrap', rowGap: 8 },
     [media.s]: { flexDirection: 'column' },
   },
-});
-
-/** 整包切换里的单选组：与叠加的卡片同一行排布。 */
-export const wholeRow = style({
-  display: 'flex',
-  alignItems: 'stretch',
-  flex: '0 1 auto',
-  minWidth: 0,
-  '@media': { [media.mDown]: { flexWrap: 'wrap', rowGap: 8 }, [media.s]: { flexDirection: 'column' } },
 });
 
 export const sheet = style({
@@ -106,33 +95,13 @@ export const sheet = style({
   '@media': { [media.s]: { flex: 'none', padding: '12px 14px 10px' } },
 });
 
+/** 最下面一层：`--bg-2` 底。 */
 export const sheetBase = style({ background: color.bg2 });
 
 export const sheetResult = style({
   flex: '1 1 360px',
   boxShadow: ring(color.fg),
   '@media': { [media.mDown]: { flexBasis: '100%' } },
-});
-
-/** 整包切换里可点的包：`role="radio"`，右上圆点，选中 1px 主色框加 `--bg-3` 底。 */
-export const sheetPick = style({
-  cursor: 'pointer',
-  selectors: {
-    '&[data-hovered]': { background: color.bg2 },
-    '&[data-selected]': { boxShadow: ring(color.fg), background: color.bg3 },
-    '&[data-focus-visible]': { outline: `${stroke.hair} solid ${color.fg}`, outlineOffset: 2 },
-  },
-});
-
-export const dot = style({
-  position: 'absolute',
-  right: 14,
-  top: 16,
-  width: 12,
-  height: 12,
-  borderRadius: '50%',
-  boxShadow: ring(color.fg3),
-  selectors: { [`${sheetPick}[data-selected] &`]: { boxShadow: ring(color.fg, '3.5px') } },
 });
 
 export const sheetKind = style({ fontSize: size.label, color: color.fg3 });
@@ -145,6 +114,9 @@ export const sheetId = style({ fontFamily: font.num, fontSize: size.aux, color: 
 export const sheetVersion = style({ marginLeft: 10 });
 
 export const sheetNote = style({ fontSize: size.small, lineHeight: 1.6, color: color.fg2 });
+
+/** 一层的 extends 声明与位置对不上时的提醒：中性信息，不用赭红。 */
+export const sheetAdvice = style({ fontSize: size.aux, lineHeight: 1.6, color: color.fg3 });
 
 export const sheetActions = style({ display: 'flex', margin: '6px -8px -6px auto', '@media': { [media.s]: { marginTop: 0 } } });
 

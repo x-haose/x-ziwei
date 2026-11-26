@@ -3,15 +3,16 @@ import {
   DEFAULT_PACK_ID,
   DEFAULT_USE,
   type Pack,
-  addToStack,
+  addLayer,
   checkUse,
   describePack,
   diffAgainst,
+  extendsAdvice,
   libraryProblems,
-  moveInStack,
-  pickWhole,
+  migrateUse,
+  moveLayer,
+  removeLayer,
   repairUse,
-  usePack,
   withoutPack,
 } from './library';
 
@@ -20,70 +21,76 @@ const notes = pack({ id: 'notes', extends: DEFAULT_PACK_ID, source: { name: '笔
 const more = pack({ id: 'more', extends: DEFAULT_PACK_ID, topics: { romance: {} } });
 const school = pack({ id: 'school', stars: { ziweiMaj: {} } });
 const onSchool = pack({ id: 'on-school', extends: 'school', stars: { ziweiMaj: {} } });
-const packs: Pack[] = [notes, more, school, onSchool];
+const onNotes = pack({ id: 'on-notes', extends: 'notes' });
+const packs: Pack[] = [notes, more, school, onSchool, onNotes];
 
 describe('本机包库的导入规则', () => {
-  it('id 缺失、与默认包同名、与本机已有的重复', () => {
+  it('id 缺失、与默认包同名、与本机已有的重复；extends 不限制导入', () => {
     expect(libraryProblems({ schema: 1 }, packs)).toEqual([{ code: 'idMissing' }]);
     expect(libraryProblems({ schema: 1, id: DEFAULT_PACK_ID }, packs)).toEqual([{ code: 'idDefault' }]);
     expect(libraryProblems({ schema: 1, id: 'notes' }, packs)).toEqual([{ code: 'idTaken', id: 'notes' }]);
-  });
-
-  it('覆盖包只能基于默认包或本机的独立整包', () => {
-    expect(libraryProblems({ id: 'a', extends: DEFAULT_PACK_ID }, packs)).toEqual([]);
-    expect(libraryProblems({ id: 'a', extends: 'school' }, packs)).toEqual([]);
-    expect(libraryProblems({ id: 'a', extends: 'nowhere' }, packs)).toEqual([{ code: 'extendsMissing', target: 'nowhere' }]);
-    expect(libraryProblems({ id: 'a', extends: 'notes' }, packs)).toEqual([{ code: 'extendsOverlay', target: 'notes' }]);
-    expect(libraryProblems({ id: 'a', extends: 'school' }, packs, new Set(['school']))).toEqual([{ code: 'extendsBroken', target: 'school' }]);
+    for (const target of [DEFAULT_PACK_ID, 'school', 'notes', 'nowhere']) expect(libraryProblems({ id: 'a', extends: target }, packs)).toEqual([]);
   });
 });
 
-describe('生效组合', () => {
-  it('两处叠加各自只收基于自己底包的覆盖包；整包模式选默认包时不叠加', () => {
-    expect(() => checkUse({ mode: 'stack', stack: ['notes', 'more'], whole: 'school', wholeStack: ['on-school'] }, packs)).not.toThrow();
-    expect(() => checkUse({ ...DEFAULT_USE, stack: ['school'] }, packs)).toThrow();
-    expect(() => checkUse({ ...DEFAULT_USE, stack: ['on-school'] }, packs)).toThrow();
-    expect(() => checkUse({ ...DEFAULT_USE, stack: ['notes', 'notes'] }, packs)).toThrow();
-    expect(() => checkUse({ ...DEFAULT_USE, whole: 'notes' }, packs)).toThrow();
-    expect(() => checkUse({ ...DEFAULT_USE, stack: ['gone'] }, packs)).toThrow();
-    expect(() => checkUse({ ...DEFAULT_USE, whole: 'school', wholeStack: ['notes'] }, packs)).toThrow();
-    expect(() => checkUse({ ...DEFAULT_USE, wholeStack: ['notes'] }, packs)).toThrow();
+describe('生效组合：同级的有序叠放', () => {
+  it('任意本机包与默认包、任意顺序都行；不能为空、不能重复、不能有本机没有的包', () => {
+    for (const layers of [['school', 'notes'], ['on-notes'], ['notes', DEFAULT_PACK_ID], [DEFAULT_PACK_ID, 'on-school', 'more']]) {
+      expect(() => checkUse({ layers }, packs), layers.join()).not.toThrow();
+    }
+    expect(() => checkUse({ layers: [] }, packs)).toThrow();
+    expect(() => checkUse({ layers: ['notes', 'notes'] }, packs)).toThrow();
+    expect(() => checkUse({ layers: ['gone'] }, packs)).toThrow();
   });
 
-  it('前移后移交换当前模式叠加里相邻两项，越界报错', () => {
-    const use = { ...DEFAULT_USE, stack: ['notes', 'more'] };
-    expect(moveInStack(use, 'more', -1).stack).toEqual(['more', 'notes']);
-    expect(() => moveInStack(use, 'notes', -1)).toThrow();
-    expect(() => moveInStack(use, 'school', 1)).toThrow();
-    const whole = { ...DEFAULT_USE, mode: 'whole' as const, whole: 'school', wholeStack: ['on-school'] };
-    expect(addToStack(whole, 'on-school')).toBe(whole);
-    expect(() => moveInStack(whole, 'on-school', 1)).toThrow();
+  it('上移下移交换相邻两层，越界报错；只剩一层时不能移出', () => {
+    const use = { layers: [DEFAULT_PACK_ID, 'notes', 'more'] };
+    expect(moveLayer(use, 'more', -1).layers).toEqual([DEFAULT_PACK_ID, 'more', 'notes']);
+    expect(moveLayer(use, DEFAULT_PACK_ID, 1).layers).toEqual(['notes', DEFAULT_PACK_ID, 'more']);
+    expect(() => moveLayer(use, DEFAULT_PACK_ID, -1)).toThrow();
+    expect(() => moveLayer(use, 'school', 1)).toThrow();
+    expect(removeLayer(use, DEFAULT_PACK_ID).layers).toEqual(['notes', 'more']);
+    expect(() => removeLayer({ layers: ['notes'] }, 'notes')).toThrow();
   });
 
-  it('删包后从两处叠加里去掉；它是所选整包时改回默认包并清空整包的叠加；另一模式的选择保留', () => {
-    const use = { mode: 'whole' as const, stack: ['notes', 'more'], whole: 'school', wholeStack: ['on-school'] };
-    expect(withoutPack(use, 'notes')).toEqual({ ...use, stack: ['more'] });
-    expect(withoutPack(use, 'on-school')).toEqual({ ...use, wholeStack: [] });
-    expect(withoutPack(use, 'school')).toEqual({ mode: 'whole', stack: ['notes', 'more'], whole: DEFAULT_PACK_ID, wholeStack: [] });
+  it('加入时放在最上面（所声明的包已在组合里时自然在它下面）；已在组合里不动', () => {
+    const use = { layers: [DEFAULT_PACK_ID, 'school', 'more'] };
+    expect(addLayer(use, 'on-school').layers).toEqual([DEFAULT_PACK_ID, 'school', 'more', 'on-school']);
+    expect(addLayer({ layers: ['school'] }, 'alone').layers).toEqual(['school', 'alone']);
+    expect(addLayer(use, 'school')).toBe(use);
   });
 
-  it('换整包清空原来整包上的叠加', () => {
-    const use = { ...DEFAULT_USE, mode: 'whole' as const, whole: 'school', wholeStack: ['on-school'] };
-    expect(pickWhole(use, DEFAULT_PACK_ID)).toEqual({ ...use, whole: DEFAULT_PACK_ID, wholeStack: [] });
-    expect(pickWhole(use, 'school')).toBe(use);
+  it('删包后从组合里去掉，空了退回默认包', () => {
+    expect(withoutPack({ layers: ['notes', 'school'] }, 'notes')).toEqual({ layers: ['school'] });
+    expect(withoutPack({ layers: ['school'] }, 'school')).toEqual(DEFAULT_USE);
   });
 
-  it('改用一个包：覆盖包排到所在底包的叠加末尾并切到对应模式，整包切到整包模式', () => {
-    expect(usePack({ ...DEFAULT_USE, mode: 'whole', stack: ['more'] }, notes)).toEqual({ ...DEFAULT_USE, mode: 'stack', stack: ['more', 'notes'] });
-    expect(usePack(DEFAULT_USE, school)).toEqual({ ...DEFAULT_USE, mode: 'whole', whole: 'school' });
-    expect(usePack(DEFAULT_USE, onSchool)).toEqual({ ...DEFAULT_USE, mode: 'whole', whole: 'school', wholeStack: ['on-school'] });
+  it('extends 只作提醒：所声明的包不在本机，或在组合里但不在这一层下面', () => {
+    expect(extendsAdvice(notes, { layers: [DEFAULT_PACK_ID, 'notes'] }, packs)).toBeNull();
+    expect(extendsAdvice(notes, { layers: ['notes', DEFAULT_PACK_ID] }, packs)).toEqual({ kind: 'notBelow', target: DEFAULT_PACK_ID });
+    expect(extendsAdvice(notes, { layers: ['notes'] }, packs)).toEqual({ kind: 'notBelow', target: DEFAULT_PACK_ID });
+    expect(extendsAdvice(pack({ id: 'x', extends: 'nowhere' }), { layers: ['x'] }, packs)).toEqual({ kind: 'absent', target: 'nowhere' });
+    expect(extendsAdvice(school, { layers: ['school'] }, packs)).toBeNull();
+    expect(extendsAdvice(onSchool, DEFAULT_USE, packs)).toBeNull();
   });
 });
 
-describe('覆盖包相对底包的改动', () => {
-  it('同键算改，底包没有的算新增', () => {
-    const base = pack({ id: 'base', stars: { ziweiMaj: {}, tianjiMaj: {} } });
-    const d = diffAgainst(notes, base);
+describe('旧组合的迁移', () => {
+  it('叠加模式 → 默认包加叠加；整包模式 → 整包加它的叠加；版本 1 没有 wholeStack', () => {
+    expect(migrateUse({ mode: 'stack', stack: ['notes', 'more'], whole: 'school', wholeStack: ['on-school'] })).toEqual({ layers: [DEFAULT_PACK_ID, 'notes', 'more'] });
+    expect(migrateUse({ mode: 'whole', stack: ['notes'], whole: 'school', wholeStack: ['on-school'] })).toEqual({ layers: ['school', 'on-school'] });
+    expect(migrateUse({ mode: 'whole', stack: [], whole: DEFAULT_PACK_ID })).toEqual({ layers: [DEFAULT_PACK_ID] });
+    expect(migrateUse({ mode: 'stack', stack: [] })).toEqual(DEFAULT_USE);
+    expect(migrateUse({ mode: 'other' })).toBeNull();
+    expect(migrateUse({ mode: 'stack', stack: [1] })).toBeNull();
+    expect(migrateUse('x')).toBeNull();
+  });
+});
+
+describe('一层相对下面各层的改动', () => {
+  it('同键算改，下面各层都没有的算新增', () => {
+    const base = pack({ id: 'base', stars: { tianjiMaj: {} } });
+    const d = diffAgainst(notes, [base, school]);
     expect(d.changed.stars).toBe(1);
     expect(d.added.stars).toBe(1);
     expect(d.changed.topics + d.added.topics).toBe(0);
@@ -91,14 +98,15 @@ describe('覆盖包相对底包的改动', () => {
 });
 
 describe('修复对不上的组合', () => {
-  it('整包不在本机时改回默认包并移出它的叠加；叠加里去掉不在本机、底包不对与重复的', () => {
-    const r = repairUse({ mode: 'whole', stack: ['notes', 'gone', 'notes', 'school'], whole: 'nowhere', wholeStack: ['on-school'] }, packs);
-    expect(r.use).toEqual({ mode: 'whole', stack: ['notes'], whole: DEFAULT_PACK_ID, wholeStack: [] });
-    expect(r.dropped.sort()).toEqual(['gone', 'notes', 'nowhere', 'on-school', 'school'].sort());
+  it('去掉不在本机与重复的层，空了退回默认包', () => {
+    const r = repairUse({ layers: ['notes', 'gone', 'notes', DEFAULT_PACK_ID] }, packs);
+    expect(r.use).toEqual({ layers: ['notes', DEFAULT_PACK_ID] });
+    expect(r.dropped.sort()).toEqual(['gone', 'notes'].sort());
+    expect(repairUse({ layers: ['gone'] }, packs)).toEqual({ use: DEFAULT_USE, dropped: ['gone'] });
   });
 
   it('组合对得上时原样返回', () => {
-    const use = { mode: 'whole' as const, stack: ['notes'], whole: 'school', wholeStack: ['on-school'] };
+    const use = { layers: ['school', 'notes'] };
     expect(repairUse(use, packs)).toEqual({ use, dropped: [] });
   });
 });

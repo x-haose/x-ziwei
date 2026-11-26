@@ -37,12 +37,8 @@ export function problemText(p: Problem, t: Messages): { where: string; text: str
       return { where: w.id, text: m.idDefault };
     case 'idTaken':
       return { where: w.id, text: fmt(m.idTaken, { id: p.id }) };
-    case 'extendsMissing':
-      return { where: w.extends, text: fmt(m.extendsMissing, { target: p.target }) };
-    case 'extendsOverlay':
-      return { where: w.extends, text: fmt(m.extendsOverlay, { target: p.target }) };
-    case 'extendsBroken':
-      return { where: w.extends, text: fmt(m.extendsBroken, { target: p.target }) };
+    case 'extendsAbsent':
+      return { where: w.extends, text: fmt(m.extendsAbsent, { target: p.target }) };
     case 'full':
       return { where: w.storage, text: m.full };
     case 'storage':
@@ -141,7 +137,11 @@ function Result({
         <dd className={css.okValue}>{p.language ?? '—'}</dd>
         <dt className={css.okTerm}>{t.knowledge.list.base}</dt>
         <dd className={css.okValue}>
-          {b ? fmt(k.overlayOn, { base: b.name, diff: diffText(diffAgainst(p, b), t) }) : fmt(k.wholeTotal, { n: totalOf(p.counts) })}
+          {b
+            ? fmt(k.overlayOn, { base: b.name, diff: diffText(diffAgainst(p, [b]), t) })
+            : p.extends !== null
+              ? fmt(k.absentBase, { target: p.extends })
+              : fmt(k.wholeTotal, { n: totalOf(p.counts) })}
         </dd>
       </dl>
       {state.warnings.length > 0 && (
@@ -160,7 +160,7 @@ function Result({
           <span className={`${css.tag} ${css.tagOn}`}>{k.inUse}</span>
         ) : (
           <Button className={`${controls.button} ${css.resultButton}`} onPress={() => onUse(p)}>
-            {p.extends === null ? k.useIt : k.stackIt}
+            {k.addIt}
           </Button>
         )}
         <Button className={`${controls.ghost} ${css.resultButton}`} onPress={() => onView(p)}>

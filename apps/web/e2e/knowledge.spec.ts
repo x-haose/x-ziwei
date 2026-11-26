@@ -29,17 +29,17 @@ async function paste(page: Page, json: unknown) {
 
 const row = (page: Page, id: string) => page.getByRole('listitem').filter({ has: page.getByText(id, { exact: true }) });
 
-test('粘贴导入覆盖包，叠加到当前生效；本机的包与生效卡片随之更新', async ({ page }) => {
+test('粘贴导入一个包，加入生效组合；本机的包与生效卡片随之更新', async ({ page }) => {
   await openPage(page);
   await paste(page, overlay('my-notes', '我的笔记', '笔记：紫微看格局。'));
   const result = page.locator('[aria-live="polite"]').filter({ hasText: '已导入' });
   await expect(result).toContainText('已导入「我的笔记」');
   await expect(result).toContainText('iztro-docs，改 1 条星曜');
-  await expect(row(page, 'my-notes')).toContainText('改 1 条星曜，其余条目沿用 iztro-docs。');
-  await page.getByRole('button', { name: '叠加到当前生效' }).click();
+  await expect(row(page, 'my-notes')).toContainText('相对 iztro-docs：改 1 条星曜。');
+  await page.getByRole('button', { name: '加入生效组合', exact: true }).click();
   await expect(result).toContainText('已在生效');
   const use = page.getByRole('region', { name: '当前生效' });
-  await expect(use).toContainText('覆盖 1');
+  await expect(use).toContainText('第 2 层');
   await expect(use).toContainText('iztro-docs + 我的笔记');
   await page.reload();
   await expect(page.getByRole('region', { name: '当前生效' })).toContainText('iztro-docs + 我的笔记');
@@ -54,9 +54,10 @@ test('导入失败逐条列出位置与改法：JSON 语法、内核拒绝、本
   await page.getByRole('button', { name: '重新选择' }).click();
 
   await paste(page, { ...overlay('iztro-docs', '同名', 'x'), extends: 'nowhere' });
-  await expect(result).toContainText('2 处要改');
+  await expect(result).toContainText('1 处要改');
   await expect(result).toContainText('id 不能是 iztro-docs');
-  await expect(result).toContainText('指向的包 nowhere 不在本机');
+  // extends 只是声明：所声明的包不在本机只给提醒。
+  await expect(result).toContainText('声明基于 nowhere，本机没有它');
   await page.getByRole('button', { name: '重新选择' }).click();
 
   // 包格式的问题由内核的 check 逐条给出：字段路径、原因与最接近的写法；提醒另列一组。
@@ -74,14 +75,14 @@ test('导入失败逐条列出位置与改法：JSON 语法、内核拒绝、本
   await expect(row(page, 'bad')).toHaveCount(0);
 });
 
-test('叠加顺序决定排盘页的释义与提示词出处；排盘页的「更换」立即改组合', async ({ page }) => {
+test('叠放顺序决定排盘页的释义与提示词出处；排盘页的「更换」立即改组合', async ({ page }) => {
   await openPage(page);
   await paste(page, overlay('a', '甲', '甲说紫微。'));
   await expect(page.getByText('已导入「甲」')).toBeVisible();
   await paste(page, overlay('b', '乙', '乙说紫微。'));
   await expect(page.getByText('已导入「乙」')).toBeVisible();
-  await page.getByRole('button', { name: '把 甲 叠加到最后' }).click();
-  await page.getByRole('button', { name: '把 乙 叠加到最后' }).click();
+  await page.getByRole('button', { name: '把 甲 加入生效组合' }).click();
+  await page.getByRole('button', { name: '把 乙 加入生效组合' }).click();
   await expect(page.getByRole('region', { name: '当前生效' })).toContainText('iztro-docs + 甲 + 乙');
 
   const preview = page.getByRole('region', { name: '提示词预览' });
@@ -93,14 +94,14 @@ test('叠加顺序决定排盘页的释义与提示词出处；排盘页的「�
   await expect(preview).toContainText('释义摘自知识包 iztro-docs 2026-08-19 + a 2026-11-20 + b 2026-11-20');
 
   await page.goto('/zh/knowledge');
-  await page.getByRole('button', { name: '乙 前移' }).click();
+  await page.getByRole('button', { name: '把 乙 往下移一层' }).click();
   await expect(page.getByRole('region', { name: '当前生效' })).toContainText('iztro-docs + 乙 + 甲');
   await page.goto(SAMPLE);
   await page.getByRole('radio', { name: '原文' }).click();
   await expect(preview).toContainText('甲说紫微。');
 
   await page.getByRole('button', { name: /^释义：iztro-docs \+ 乙 \+ 甲/ }).click();
-  await page.getByRole('dialog', { name: '释义用哪套知识包' }).getByRole('option', { name: 'iztro-docs，默认包' }).click();
+  await page.getByRole('dialog', { name: '释义用哪套知识包' }).getByRole('option', { name: 'iztro-docs，单独' }).click();
   await expect(preview).not.toContainText('甲说紫微。');
   await expect(preview).toContainText('释义摘自知识包 iztro-docs 2026-08-19（');
 });
@@ -144,10 +145,10 @@ test('查看抽屉：按段浏览、搜索，覆盖包的条目标「覆盖」�
 test('删除正在生效的包：确认框写明删后的组合，删后生效组合随之改变', async ({ page }) => {
   await openPage(page);
   await paste(page, overlay('my-notes', '我的笔记', '笔记：紫微看格局。'));
-  await page.getByRole('button', { name: '叠加到当前生效' }).click();
+  await page.getByRole('button', { name: '加入生效组合', exact: true }).click();
   await row(page, 'my-notes').getByRole('button', { name: '删除' }).click();
   const dialog = page.getByRole('alertdialog', { name: '删除「我的笔记」？' });
-  await expect(dialog).toContainText('它正在生效，删除后从叠加里移除，剩下 iztro-docs。');
+  await expect(dialog).toContainText('它正在生效，删除后生效组合是 iztro-docs。');
   await expect(dialog.getByRole('button', { name: '取消' })).toBeFocused();
   await dialog.getByRole('button', { name: '删除' }).click();
   await expect(row(page, 'my-notes')).toHaveCount(0);
@@ -192,14 +193,17 @@ test('内核未装好：放置区与粘贴按钮写明在加载，默认包照�
   await expect(page.getByRole('button', { name: /^内核加载中 \d+%$/ })).toBeDisabled();
 });
 
-test('整包加它的覆盖包：以所选整包为底叠加，排盘页的释义与「更换」选项随之', async ({ page }) => {
+test('独立的新包可以单独生效，也能与默认包任意顺序叠放；排盘页的释义、出处与「更换」随之', async ({ page }) => {
   await openPage(page);
   await paste(page, { schema: 1, id: 'school', version: '2025-03-01', language: 'zh-CN', source: { name: '某门派' }, stars: { ziweiMaj: { intro: '本门说紫微。' } } });
-  await page.getByRole('button', { name: '改用这个包' }).click();
-  await paste(page, { ...overlay('school-notes', '门内笔记', '门内又说紫微。'), extends: 'school' });
-  await page.getByRole('button', { name: '叠加到当前生效' }).click();
+  await page.getByRole('button', { name: '加入生效组合', exact: true }).click();
   const use = page.getByRole('region', { name: '当前生效' });
-  await expect(use.getByRole('radio', { name: /某门派/ })).toBeChecked();
+  await expect(use).toContainText('iztro-docs + 某门派');
+  await page.getByRole('button', { name: '把 iztro-docs 移出生效组合' }).click();
+  await expect(use).toContainText('缺释义');
+  await expect(page.getByRole('button', { name: '把 某门派 移出生效组合' })).toBeDisabled();
+  await paste(page, { ...overlay('school-notes', '门内笔记', '门内又说紫微。'), extends: 'school' });
+  await page.getByRole('button', { name: '加入生效组合', exact: true }).click();
   await expect(use).toContainText('某门派 + 门内笔记');
 
   const preview = page.getByRole('region', { name: '提示词预览' });
@@ -210,9 +214,17 @@ test('整包加它的覆盖包：以所选整包为底叠加，排盘页的释�
   await expect(preview).toContainText('释义摘自知识包 school 2025-03-01 + school-notes 2026-11-20');
   await page.getByRole('button', { name: /^释义：某门派 \+ 门内笔记/ }).click();
   const options = page.getByRole('dialog', { name: '释义用哪套知识包' }).getByRole('option');
-  await expect(options).toHaveText([/^iztro-docs默认包$/, /^某门派整包$/, /^某门派 \+ 门内笔记叠加$/]);
-  await options.filter({ hasText: /^某门派整包$/ }).click();
+  await expect(options).toHaveText([
+    /^某门派 \+ 门内笔记当前组合$/,
+    /^iztro-docs单独$/,
+    /^某门派单独$/,
+    /^门内笔记单独$/,
+    /^iztro-docs \+ 某门派叠在默认包上$/,
+    /^iztro-docs \+ 门内笔记叠在默认包上$/,
+  ]);
+  await options.filter({ hasText: /^某门派单独$/ }).click();
   await expect(preview).toContainText('本门说紫微。');
+  await expect(preview).toContainText('释义摘自知识包 school 2025-03-01（');
 });
 
 test('两个标签页同时操作：改动按库里此刻的数据校验，另一页随之更新，库不会写坏', async ({ context, page }) => {
@@ -221,7 +233,7 @@ test('两个标签页同时操作：改动按库里此刻的数据校验，另�
   await expect(page.getByText('已导入「甲」')).toBeVisible();
   await paste(page, overlay('p2', '乙', '乙说紫微。'));
   await expect(page.getByText('已导入「乙」')).toBeVisible();
-  await page.getByRole('button', { name: '把 甲 叠加到最后' }).click();
+  await page.getByRole('button', { name: '把 甲 加入生效组合' }).click();
   await expect(page.getByRole('region', { name: '当前生效' })).toContainText('iztro-docs + 甲');
 
   const other = await context.newPage();
@@ -230,7 +242,7 @@ test('两个标签页同时操作：改动按库里此刻的数据校验，另�
   await row(page, 'p1').getByRole('button', { name: '删除' }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: '删除' }).click();
   await expect(row(other, 'p1')).toHaveCount(0);
-  await other.getByRole('button', { name: '把 乙 叠加到最后' }).click();
+  await other.getByRole('button', { name: '把 乙 加入生效组合' }).click();
   for (const p of [page, other]) await expect(p.getByRole('region', { name: '当前生效' })).toContainText('iztro-docs + 乙');
   await page.reload();
   await expect(page.getByRole('region', { name: '当前生效' })).toContainText('iztro-docs + 乙');
@@ -247,7 +259,7 @@ test('库里的组合引用了不在本机的包：读库时移出并提示，�
         const req = indexedDB.open('xzw-knowledge');
         req.onsuccess = () => {
           const tx = req.result.transaction('state', 'readwrite');
-          tx.objectStore('state').put({ mode: 'stack', stack: ['gone', 'p2'], whole: 'iztro-docs', wholeStack: [] }, 'use');
+          tx.objectStore('state').put({ layers: ['iztro-docs', 'gone', 'p2'] }, 'use');
           tx.oncomplete = () => resolve();
           tx.onerror = () => reject(tx.error);
         };
@@ -258,32 +270,34 @@ test('库里的组合引用了不在本机的包：读库时移出并提示，�
   await expect(page.getByRole('region', { name: '当前生效' })).toContainText('iztro-docs + 乙');
 });
 
-test('整包加覆盖包：换底包时原来的叠加移出并提示；删除整包时确认框写明覆盖包留在本机', async ({ page }) => {
+test('extends 只作建议：放在所声明的包上面，对不上时提醒但照常生效；删掉所声明的包时确认框写明', async ({ page }) => {
   await openPage(page);
-  const school = (id: string, name: string) => ({ schema: 1, id, version: '1', language: 'zh-CN', source: { name }, stars: { ziweiMaj: { intro: `${name}说。` } } });
-  await paste(page, school('school', '某门派'));
-  await page.getByRole('button', { name: '改用这个包' }).click();
+  const school = { schema: 1, id: 'school', version: '1', language: 'zh-CN', source: { name: '某门派' }, stars: { ziweiMaj: { intro: '某门派说。' } } };
   await paste(page, { ...overlay('school-notes', '门内笔记', '门内又说。'), extends: 'school' });
-  await page.getByRole('button', { name: '叠加到当前生效' }).click();
-  await paste(page, school('other', '别派'));
-  await expect(page.getByText('已导入「别派」')).toBeVisible();
+  await expect(page.getByText('已导入「门内笔记」')).toBeVisible();
+  await page.getByRole('button', { name: '1 条提醒' }).click();
+  await expect(page.getByText('声明基于 school，本机没有它')).toBeVisible();
+  await page.getByRole('button', { name: '加入生效组合', exact: true }).click();
   const use = page.getByRole('region', { name: '当前生效' });
-  await use.locator('label').filter({ hasText: '别派' }).click();
-  await expect(page.getByRole('status').filter({ hasText: '换了底包，原来叠加在 某门派 上的 门内笔记 已移出叠加。' })).toBeVisible();
-  await expect(use).toContainText('别派');
-  await use.locator('label').filter({ hasText: '某门派' }).click();
-  await page.getByRole('button', { name: '把 门内笔记 叠加到最后' }).click();
-  await expect(use).toContainText('某门派 + 门内笔记');
+  await expect(use).toContainText('iztro-docs + 门内笔记');
+  await expect(use).toContainText('声明基于 school，本机没有它；照常生效。');
+
+  await paste(page, school);
+  await expect(page.getByText('已导入「某门派」')).toBeVisible();
+  await page.getByRole('button', { name: '加入生效组合', exact: true }).click();
+  await expect(use).toContainText('iztro-docs + 门内笔记 + 某门派');
+  await expect(use).toContainText('声明基于 school，它不在这一层下面');
+  await page.getByRole('button', { name: '把 门内笔记 往上移一层' }).click();
+  await expect(use).toContainText('iztro-docs + 某门派 + 门内笔记');
+  await expect(use).not.toContainText('声明基于 school');
 
   await row(page, 'school').getByRole('button', { name: '删除' }).click();
   const dialog = page.getByRole('alertdialog', { name: '删除「某门派」？' });
-  await expect(dialog).toContainText('它正在生效，删除后改用默认包 iztro-docs。');
-  await expect(dialog).toContainText('基于它的覆盖包 门内笔记 会留在本机，重新导入它之后才能再叠加。');
+  await expect(dialog).toContainText('它正在生效，删除后生效组合是 iztro-docs + 门内笔记。');
+  await expect(dialog).toContainText('门内笔记 声明基于它；删掉后它们照常可以生效');
   await dialog.getByRole('button', { name: '删除' }).click();
-  await expect(use.getByRole('radio', { name: /iztro-docs/ })).toBeChecked();
-  await expect(row(page, 'school-notes')).toHaveCount(1);
-  await page.getByRole('radio', { name: '在默认包上叠加' }).click();
-  await expect(page.getByText('门内笔记 所基于的包不在本机')).toBeVisible();
+  await expect(use).toContainText('iztro-docs + 门内笔记');
+  await expect(use).toContainText('声明基于 school，本机没有它');
 });
 
 test('id 里带逗号的包也能在排盘页「更换」里选用', async ({ page }) => {
@@ -294,7 +308,7 @@ test('id 里带逗号的包也能在排盘页「更换」里选用', async ({ pa
   await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
   await page.getByRole('radio', { name: '原文' }).click();
   await page.getByRole('button', { name: /^释义：iztro-docs/ }).click();
-  await page.getByRole('dialog', { name: '释义用哪套知识包' }).getByRole('option', { name: 'iztro-docs + 逗号，叠加' }).click();
+  await page.getByRole('dialog', { name: '释义用哪套知识包' }).getByRole('option', { name: 'iztro-docs + 逗号，叠在默认包上' }).click();
   await expect(page.getByRole('region', { name: '提示词预览' })).toContainText('逗号说紫微。');
 });
 
@@ -320,7 +334,7 @@ test('旧版本导入、现在需要改的包：标为需要改并列出问题�
           const tx = req.result.transaction(['packs', 'state'], 'readwrite');
           const raw = { schema: 1, id: 'old', version: '1', language: 'zh-CN', extends: 'iztro-docs', source: { name: '旧包' }, stars: { ziweiMjj: { intro: '旧。' } } };
           tx.objectStore('packs').put({ id: 'old', raw, importedAt: 1 });
-          tx.objectStore('state').put({ mode: 'stack', stack: ['old', 'good'], whole: 'iztro-docs', wholeStack: [] }, 'use');
+          tx.objectStore('state').put({ layers: ['iztro-docs', 'old', 'good'] }, 'use');
           tx.oncomplete = () => resolve();
           tx.onerror = () => reject(tx.error);
         };
@@ -332,7 +346,7 @@ test('旧版本导入、现在需要改的包：标为需要改并列出问题�
   await expect(old).toContainText('需要改');
   await expect(old).toContainText('stars.ziweiMjj');
   await expect(page.getByRole('region', { name: '当前生效' })).toContainText('iztro-docs + 好包');
-  await expect(page.getByRole('button', { name: '把 旧包 叠加到最后' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '把 旧包 加入生效组合' })).toHaveCount(0);
   const [file] = await Promise.all([page.waitForEvent('download'), old.getByRole('button', { name: '导出' }).click()]);
   expect(JSON.parse(readFileSync((await file.path())!, 'utf8')).stars).toEqual({ ziweiMjj: { intro: '旧。' } });
 
@@ -428,7 +442,7 @@ test('需要改的包移出组合时写回失败：只试一次并写明原因�
           const tx = req.result.transaction(['packs', 'state'], 'readwrite');
           const raw = { schema: 1, id: 'old', version: '1', language: 'zh-CN', extends: 'iztro-docs', source: { name: '旧包' }, stars: { ziweiMjj: { intro: '旧。' } } };
           tx.objectStore('packs').put({ id: 'old', raw, importedAt: 1 });
-          tx.objectStore('state').put({ mode: 'stack', stack: ['old'], whole: 'iztro-docs', wholeStack: [] }, 'use');
+          tx.objectStore('state').put({ layers: ['iztro-docs', 'old'] }, 'use');
           tx.oncomplete = () => resolve();
           tx.onerror = () => reject(tx.error);
         };
@@ -452,23 +466,38 @@ test('需要改的包移出组合时写回失败：只试一次并写明原因�
   expect(await page.evaluate(() => (window as unknown as { statePuts: number }).statePuts)).toBe(1);
 });
 
-test('底包需要改的整包上不能导入覆盖包', async ({ page }) => {
-  await openPage(page);
+test('旧版本存的组合（整包模式加叠加）升级后无损转成叠放列表', async ({ page }) => {
+  await page.goto('/zh/install');
   await page.evaluate(
     () =>
       new Promise<void>((resolve, reject) => {
-        const req = indexedDB.open('xzw-knowledge');
-        req.onsuccess = () => {
-          const tx = req.result.transaction('packs', 'readwrite');
-          const raw = { schema: 1, id: 'school', version: '1', language: 'zh-CN', source: { name: '某门派' }, stars: { ziweiMjj: { intro: '旧。' } } };
-          tx.objectStore('packs').put({ id: 'school', raw, importedAt: 1 });
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
+        const req = indexedDB.open('xzw-knowledge', 2);
+        req.onupgradeneeded = () => {
+          const packs = req.result.createObjectStore('packs', { keyPath: 'id' });
+          const stars = (intro: string) => ({ ziweiMaj: { intro } });
+          packs.put({ id: 'school', raw: { schema: 1, id: 'school', version: '1', language: 'zh-CN', source: { name: '某门派' }, stars: stars('某门派说。') }, importedAt: 1 });
+          packs.put({ id: 'on', raw: { schema: 1, id: 'on', version: '1', language: 'zh-CN', extends: 'school', source: { name: '门内笔记' }, stars: stars('门内又说。') }, importedAt: 2 });
+          req.result.createObjectStore('state').put({ mode: 'whole', stack: [], whole: 'school', wholeStack: ['on'] }, 'use');
         };
+        req.onsuccess = () => {
+          req.result.close();
+          resolve();
+        };
+        req.onerror = () => reject(req.error);
       }),
   );
-  await page.reload();
-  await expect(row(page, 'school')).toContainText('需要改');
-  await paste(page, { ...overlay('on-school', '门内笔记', '门内又说。'), extends: 'school' });
-  await expect(page.locator('[aria-live="polite"]').filter({ hasText: '没能导入' })).toContainText('底包 school 需要先改好');
+  await openPage(page);
+  await expect(page.getByRole('region', { name: '当前生效' })).toContainText('某门派 + 门内笔记');
+  await expect(page.getByRole('button', { name: '把 iztro-docs 加入生效组合' })).toBeVisible();
+});
+
+test('生效卡片写合并后的覆盖度：只有一个小包时列出缺释义的条目', async ({ page }) => {
+  await openPage(page);
+  await paste(page, { schema: 1, id: 'tiny', version: '1', language: 'zh-CN', source: { name: '小包' }, stars: { ziweiMaj: { intro: '只说紫微。' } } });
+  await page.getByRole('button', { name: '加入生效组合', exact: true }).click();
+  const use = page.getByRole('region', { name: '当前生效' });
+  await expect(use).toContainText('内核认识的星曜、格局、宫位、四化都有释义。');
+  await page.getByRole('button', { name: '把 iztro-docs 移出生效组合' }).click();
+  await expect(use).toContainText(/缺释义：星曜 \d+ 条（天机、/);
+  await expect(use).toContainText('宫位 12 条');
 });

@@ -68,7 +68,7 @@ export function ViewDrawer({
     pack.id,
     pack.version ?? '—',
     pack.language ?? '—',
-    base ? fmt(v.based, { name: base.name }) : pack.id === DEFAULT_PACK_ID ? t.knowledge.use.defaultKind : t.knowledge.use.wholeKind,
+    base ? fmt(v.based, { name: base.name }) : pack.id === DEFAULT_PACK_ID ? t.knowledge.list.default : t.knowledge.list.whole,
   ];
   let hint = q ? fmt(v.found, { n: list.length }) : fmt(v.count, { n: entries.length });
   if (pack.id !== DEFAULT_PACK_ID && defaultPack.counts[section]) {

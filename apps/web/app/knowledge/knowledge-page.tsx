@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Dialog, Heading, Link, Modal, ModalOverlay, Radio, RadioGroup } from 'react-aria-components';
+import { Button, Dialog, Heading, Link, Modal, ModalOverlay } from 'react-aria-components';
 import { useLocation, useNavigate } from 'react-router';
 import type { KnowledgeIssue } from 'x-iztro';
 import * as controls from '../components/controls.css';
 import { ChevronIcon, CloseIcon } from '../components/icons';
-import { Segmented } from '../components/segmented';
 import { useToast } from '../components/toast';
 import { localePath } from '../i18n/lang';
 import { fmt, type Messages } from '../i18n/messages';
@@ -12,24 +11,22 @@ import { useLang, useMessages } from '../i18n/use-lang';
 import { type Kernel, loadKernel, useKernelState } from '../kernel/kernel';
 import { type ImportState, fileProblems, runImport } from './import';
 import { ImportPanel, ProblemList } from './import-panel';
-import { defaultPackInfo, packRaw } from './kernel-pack';
+import { type SectionCoverage, activePack, builtinPack, coverage, defaultPackInfo, packRaw } from './kernel-pack';
 import * as css from './knowledge.css';
 import {
   DEFAULT_PACK_ID,
   DEFAULT_USE,
+  type ExtendsAdvice,
   type Pack,
   SECTIONS,
   type Section,
   type Use,
   activeIds,
+  addLayer,
   diffAgainst,
-  addToStack,
-  moveInStack,
-  overlaysOf,
-  pickWhole,
-  removeFromStack,
-  usePack,
-  wholes,
+  extendsAdvice,
+  moveLayer,
+  removeLayer,
   withoutPack,
   withoutPacks,
 } from './library';
@@ -54,117 +51,77 @@ function packFile(p: Pack): string {
   return `${p.id}-${p.version ?? 'unversioned'}.json`;
 }
 
-/** 当前生效（设计规范第 18.4 节）：叠加或整包切换，改动立即生效并写进本机。 */
+/** 缺释义的一段：「星曜 3 条（流禄、流羊、流马）」，多于 8 个时只列前 8 个。 */
+function missingText(t: Messages, s: Section, keys: readonly string[], nameOf: (s: Section, key: string) => string): string {
+  const shown = keys.slice(0, 8).map((k) => nameOf(s, k)).join(t.knowledge.diff.sep);
+  return fmt(t.knowledge.use.missing, {
+    section: t.knowledge.sections[s],
+    n: keys.length,
+    names: keys.length > 8 ? fmt(t.knowledge.use.missingMore, { names: shown }) : shown,
+  });
+}
+
+/**
+ * 当前生效（设计规范第 18.4 节）：从下到上叠放的各层（左边是最下面），后面的覆盖前面的；生效卡片写合并后各段的覆盖度与缺释义的条目。
+ * 改动立即生效并写进本机。
+ */
 function UsePanel({
   t,
   use,
   packs,
   defaultPack,
   blocked,
-  brokenIds,
+  cover,
+  nameOf,
   onChange,
 }: {
   t: Messages;
   use: Use;
+  /** 本机能生效的包（不含「需要改」的）。 */
   packs: readonly Pack[];
   defaultPack: Pack;
   /** 存储不可用或读库失败：组合改不了，只有默认包。 */
   blocked: boolean;
-  /** 「需要改」的包（`packs` 里已不含它们）：基于它们的覆盖包要等底包改好才能叠加。 */
-  brokenIds: ReadonlySet<string>;
+  /** 合并后各段的覆盖度；内核装好之前为 null。 */
+  cover: Record<Section, SectionCoverage> | null;
+  /** 标识的显示名（缺释义的条目用）。 */
+  nameOf: (s: Section, key: string) => string;
   /** 改组合：传入由库里此刻的组合算出新组合的函数（见 `updateUse`）。 */
   onChange: (next: (use: Use) => Use) => void;
 }) {
   const u = t.knowledge.use;
   const active = activePacks(use, packs, defaultPack);
-  const [base, ...layers] = active;
-  if (!base) throw new Error('生效组合没有底包');
-  const baseOverlays = overlaysOf(packs, base.id);
-  const whole = [defaultPack, ...wholes(packs)];
-  const merged: Record<Section, number> = { ...base.counts };
-  const marks: Partial<Record<Section, string>> = {};
-  const keys = Object.fromEntries(SECTIONS.map((s) => [s, new Set(base.keys[s])])) as Record<Section, Set<string>>;
-  const touched = Object.fromEntries(SECTIONS.map((s) => [s, new Set<string>()])) as Record<Section, Set<string>>;
-  for (const p of layers) {
-    for (const s of SECTIONS) {
-      for (const k of p.keys[s]) {
-        keys[s].add(k);
-        touched[s].add(k);
-      }
-    }
-  }
-  for (const s of SECTIONS) {
-    merged[s] = keys[s].size;
-    if (touched[s].size) marks[s] = fmt(u.changedMark, { n: touched[s].size });
-  }
-  const addable = baseOverlays.filter((p) => !layers.some((l) => l.id === p.id));
-  // 叠加模式下，基于本机整包的覆盖包要到整包切换里选那个整包才能叠加。
-  const onWhole = (p: Pack) => p.extends !== null && p.extends !== DEFAULT_PACK_ID;
-  const elsewhere = use.mode === 'stack' ? packs.filter((p) => onWhole(p) && packs.some((b) => b.id === p.extends)) : [];
-  // 底包已被删掉的覆盖包：留在本机，重新导入底包后才能叠加。底包「需要改」的另行说明。
-  const brokenBase = (p: Pack) => p.extends !== null && brokenIds.has(p.extends);
-  const baseBroken = packs.filter((p) => onWhole(p) && brokenBase(p));
-  const orphans = packs.filter((p) => onWhole(p) && !brokenBase(p) && !packs.some((b) => b.id === p.extends));
-  // 整包模式选的是默认包时不叠加（叠加默认包用叠加模式）。
-  const canLayer = use.mode === 'stack' || base.id !== DEFAULT_PACK_ID;
+  const all = [defaultPack, ...packs];
+  const addable = all.filter((p) => !use.layers.includes(p.id));
+  const counts = cover ? (Object.fromEntries(SECTIONS.map((s) => [s, cover[s].have])) as Record<Section, number>) : null;
+  const totals = Object.fromEntries(SECTIONS.map((s) => [s, cover?.[s].total ?? defaultPack.counts[s]])) as Record<Section, number>;
+  const missing = cover ? SECTIONS.filter((s) => cover[s].missing.length > 0) : [];
   return (
     <section className={css.use} aria-labelledby="knowledge-use-title">
       <div className={css.useHead}>
         <h2 id="knowledge-use-title" className={css.sectionTitle}>
           {u.title}
         </h2>
-        <Segmented
-          label={u.modeLabel}
-          className={css.useMode}
-          value={use.mode}
-          onChange={(mode) => onChange((u) => ({ ...u, mode }))}
-          options={[
-            { value: 'stack', label: u.stack, ...(blocked ? { disabledReason: t.knowledge.imp.blocked } : {}) },
-            { value: 'whole', label: u.whole, ...(blocked ? { disabledReason: t.knowledge.imp.blocked } : {}) },
-          ]}
-        />
       </div>
       <div className={css.row}>
-        {use.mode === 'stack' ? (
-          <div className={`${css.sheet} ${css.sheetBase}`}>
-            <small className={css.sheetKind}>{u.base}</small>
-            <b className={css.sheetName}>{defaultPack.name}</b>
-            <span className={css.sheetId}>{defaultPack.version}</span>
-            <p className={css.sheetNote}>{u.defaultNote}</p>
-          </div>
-        ) : (
-          <RadioGroup
-            aria-label={u.whole}
-            value={use.whole}
-            onChange={(id) => onChange((u) => pickWhole(u, id))}
-            className={css.wholeRow}
-            orientation="horizontal"
-            isDisabled={blocked}
-          >
-            {whole.map((p) => (
-              <Radio key={p.id} value={p.id} className={`${css.sheet} ${css.sheetPick}`}>
-                <span className={css.dot} />
-                <small className={css.sheetKind}>{p.id === DEFAULT_PACK_ID ? u.defaultKind : u.wholeKind}</small>
-                <b className={css.sheetName}>{p.name}</b>
-                <span className={css.sheetId}>
-                  {p.id}
-                  <span className={css.sheetVersion}>{p.version}</span>
-                </span>
-                <span className={css.sheetNote}>{fmt(u.total, { n: totalOf(p.counts) })}</span>
-              </Radio>
-            ))}
-          </RadioGroup>
-        )}
-        {layers.map((p, i) => (
-          <Overlay
+        {active.map((p, i) => (
+          <Layer
             key={p.id}
             t={t}
             pack={p}
             index={i}
-            last={i === layers.length - 1}
-            diff={diffText(diffAgainst(p, base), t)}
-            onMove={(dir) => onChange((u) => moveInStack(u, p.id, dir))}
-            onRemove={() => onChange((u) => removeFromStack(u, p.id))}
+            count={active.length}
+            blocked={blocked}
+            note={
+              p.id === DEFAULT_PACK_ID && i === 0
+                ? u.defaultNote
+                : i === 0
+                  ? fmt(u.total, { n: totalOf(p.counts) })
+                  : diffText(diffAgainst(p, active.slice(0, i)), t)
+            }
+            advice={extendsAdvice(p, use, packs)}
+            onMove={(dir) => onChange((now) => moveLayer(now, p.id, dir))}
+            onRemove={() => onChange((now) => removeLayer(now, p.id))}
           />
         ))}
         <span className={`${css.op} ${css.opEq}`} aria-hidden="true">
@@ -173,73 +130,88 @@ function UsePanel({
         <div className={`${css.sheet} ${css.sheetResult}`} aria-live="polite">
           <small className={css.sheetKind}>{u.result}</small>
           <b className={css.sheetName}>{useLabel(active)}</b>
-          <CountList counts={merged} base={defaultPack.counts} marks={marks} t={t} />
+          {counts && <CountList counts={counts} base={totals} t={t} label={u.coverLabel} />}
+          {cover && (
+            <p className={css.sheetNote}>
+              {missing.length ? (
+                <>
+                  {u.missingTitle}
+                  {missing.map((s) => missingText(t, s, cover[s].missing, nameOf)).join(t.knowledge.diff.sep)}
+                </>
+              ) : (
+                u.fullCover
+              )}
+            </p>
+          )}
           <p className={css.sheetNote}>{u.resultNote}</p>
         </div>
       </div>
       <p className={css.addable}>
-        {use.mode === 'whole' && <span>{whole.length > 1 ? u.wholeNote : u.noWhole}</span>}
-        {canLayer &&
-          (addable.length ? (
-            <>
-              <span>{u.addable}</span>
-              {addable.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className={css.addButton}
-                  aria-label={fmt(u.addLabel, { name: p.name })}
-                  onClick={() => onChange((u) => addToStack(u, p.id))}
-                >
-                  {p.name}
-                </button>
-              ))}
-              <span>{u.laterWins}</span>
-            </>
-          ) : (
-            <span>{baseOverlays.length ? u.allStacked : fmt(u.noOverlay, { base: base.id })}</span>
-          ))}
-        {elsewhere.length > 0 && <span>{fmt(u.otherBase, { names: elsewhere.map((p) => p.name).join(t.knowledge.diff.sep) })}</span>}
-        {orphans.length > 0 && <span>{fmt(u.orphans, { names: orphans.map((p) => p.name).join(t.knowledge.diff.sep) })}</span>}
-        {baseBroken.length > 0 && <span>{fmt(u.baseBroken, { names: baseBroken.map((p) => p.name).join(t.knowledge.diff.sep) })}</span>}
+        {addable.length ? (
+          <>
+            <span>{u.addable}</span>
+            {addable.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={css.addButton}
+                aria-label={fmt(u.addLabel, { name: p.name })}
+                disabled={blocked}
+                onClick={() => onChange((now) => addLayer(now, p.id))}
+              >
+                {p.name}
+              </button>
+            ))}
+            <span>{u.addHint}</span>
+          </>
+        ) : (
+          <span>{u.allIn}</span>
+        )}
       </p>
     </section>
   );
 }
 
-function Overlay({
+function Layer({
   t,
   pack,
   index,
-  last,
-  diff,
+  count,
+  blocked,
+  note,
+  advice,
   onMove,
   onRemove,
 }: {
   t: Messages;
   pack: Pack;
   index: number;
-  last: boolean;
-  diff: string;
+  count: number;
+  blocked: boolean;
+  note: string;
+  advice: ExtendsAdvice;
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
 }) {
   const u = t.knowledge.use;
   return (
     <>
-      <span className={css.op} aria-hidden="true">
-        +
-      </span>
-      <div className={css.sheet}>
-        <small className={css.sheetKind}>{fmt(u.overlay, { n: index + 1 })}</small>
+      {index > 0 && (
+        <span className={css.op} aria-hidden="true">
+          +
+        </span>
+      )}
+      <div className={index === 0 ? `${css.sheet} ${css.sheetBase}` : css.sheet}>
+        <small className={css.sheetKind}>{index === 0 ? u.bottom : fmt(u.layer, { n: index + 1 })}</small>
         <b className={css.sheetName}>{pack.name}</b>
         <span className={css.sheetId}>
           {pack.id}
           <span className={css.sheetVersion}>{pack.version}</span>
         </span>
-        <p className={css.sheetNote}>{diff}</p>
+        <p className={css.sheetNote}>{note}</p>
+        {advice && <p className={css.sheetAdvice}>{fmt(advice.kind === 'absent' ? u.adviceAbsent : u.adviceNotBelow, { target: advice.target })}</p>}
         <div className={css.sheetActions}>
-          <button type="button" className={css.sheetAction} aria-label={fmt(u.moveEarlier, { name: pack.name })} disabled={index === 0} onClick={() => onMove(-1)}>
+          <button type="button" className={css.sheetAction} aria-label={fmt(u.moveDown, { name: pack.name })} disabled={blocked || index === 0} onClick={() => onMove(-1)}>
             <span className={css.arrowH}>
               <ChevronIcon dir="left" />
             </span>
@@ -247,7 +219,13 @@ function Overlay({
               <ChevronIcon dir="up" />
             </span>
           </button>
-          <button type="button" className={css.sheetAction} aria-label={fmt(u.moveLater, { name: pack.name })} disabled={last} onClick={() => onMove(1)}>
+          <button
+            type="button"
+            className={css.sheetAction}
+            aria-label={fmt(u.moveUp, { name: pack.name })}
+            disabled={blocked || index === count - 1}
+            onClick={() => onMove(1)}
+          >
             <span className={css.arrowH}>
               <ChevronIcon dir="right" />
             </span>
@@ -255,7 +233,14 @@ function Overlay({
               <ChevronIcon dir="down" />
             </span>
           </button>
-          <button type="button" className={css.sheetAction} aria-label={fmt(u.remove, { name: pack.name })} onClick={onRemove}>
+          <button
+            type="button"
+            className={css.sheetAction}
+            aria-label={fmt(u.remove, { name: pack.name })}
+            aria-description={count === 1 ? u.lastLayer : undefined}
+            disabled={blocked || count === 1}
+            onClick={onRemove}
+          >
             <CloseIcon />
           </button>
         </div>
@@ -292,7 +277,6 @@ function PackList({
 }) {
   const l = t.knowledge.list;
   const rows = [defaultPack, ...packs];
-  const nameOf = (id: string) => (id === DEFAULT_PACK_ID ? defaultPack.name : (packs.find((p) => p.id === id)?.name ?? id));
   return (
     <section aria-labelledby="knowledge-list-title">
       <div className={css.sectionHead}>
@@ -305,6 +289,7 @@ function PackList({
         {rows.map((p) => {
           const isDefault = p.id === DEFAULT_PACK_ID;
           const base = p.extends === null ? null : p.extends === DEFAULT_PACK_ID ? defaultPack : (packs.find((x) => x.id === p.extends) ?? null);
+          const declared = p.extends === null ? (isDefault ? '—' : l.whole) : base ? base.name : fmt(t.knowledge.imp.absentBase, { target: p.extends });
           const readable = !isDefault || canReadDefault;
           const issues = broken.get(p.id);
           return (
@@ -330,7 +315,7 @@ function PackList({
                   </span>
                   <span>
                     <small className={css.metaLabel}>{l.base}</small>
-                    {p.extends ? nameOf(p.extends) : isDefault ? '—' : l.whole}
+                    {declared}
                   </span>
                   <span>
                     <small className={css.metaLabel}>{l.imported}</small>
@@ -341,7 +326,7 @@ function PackList({
                 {isDefault ? (
                   <p className={css.packSource}>{fmt(l.defaultSource, { license: p.license ?? '—', author: p.author ?? '—' })}</p>
                 ) : base ? (
-                  <p className={css.packSource}>{fmt(l.overlaySource, { diff: diffText(diffAgainst(p, base), t), base: base.name })}</p>
+                  <p className={css.packSource}>{fmt(l.overlaySource, { diff: diffText(diffAgainst(p, [base]), t), base: base.name })}</p>
                 ) : null}
                 {issues && (
                   <>
@@ -396,7 +381,7 @@ function DeleteDialog({
   const inUse = activeIds(use).includes(pack.id);
   const after = withoutPack(use, pack.id);
   const rest = activePacks(after, packs.filter((p) => p.id !== pack.id), defaultPack);
-  const dependents = overlaysOf(packs, pack.id);
+  const dependents = packs.filter((p) => p.extends === pack.id);
   return (
     <ModalOverlay isOpen isDismissable onOpenChange={(o) => !o && onCancel()} className={css.scrim}>
       <Modal className={css.dialog}>
@@ -410,7 +395,7 @@ function DeleteDialog({
               <>
                 <br />
                 <b className={css.dialogStrong}>{d.active}</b>
-                {use.mode === 'whole' && use.whole === pack.id ? d.activeWhole : fmt(d.activeStack, { label: useLabel(rest) })}
+                {fmt(d.activeLeft, { label: useLabel(rest) })}
               </>
             )}
             {dependents.length > 0 && (
@@ -484,17 +469,20 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
       toast(fmt(t.knowledge.actionFailed, { reason: err instanceof Error ? err.message : String(err) }));
     }
   };
-  /** 改组合；换了整包、原来叠加在旧整包上的覆盖包随之移出时，提示一句。 */
   const changeUse = (next: (u: Use) => Use) =>
     void act(async () => {
-      const before = use;
-      const after = (await updateUse(next)).use;
-      const gone = before.whole !== after.whole ? before.wholeStack.filter((id) => !after.wholeStack.includes(id)) : [];
-      if (gone.length) {
-        const name = (id: string) => packs.find((p) => p.id === id)?.name ?? id;
-        toast(fmt(t.knowledge.use.baseChanged, { names: gone.map(name).join(t.knowledge.diff.sep), base: name(before.whole) }));
-      }
+      await updateUse(next);
     });
+  // 合并后各段的覆盖度：组合里有「需要改」的包时按去掉它们之后的组合算（与排盘页一致）。
+  const cover = useMemo(() => (kernel ? coverage(kernel, activePack(kernel, use, usable)) : null), [kernel, use, usable]);
+  // 缺释义的条目的名字：取默认包里同一条目的名字（它覆盖内核认识的全部标识），没有就用标识。
+  const nameOf = useMemo(() => {
+    const names = kernel ? builtinPack(kernel).toJSON() : {};
+    return (s: Section, key: string) => {
+      const entry = (names[s] as Record<string, { name?: unknown }> | undefined)?.[key];
+      return typeof entry?.name === 'string' ? entry.name : key;
+    };
+  }, [kernel]);
   const baseOf = (p: Pack): Pack | null =>
     p.extends === null ? null : p.extends === DEFAULT_PACK_ID ? defaultPack : (packs.find((x) => x.id === p.extends) ?? null);
   const startImport = (file: string, read: () => Promise<string>) => {
@@ -557,7 +545,7 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
           </Button>
         </p>
       )}
-      <UsePanel t={t} use={use} packs={usable} defaultPack={defaultPack} blocked={blocked} brokenIds={new Set(broken.keys())} onChange={changeUse} />
+      <UsePanel t={t} use={use} packs={usable} defaultPack={defaultPack} blocked={blocked} cover={cover} nameOf={nameOf} onChange={changeUse} />
       <div className={css.grid}>
         <PackList
           t={t}
@@ -600,7 +588,7 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
             base={baseOf}
             onUse={(p) =>
               void act(async () => {
-                const snap = await updateUse((u) => usePack(u, p));
+                const snap = await updateUse((u) => addLayer(u, p.id));
                 toast(fmt(t.knowledge.use.toast, { label: useLabel(activePacks(snap.use, snap.packs, defaultPack)) }));
               })
             }
