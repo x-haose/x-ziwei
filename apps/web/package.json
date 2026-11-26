@@ -20,8 +20,14 @@
     "check": "pnpm typecheck && pnpm test && pnpm build:beta && pnpm e2e"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "4.0.109",
+    "@ai-sdk/deepseek": "3.0.90",
+    "@ai-sdk/openai": "4.0.124",
+    "@ai-sdk/openai-compatible": "3.0.95",
+    "@ai-sdk/react": "4.0.187",
     "@vanilla-extract/css": "1.21.3",
     "@vanilla-extract/dynamic": "2.1.5",
+    "ai": "7.0.182",
     "fumadocs-core": "16.19.7",
     "fumadocs-mdx": "15.6.4",
     "idb": "8.0.4",

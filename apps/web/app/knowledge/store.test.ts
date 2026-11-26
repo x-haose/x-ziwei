@@ -2,7 +2,8 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_PACK_ID, DEFAULT_USE, type Use } from './library';
-import { LibraryConflictError, StorageNewerError, StorageUnavailableError, openLibrary } from './store';
+import { StorageNewerError, StorageUnavailableError } from '../lib/local-db';
+import { LibraryConflictError, openLibrary } from './store';
 
 /** 测试里只有一个连接，不会遇到版本协调。 */
 const NO_EVENTS = { onBlocked: () => undefined, onSuperseded: () => undefined };

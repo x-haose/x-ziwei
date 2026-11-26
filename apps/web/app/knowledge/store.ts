@@ -1,4 +1,5 @@
-import { type DBSchema, type IDBPDatabase, type IDBPTransaction, openDB } from 'idb';
+import type { DBSchema, IDBPDatabase, IDBPTransaction } from 'idb';
+import { type OpenEvents, openLocalDb, writing } from '../lib/local-db';
 import {
   DEFAULT_USE,
   type LibraryProblem,
@@ -30,30 +31,6 @@ const DB_NAME = 'xzw-knowledge';
 /** 2：生效组合加了整包模式的叠加 `wholeStack`。 */
 const DB_VERSION = 2;
 
-/** 浏览器不让本页用 IndexedDB（隐私窗口、关了网站数据等）。默认包照常可用，导入关闭。 */
-export class StorageUnavailableError extends Error {
-  constructor(cause: unknown) {
-    super('这个浏览器不让本页存数据', { cause });
-    this.name = 'StorageUnavailableError';
-  }
-}
-
-/** 本机的库比这一页的代码新（本站回退过版本，或这一页是更新之前打开的）：打不开，要刷新到新版本。 */
-export class StorageNewerError extends Error {
-  constructor(cause: unknown) {
-    super('本机知识包库的版本比这一页新', { cause });
-    this.name = 'StorageNewerError';
-  }
-}
-
-/** 浏览器给本站的存储空间满了，写入被拒绝；这次写入没有发生。 */
-export class StorageFullError extends Error {
-  constructor(cause: unknown) {
-    super('这台设备给本站的存储空间满了', { cause });
-    this.name = 'StorageFullError';
-  }
-}
-
 /** 按库里此刻的包，要存的包不合本机包库的规则（如另一个标签页刚存了同 id 的包）；这次写入没有发生。 */
 export class LibraryConflictError extends Error {
   constructor(readonly problems: LibraryProblem[]) {
@@ -74,16 +51,6 @@ function isUse(v: unknown): v is Use {
   const u = v as Record<string, unknown>;
   const ids = (x: unknown) => Array.isArray(x) && x.every((y) => typeof y === 'string');
   return (u.mode === 'stack' || u.mode === 'whole') && ids(u.stack) && typeof u.whole === 'string' && ids(u.wholeStack);
-}
-
-/** 写入失败时把配额错误换成 `StorageFullError`，其余原样抛出。 */
-async function writing<T>(run: () => Promise<T>): Promise<T> {
-  try {
-    return await run();
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'QuotaExceededError') throw new StorageFullError(err);
-    throw err;
-  }
 }
 
 type Tx = IDBPTransaction<Schema, ('packs' | 'state')[], 'readwrite'>;
@@ -166,42 +133,25 @@ export class Library {
   }
 }
 
-/** 打开库时与其他标签页的版本协调。 */
-export interface OpenEvents {
-  /** 别的标签页还开着旧版本的连接，挡住了这次升级；那些连接关掉后打开会自动继续。 */
-  onBlocked: () => void;
-  /** 别的标签页要把库升到更新的版本：本连接已关闭，这一页要刷新才能继续用本机的包。 */
-  onSuperseded: () => void;
-}
-
 /**
- * 打开本机包库。浏览器不给用 IndexedDB 时报 `StorageUnavailableError`；库的版本比本页代码新时报 `StorageNewerError`。
- * 本连接收到升级请求时立即关闭，不挡别的标签页升级（见 `OpenEvents`）。
+ * 打开本机包库（错误分类与多标签页协调见 `openLocalDb`）。
  */
 export async function openLibrary(events: OpenEvents): Promise<Library> {
-  let db: IDBPDatabase<Schema>;
-  try {
-    db = await openDB<Schema>(DB_NAME, DB_VERSION, {
-      async upgrade(d, oldVersion, _newVersion, tx) {
-        if (oldVersion < 1) {
-          d.createObjectStore('packs', { keyPath: 'id' });
-          d.createObjectStore('state');
-        }
-        if (oldVersion < 2) {
-          const state = tx.objectStore('state');
-          const use = await state.get('use');
-          if (use !== undefined) await state.put({ ...use, wholeStack: [] }, 'use');
-        }
-      },
-      blocked: events.onBlocked,
-      blocking() {
-        db.close();
-        events.onSuperseded();
-      },
-    });
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'VersionError') throw new StorageNewerError(err);
-    throw new StorageUnavailableError(err);
-  }
+  const db = await openLocalDb<Schema>(
+    DB_NAME,
+    DB_VERSION,
+    async (d, oldVersion, _newVersion, tx) => {
+      if (oldVersion < 1) {
+        d.createObjectStore('packs', { keyPath: 'id' });
+        d.createObjectStore('state');
+      }
+      if (oldVersion < 2) {
+        const state = tx.objectStore('state');
+        const use = await state.get('use');
+        if (use !== undefined) await state.put({ ...use, wholeStack: [] }, 'use');
+      }
+    },
+    events,
+  );
   return new Library(db);
 }

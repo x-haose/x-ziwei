@@ -1,6 +1,7 @@
 import { type ImportProblem, MAX_PACK_BYTES, checkImport } from './kernel-pack';
 import type { Pack, PackRaw } from './library';
-import { LibraryConflictError, StorageFullError } from './store';
+import { StorageFullError } from '../lib/local-db';
+import { LibraryConflictError } from './store';
 
 /**
  * 导入的流程与结果（不含界面）：读文本 → 大小上限 → 解析与校验 → 存入本机，逐步报告状态。
