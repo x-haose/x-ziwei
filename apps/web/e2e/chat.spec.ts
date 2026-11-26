@@ -125,7 +125,7 @@ test('兼容服务：Base URL 必须是 https；能否调用工具以第一次�
   await page.getByRole('textbox', { name: 'Base URL' }).fill('http://llm.example.test/v1');
   await page.getByLabel('API Key').fill('sk-compat');
   await page.getByRole('button', { name: '检查并保存' }).click();
-  await expect(page.getByText('Base URL 必须以 https:// 开头')).toBeVisible();
+  await expect(page.getByText('浏览器页面只能直连 https 地址，http 与本机地址不行')).toBeVisible();
   await page.getByRole('textbox', { name: 'Base URL' }).fill('https://llm.example.test/v1/');
   await page.getByRole('button', { name: '检查并保存' }).click();
   await expect(page.getByText('直连 llm.example.test，费用按你在服务商的账号计')).toBeVisible();
@@ -219,7 +219,7 @@ test('出错：401、429、连不上各有标题、原因与动作，问题保�
   await page.getByRole('button', { name: '新对话' }).click();
   await ask(page, '试试 [cors]');
   await expect(alert).toContainText('连不上 api.deepseek.com');
-  await expect(alert).toContainText('不允许网页直接访问（跨域）');
+  await expect(alert).toContainText('不允许网页直接访问（跨域），也可能是厂商在限流');
 });
 
 test('对话接口的 401 不带跨域头时（OpenAI），按模型列表接口复核成 Key 无效', async ({ page }) => {
@@ -359,4 +359,50 @@ test('存储不可用：对话页签写明原因，提示词照常可用', async
   await expect(page.getByText('这个浏览器不让本页存数据')).toBeVisible();
   await page.getByRole('tab', { name: '提示词' }).click();
   await expect(page.getByRole('button', { name: '复制提示词' })).toBeEnabled({ timeout: 20000 });
+});
+
+test('模型输出里的图片不加载（显示为链接）、原始 HTML 不渲染；站外链接点了才新开页且不带来源', async ({ page }) => {
+  const outside: string[] = [];
+  page.on('request', (r) => {
+    if (r.url().includes('evil.example')) outside.push(r.url());
+  });
+  await seed(page, { provider: 'deepseek', key: 'sk-good' });
+  await openChat(page);
+  await ask(page, '给我看图 [image][plain]');
+  const log = answer(page);
+  const image = log.getByRole('link', { name: '泄露' });
+  await expect(image).toHaveAttribute('href', 'https://evil.example/leak.png?q=%E5%AF%B9%E8%AF%9D%E5%86%85%E5%AE%B9');
+  await expect(image).toHaveAttribute('rel', 'noopener noreferrer');
+  await expect(log.getByRole('link', { name: '出处' })).toHaveAttribute('target', '_blank');
+  await expect(log.locator('img')).toHaveCount(0);
+  await expect(log).not.toContainText('<img');
+  expect(outside).toEqual([]);
+});
+
+test('从首页站内跳转进排盘页（沿用首页的 CSP）后，对话照样能连厂商', async ({ page }) => {
+  await seed(page, { provider: 'deepseek', key: 'sk-good' });
+  await page.goto('/zh');
+  await page.getByRole('link', { name: /在线排盘/ }).first().click();
+  await expect(page).toHaveURL(/\/zh\/chart$/);
+  await page.evaluate(() => {
+    location.hash = 'cal=solar&d=2000-8-16&t=2&g=f';
+  });
+  await expect(page.getByRole('textbox', { name: '问这张盘' })).toBeEnabled({ timeout: 20000 });
+  await ask(page, '站内跳转后 [plain]');
+  await expect(answer(page)).toContainText('自己拿主意的力量很足。');
+});
+
+test('全站的 CSP 一致（只有内联脚本与样式的哈希不同）：connect-src 只放 https，图片只同源，不用的能力一律关闭', async ({ request }) => {
+  const policies = await Promise.all(
+    ['/zh', '/zh/chart', '/zh/knowledge', '/zh/install', '/en/chart', '/no-such-page'].map(async (path) => {
+      const html = await (await request.get(path)).text();
+      const csp = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/)![1]!;
+      return csp.replace(/ 'sha256-[^']+'/g, '');
+    }),
+  );
+  expect(new Set(policies).size).toBe(1);
+  const directives = policies[0]!.split('; ');
+  for (const d of ["connect-src 'self' https:", "img-src 'self'", "object-src 'none'", "frame-src 'none'", "base-uri 'none'", "form-action 'none'"]) {
+    expect(directives).toContain(d);
+  }
 });

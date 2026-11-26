@@ -239,7 +239,7 @@ export function Home() {
       </Link>
       {sample && <Leader home={homeRef} ring={ringRef} board={boardRef} label={t.home.leader} />}
 
-      <a className={css.credit} href={RUBBING_SOURCE} target="_blank" rel="noopener">
+      <a className={css.credit} href={RUBBING_SOURCE} target="_blank" rel="noopener noreferrer">
         {t.home.credit}
       </a>
     </main>

@@ -69,8 +69,11 @@ const REACT_ARIA_PRESS_STYLE = '@layer {\n  [data-react-aria-pressable] {\n    t
  * 部署目标带统计时另放行统计脚本的来源（Cloudflare 文档「What do I need to add to my CSP」）。
  *
  * `connect-src` 放行 `'self'` 与任意 https 地址：排盘页的对话从浏览器直连用户选的模型厂商，兼容服务的 Base URL
- * 由用户填，构建时写不进来；meta CSP 运行时只能收紧不能放宽，站内跳转又沿用最初那一页的 CSP，所以全站一致。
- * 统计的上报地址也在其中。http 地址（含本机）不放行。
+ * 由用户填，构建时写不进来；meta CSP 运行时只能收紧不能放宽，站内跳转（客户端导航）沿用最初那一页的 CSP，
+ * 所以全站一致。统计的上报地址也在其中。http 地址（含本机）不放行。
+ * 这一项挡不住注入的脚本经跳转把 Key 带出去，防线是 `script-src` 只放行同源与逐段哈希；配套地，模型输出与知识包正文的
+ * Markdown 不渲染原始 HTML、不加载图片（`img-src` 只有同源，图片语法显示为链接，见 `markdown.tsx`），
+ * 否则模型能用图片地址把对话内容带出去。不用的能力一律 `'none'`：插件、框架、`<base>`、表单提交（表单都由脚本处理）。
  */
 export function contentSecurityPolicy(html: string, site: Site): string {
   const { scripts, styles } = inlineBlocks(html);
@@ -84,8 +87,9 @@ export function contentSecurityPolicy(html: string, site: Site): string {
     "font-src 'self'",
     "connect-src 'self' https:",
     "object-src 'none'",
+    "frame-src 'none'",
     "base-uri 'none'",
-    "form-action 'self'",
+    "form-action 'none'",
   ].join('; ');
 }
 

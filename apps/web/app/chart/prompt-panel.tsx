@@ -196,7 +196,7 @@ export function PromptPanel({
       </div>
       <nav className={css.ai} aria-label={t.chart.openAi}>
         {CHAT_AIS.map((a) => (
-          <a key={a.href} className={css.aiLink} href={a.href} target="_blank" rel="noopener">
+          <a key={a.href} className={css.aiLink} href={a.href} target="_blank" rel="noopener noreferrer">
             {a[lang]}
           </a>
         ))}

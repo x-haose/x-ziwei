@@ -13,11 +13,15 @@ import type { ChatSettings } from './providers';
  * 一段对话整段写入：同一段对话在两个标签页里同时生成时，后写完的那次为准。
  */
 
-/** 排盘页右栏的页签。 */
-export type SideTab = 'chat' | 'prompt';
+/** 排盘页右栏的页签，按显示顺序。 */
+export const SIDE_TABS = ['chat', 'prompt'] as const;
+
+export type SideTab = (typeof SIDE_TABS)[number];
+
+const isSideTab = (v: unknown): v is SideTab => (SIDE_TABS as readonly unknown[]).includes(v);
 
 interface Schema extends DBSchema {
-  state: { key: 'settings' | 'tab'; value: ChatSettings | SideTab };
+  state: { key: 'settings' | 'tab'; value: ChatSettings | string };
   conversations: { key: string; value: Conversation };
 }
 
@@ -46,7 +50,8 @@ export class ChatDb {
     ]);
     return {
       settings: (settings as ChatSettings | undefined) ?? null,
-      tab: (tab as SideTab | undefined) ?? null,
+      // 存的页签以后可能不再有（页签改名或去掉）：认不出就当没存过。
+      tab: isSideTab(tab) ? tab : null,
       conversations: conversations.map(settled).sort((a, b) => b.updatedAt - a.updatedAt),
     };
   }

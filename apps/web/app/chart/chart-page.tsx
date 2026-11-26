@@ -315,22 +315,24 @@ function ChartBody({
         mark={mark}
         className={css.side}
         onOpenChart={onOpenChart}
-        prompt={
-          <PromptPanel
-            t={t}
-            lang={lang}
-            text={text}
-            emptyText=""
-            choice={choice}
-            onChoice={(next) => onInput({ choice: next, question })}
-            yearLabel={monthItem ? fmt(t.chart.checkMonth, { y: sel.year, month: monthLabel(t, monthItem) }) : fmt(t.chart.checkYear, { y: sel.year })}
-            yearsLabel={fmt(t.chart.checkYears, { a: decadal.yearRange[0], b: decadal.yearRange[1] })}
-            question={question}
-            onQuestion={(next) => onInput({ choice, question: next })}
-            questionHeading={questionHeading(lang)}
-            mark={mark}
-          />
-        }
+        panels={{
+          prompt: (
+            <PromptPanel
+              t={t}
+              lang={lang}
+              text={text}
+              emptyText=""
+              choice={choice}
+              onChoice={(next) => onInput({ choice: next, question })}
+              yearLabel={monthItem ? fmt(t.chart.checkMonth, { y: sel.year, month: monthLabel(t, monthItem) }) : fmt(t.chart.checkYear, { y: sel.year })}
+              yearsLabel={fmt(t.chart.checkYears, { a: decadal.yearRange[0], b: decadal.yearRange[1] })}
+              question={question}
+              onQuestion={(next) => onInput({ choice, question: next })}
+              questionHeading={questionHeading(lang)}
+              mark={mark}
+            />
+          ),
+        }}
       />
     </>
   );
@@ -513,21 +515,23 @@ export function ChartPage() {
             mark={null}
             className={`${css.side} ${css.sideEmpty}`}
             onOpenChart={openChart}
-            prompt={
-              <PromptPanel
-                t={t}
-                lang={lang}
-                text={null}
-                emptyText={waiting ? t.chart.loadingPreview : t.chart.previewEmpty}
-                choice={DEFAULT_CHOICE}
-                onChoice={() => undefined}
-                yearLabel={today ? fmt(t.chart.checkYear, { y: today.year }) : t.chart.checks.year}
-                yearsLabel={t.chart.checks.years}
-                question=""
-                onQuestion={() => undefined}
-                questionHeading={questionHeading(lang)}
-              />
-            }
+            panels={{
+              prompt: (
+                <PromptPanel
+                  t={t}
+                  lang={lang}
+                  text={null}
+                  emptyText={waiting ? t.chart.loadingPreview : t.chart.previewEmpty}
+                  choice={DEFAULT_CHOICE}
+                  onChoice={() => undefined}
+                  yearLabel={today ? fmt(t.chart.checkYear, { y: today.year }) : t.chart.checks.year}
+                  yearsLabel={t.chart.checks.years}
+                  question=""
+                  onQuestion={() => undefined}
+                  questionHeading={questionHeading(lang)}
+                />
+              ),
+            }}
           />
         </>
       )}

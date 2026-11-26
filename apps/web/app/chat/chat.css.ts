@@ -612,7 +612,8 @@ export const mobileBar = style({
   '@media': {
     [media.s]: {
       display: 'grid',
-      gridTemplateColumns: '1fr 1fr',
+      gridAutoFlow: 'column',
+      gridAutoColumns: '1fr',
       gap: 8,
       position: 'fixed',
       left: 0,

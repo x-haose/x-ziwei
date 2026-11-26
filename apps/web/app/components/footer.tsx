@@ -20,7 +20,7 @@ export function Footer() {
       <Link className={css.link} to={localePath(lang, '/terms')}>
         {t.footer.terms}
       </Link>
-      <a className={css.link} href={GITHUB_URL} target="_blank" rel="noopener">
+      <a className={css.link} href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
         {t.footer.github}
       </a>
       <Link className={css.lang} to={`/${other}${pathname.slice(lang.length + 1)}`} hrefLang={other} lang={other}>

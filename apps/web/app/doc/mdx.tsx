@@ -33,7 +33,7 @@ function Anchor({ href, children }: ComponentProps<'a'>) {
   }
   if (href.startsWith('/')) return <Link to={currentDocHref(href)}>{children}</Link>;
   return (
-    <a href={href} target="_blank" rel="noopener">
+    <a href={href} target="_blank" rel="noopener noreferrer">
       {children}
     </a>
   );

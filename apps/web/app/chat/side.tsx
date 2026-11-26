@@ -10,7 +10,7 @@ import { useMediaQuery } from '../lib/media';
 import { type ChatChart, ChatColumn, useShownConversation } from './chat-panel';
 import * as css from './chat.css';
 import { saveTab, selectConversation, serviceName, setDrawer, setSheet, useChatDb, useChatSession } from './session';
-import type { SideTab } from './store';
+import { SIDE_TABS, type SideTab } from './store';
 
 /**
  * 右栏的页签（设计规范 19.1）：首次打开时本机存有 Key 是「对话」，否则是「提示词」；之后记住上次选的（存在本机）。
@@ -62,7 +62,7 @@ export function SidePanel({
   birthLabel,
   kernel,
   mark,
-  prompt,
+  panels,
   className,
   onOpenChart,
 }: {
@@ -76,7 +76,8 @@ export function SidePanel({
   birthLabel: string | null;
   kernel: KernelState;
   mark: ReactNode;
-  prompt: ReactNode;
+  /** 对话以外各页签的内容（对话由这里自己放）。 */
+  panels: Record<Exclude<SideTab, 'chat'>, ReactNode>;
   className: string;
   onOpenChart: (hash: string) => void;
 }) {
@@ -87,6 +88,7 @@ export function SidePanel({
   const section = useRef<HTMLElement>(null);
   const conv = useShownConversation(chart?.hash ?? null);
   const hasKey = db.status === 'ready' && db.settings !== null;
+  const labels: Record<SideTab, string> = { chat: t.chat.tabChat, prompt: t.chat.tabPrompt };
 
   useEffect(() => {
     if (wide) setSheet(false);
@@ -114,42 +116,48 @@ export function SidePanel({
       onOpenChart={onOpenChart}
     />
   );
+  const content = (id: SideTab) =>
+    id === 'chat' ? wide ? column(false) : <ChatEntry t={t} chartHash={chart?.hash ?? null} onOpen={openSheet} /> : panels[id];
 
   return (
     <>
       <section ref={section} className={className} aria-label={t.chat.tabsLabel}>
         <Tabs selectedKey={tab} onSelectionChange={(k) => onTab(k as SideTab)} className={css.panel}>
           <TabList aria-label={t.chat.tabsLabel} className={css.tabs}>
-            <Tab id="chat" className={css.tab}>
-              {t.chat.tabChat}
-            </Tab>
-            <Tab id="prompt" className={css.tab}>
-              {t.chat.tabPrompt}
-            </Tab>
+            {SIDE_TABS.map((id) => (
+              <Tab key={id} id={id} className={css.tab}>
+                {labels[id]}
+              </Tab>
+            ))}
           </TabList>
-          <TabPanel id="chat" className={css.panel}>
-            {wide ? column(false) : <ChatEntry t={t} chartHash={chart?.hash ?? null} onOpen={openSheet} />}
-          </TabPanel>
-          <TabPanel id="prompt" className={css.panel}>
-            {prompt}
-          </TabPanel>
+          {SIDE_TABS.map((id) => (
+            <TabPanel key={id} id={id} className={css.panel}>
+              {content(id)}
+            </TabPanel>
+          ))}
         </Tabs>
       </section>
       {birthLabel !== null && (
         <div className={css.mobileBar}>
-          <button type="button" className={`${controls.button} ${css.mobileBarButton}`} onClick={openSheet}>
-            {t.chat.tabChat}
-          </button>
-          <button
-            type="button"
-            className={`${controls.ghost} ${css.mobileBarButton}`}
-            onClick={() => {
-              onTab('prompt');
-              section.current?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-            }}
-          >
-            {t.chat.tabPrompt}
-          </button>
+          {SIDE_TABS.map((id) =>
+            id === 'chat' ? (
+              <button key={id} type="button" className={`${controls.button} ${css.mobileBarButton}`} onClick={openSheet}>
+                {labels[id]}
+              </button>
+            ) : (
+              <button
+                key={id}
+                type="button"
+                className={`${controls.ghost} ${css.mobileBarButton}`}
+                onClick={() => {
+                  onTab(id);
+                  section.current?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+                }}
+              >
+                {labels[id]}
+              </button>
+            ),
+          )}
         </div>
       )}
       {sheet && !wide && (

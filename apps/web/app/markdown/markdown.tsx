@@ -12,9 +12,13 @@ import { slugify } from './toc';
 
 /**
  * 本站只渲染这些元素：一到四级标题、段落、列表、表格、分隔线、代码块、行内代码、加粗、链接。
- * 其余语法（斜体、引用、图片等）只保留文字；原始 HTML 一律不渲染（模型输出不可信）。
+ * 其余语法（斜体、引用等）只保留文字；原始 HTML 一律不渲染。图片语法不加载图片，显示为指向图片地址的链接：
+ * 模型输出与知识包正文不可信，能自动发出的请求（图片地址里可以带上对话内容）一律不发。
  */
-const ALLOWED = ['h1', 'h2', 'h3', 'h4', 'p', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'hr', 'pre', 'code', 'strong', 'a', 'br'];
+const ALLOWED = ['h1', 'h2', 'h3', 'h4', 'p', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'hr', 'pre', 'code', 'strong', 'a', 'img', 'br'];
+
+/** 站外链接：只在点击时新开页，不带 Referer、新页拿不到本页（`window.opener`）。 */
+const EXTERNAL = { target: '_blank', rel: 'noopener noreferrer' } as const;
 
 /** 代码块纯文本超过这个长度时折行并改用正文字体（给模型的长段说明）。 */
 const WRAP_TEXT_OVER = 160;
@@ -105,8 +109,16 @@ const components: Components = {
     }
     const external = href !== undefined && /^https?:/.test(href);
     return (
-      <a href={href} {...(external ? { target: '_blank', rel: 'noopener' } : {})}>
+      <a href={href} {...(external ? EXTERNAL : {})}>
         {children}
+      </a>
+    );
+  },
+  img: ({ src, alt }) => {
+    const href = typeof src === 'string' ? src : '';
+    return (
+      <a href={href} {...(/^https?:/.test(href) ? EXTERNAL : {})}>
+        {alt || href}
       </a>
     );
   },
