@@ -43,7 +43,26 @@ function steps(slug: string, year: number | null, decade = false): Step[] {
   });
 }
 
+/** 主题原文「## 格局」一节列出的格局名。 */
+function textPatterns(text: string): string[] {
+  const i = text.indexOf('## 格局\n');
+  if (i < 0) return [];
+  const sec = text.slice(i).split('\n\n')[0]!;
+  return [...sec.matchAll(/^- \*\*(.+?)\*\*/gm)].map((m) => m[1]!);
+}
+
 describe('主题的五步（2000-8-16 寅时 女）', () => {
+  it('运限层第 4 步与交给 AI 的该层主题原文列同一批格局（风云际会除外，待内核给出 TopicSelection.patterns）', () => {
+    for (const topic of pack.topics()) {
+      for (const decade of [false, true]) {
+        const s = steps(topic.slug, 2026, decade);
+        const web = [...new Set(s[3]!.notes.map((n) => (n.kind === 'pattern' ? n.label : '')).filter((x) => x && x !== '风云际会'))].sort();
+        const text = chart.horoscopeOfYear(2026).topicToText(topic.slug, decade ? 'decadal' : 'yearly', { knowledge: pack, knowledgeDepth: 'summary' });
+        expect([topic.slug, decade, web]).toEqual([topic.slug, decade, [...new Set(textPatterns(text))].sort()]);
+      }
+    }
+  });
+
   it('点盘上的宫读以它为本宫的主题：本命按本命宫名，运限层按该层宫名', () => {
     const natal = (slug: string) => chart.topicPalaces(slug, { knowledge: pack });
     expect(topicOfPalace(natal, pack.topics(), chart.palace('soulPalace')!.index)).toBe('overall');
@@ -106,10 +125,13 @@ describe('主题的五步（2000-8-16 寅时 女）', () => {
     expect([s[4]!.focus, s[4]!.hl]).toEqual([0, [4, 0]]);
   });
 
-  it('选了大限：按大限宫名选宫，宫名写大限的、括号注明本命；只收本宫在这几宫的格局（同 topicToText）', () => {
+  it('选了大限：按大限宫名选宫，宫名写大限的、括号注明本命；身宫先写本命位置；格局只列这一层的命中', () => {
     const s = steps('romance', 2026, true);
     expect(s[0]!.facts.map(plain)).toEqual(['你的大限夫妻宫（本命财帛宫）在寅，主星是武曲（<得>）和天相（<庙>）；[同宫]的辅星有天马。']);
+    expect(plain(s[1]!.facts[1]!)).toContain('[身宫]（在本命官禄宫，大限迁移宫）');
     expect(s[3]!.facts.map(plain)).toContain('杀破狼：以大限命宫（本命夫妻宫）为[本宫]，由大限命宫的七杀、大限官禄宫的破军、大限财帛宫的贪狼组成，大限成立。');
+    // 府相朝垣只在本命成立（本宫是本命命宫，落在大限的选中宫里），不在这一层的材料里，不列。
+    expect(s[3]!.facts.map(plain).join('')).not.toContain('府相朝垣');
     const text = chart.topicToText('property', { knowledge: pack, knowledgeDepth: 'summary' });
     // 田宅的这几宫不含命宫：府相朝垣（本宫命宫）不列，与交给 AI 的主题原文一致。
     expect(text).not.toContain('府相朝垣');

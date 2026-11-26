@@ -220,12 +220,20 @@ export function topicSteps(input: StepInput): Step[] {
   };
   const starIn = (s: Star, i: number) => f.starIn.replace('{star}', s.name).replace('{palace}', N.short(i));
 
+  /* 身宫、来因宫在任何一层都是本命那一宫：先写本命位置，运限层再补该层宫名。 */
+  const bodyAt = (id: 'shenGong' | 'laiYin', i: number): Rich =>
+    layer
+      ? rich(f.bodyAtLayer, { body: term(id), natal: N.natal(i), branch: P[i]!.earthlyBranch, layer: N.short(i) })
+      : rich(f.bodyAt, { body: term(id), palace: N.natal(i), branch: P[i]!.earthlyBranch });
+  const bodyIn = (id: 'shenGong' | 'laiYin', i: number): Rich =>
+    layer ? rich(f.bodyInLayer, { body: term(id), natal: N.natal(i), layer: N.short(i) }) : rich(f.bodyIn, { body: term(id), palace: N.natal(i) });
+
   /* 1 本宫主星 */
   const headOf = (g: TopicGroup): Rich =>
     g.key === 'bodyPalace'
-      ? rich(f.bodyAt, { body: term('shenGong'), palace: N.short(g.target), branch: P[g.target]!.earthlyBranch })
+      ? bodyAt('shenGong', g.target)
       : g.key === 'originalPalace'
-        ? rich(f.bodyAt, { body: term('laiYin'), palace: N.short(g.target), branch: P[g.target]!.earthlyBranch })
+        ? bodyAt('laiYin', g.target)
         : rich(f.palaceAt, { palace: pl(g.target), branch: P[g.target]!.earthlyBranch });
   const seenBase = new Set<number>();
   const f1: Rich[] = [];
@@ -282,9 +290,9 @@ export function topicSteps(input: StepInput): Step[] {
     if (extra.length) {
       const items = extra.map((g): Rich =>
         g.key === 'bodyPalace'
-          ? rich(f.bodyIn, { body: term('shenGong'), palace: N.short(g.target) })
+          ? bodyIn('shenGong', g.target)
           : g.key === 'originalPalace'
-            ? rich(f.bodyIn, { body: term('laiYin'), palace: N.short(g.target) })
+            ? bodyIn('laiYin', g.target)
             : withBrief(g.target),
       );
       f2.push(rich(f.alsoSee, { list: joinSep(items, t.read.sep) }));
@@ -292,9 +300,9 @@ export function topicSteps(input: StepInput): Step[] {
   } else {
     const items = only.map((g): Rich =>
       g.key === 'bodyPalace'
-        ? rich(f.bodyIn, { body: term('shenGong'), palace: N.short(g.target) })
+        ? bodyIn('shenGong', g.target)
         : g.key === 'originalPalace'
-          ? rich(f.bodyIn, { body: term('laiYin'), palace: N.short(g.target) })
+          ? bodyIn('laiYin', g.target)
           : [pl(g.target)],
     );
     f2.push(rich(f.onlySelf, { topic: topic.title ?? topic.slug, list: joinAnd(items, t), sanfang: term('sanFang') }));
@@ -374,21 +382,16 @@ export function topicSteps(input: StepInput): Step[] {
     when: null,
   });
 
-  /* 4 格局：本宫在这几宫的格局（与内核 topicToText 同一规则）；同一条命中只列一次，标出在哪几层成立 */
-  const pats = new Map<string, { hit: PatternHit; scopes: string[] }>();
-  const add = (list: readonly PatternHit[], scope: string) => {
-    for (const h of list) {
-      if (!set.includes(h.palaceIndex)) continue;
-      const id = hitId(h);
-      const same = pats.get(id);
-      if (same) {
-        if (!same.scopes.includes(scope)) same.scopes.push(scope);
-      } else pats.set(id, { hit: h, scopes: [scope] });
-    }
-  };
-  add(natalPatterns, t.layer.natal);
-  if (layer) add(layer.patterns, t.layer[layer.view.kind]);
-  const pl4 = [...pats.values()];
+  /*
+   * 4 格局：本宫在这几宫的命中，同一条只列一次。本命取本命格局；选了运限层只取该层视角的命中（与 Horoscope.topicToText
+   * 同一视角），同一条在本命也成立时写「本命、流年成立」。内核的主题文本只写到该层，另去掉要读更细一层的格局
+   * （风云际会）；JS 接口没有这一取法，这里会多列这类命中，待内核在 TopicSelection 里给出 patterns 后改取它。
+   */
+  const natalIds = new Set(natalPatterns.map(hitId));
+  const pl4 = (layer ? layer.patterns : natalPatterns)
+    .filter((h) => set.includes(h.palaceIndex))
+    .filter((h, k, a) => a.findIndex((x) => hitId(x) === hitId(h)) === k)
+    .map((hit) => ({ hit, scopes: layer ? [...(natalIds.has(hitId(hit)) ? [t.layer.natal] : []), t.layer[layer.view.kind]] : [t.layer.natal] }));
   const f4: Rich[] = pl4.length
     ? pl4.map(({ hit, scopes }) => {
         const stars = hit.stars.filter((s, k, a) => a.findIndex((y) => y.name === s.name && y.palaceIndex === s.palaceIndex) === k);
