@@ -269,7 +269,10 @@ export const note = style({
 
 export const noteLead = style({ color: color.fg, fontWeight: 500 });
 
-export const noteBar = style({ width: '100%', marginTop: 8 });
+/** 内核加载的细进度条：1px 底线上 3px 赭红填充（与盘区的进度条同一用法）。 */
+export const noteBar = style({ position: 'relative', width: '100%', height: 1, marginTop: 10, marginBottom: 2, background: color.line2 });
+
+export const noteBarFill = style({ position: 'absolute', left: 0, top: -1, height: 3, background: color.accent });
 
 /* 输入框与费用说明 */
 

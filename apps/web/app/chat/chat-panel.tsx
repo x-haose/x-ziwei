@@ -752,10 +752,25 @@ export function ChatColumn({
         )}
       </div>
       {kernelLoading && (
-        <p className={css.note}>
-          <b className={css.noteLead}>{t.chat.kernelLead}</b>
-          {kernel.status === 'loading' ? fmt(t.chat.kernelBody, { a: Math.round(kernel.loaded / 1024), b: Math.round(kernel.total / 1024) }) : ''}
-        </p>
+        <div className={css.note}>
+          <b className={css.noteLead}>{kernel.status === 'error' ? t.chart.failed : t.chat.kernelLead}</b>
+          {kernel.status === 'error' && fmt(t.chat.kernelFailed, { reason: kernel.message })}
+          {kernel.status === 'loading' && (
+            <>
+              {fmt(t.chat.kernelBody, { a: Math.round(kernel.loaded / 1024), b: Math.round(kernel.total / 1024) })}
+              <div
+                className={css.noteBar}
+                role="progressbar"
+                aria-label={t.chart.loading}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round((kernel.loaded / kernel.total) * 100)}
+              >
+                <i className={css.noteBarFill} style={{ width: `${Math.round((kernel.loaded / kernel.total) * 100)}%` }} />
+              </div>
+            </>
+          )}
+        </div>
       )}
       {!settings.model && (
         <p className={css.note}>
