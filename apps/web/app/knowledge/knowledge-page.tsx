@@ -16,6 +16,7 @@ import * as css from './knowledge.css';
 import {
   DEFAULT_PACK_ID,
   DEFAULT_USE,
+  type Draft,
   type ExtendsAdvice,
   type Pack,
   SECTIONS,
@@ -31,21 +32,14 @@ import {
   withoutPacks,
 } from './library';
 import { CountList, activePacks, diffText, importedText, totalOf, useLabel } from './parts';
-import { addPack, removePack, updateUse, useLibrary } from './use-library';
+import { type LibraryState, addPack, deleteDraft, removePack, updateUse, useLibrary } from './use-library';
 import { useBrokenPacks, useRepairNotice, useRetireBroken } from './chart-knowledge';
 import { ViewDrawer } from './view-drawer';
-
-/** 下载一个包的原文：`id-版本.json`。 */
-function download(raw: object, file: string): void {
-  const url = URL.createObjectURL(new Blob([`${JSON.stringify(raw, null, 2)}\n`], { type: 'application/json' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = file;
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+import { downloadJson } from '../lib/download';
+import { draftForPack, editorHref, newDraft } from '../editor/actions';
+import { compareOf, draftProblems, sameAsLibrary } from '../editor/model';
+import { NewPackDialog } from '../editor/new-dialog';
+import { draftLine } from '../editor/write-page';
 
 function packFile(p: Pack): string {
   return `${p.id}-${p.version ?? 'unversioned'}.json`;
@@ -261,6 +255,8 @@ function PackList({
   onView,
   onExport,
   onDelete,
+  onEdit,
+  onBaseNew,
 }: {
   t: Messages;
   packs: readonly Pack[];
@@ -274,6 +270,10 @@ function PackList({
   onView: (p: Pack) => void;
   onExport: (p: Pack) => void;
   onDelete: (p: Pack) => void;
+  /** 编辑一个用户包（进编辑器）；本机包库不可用时为 null。 */
+  onEdit: ((p: Pack) => void) | null;
+  /** 基于一个包新建（打开新建对话框）；本机包库不可用时为 null。 */
+  onBaseNew: ((p: Pack) => void) | null;
 }) {
   const l = t.knowledge.list;
   const rows = [defaultPack, ...packs];
@@ -318,8 +318,8 @@ function PackList({
                     {declared}
                   </span>
                   <span>
-                    <small className={css.metaLabel}>{l.imported}</small>
-                    {p.importedAt === null ? l.builtin : importedText(p.importedAt)}
+                    <small className={css.metaLabel}>{p.savedAt === null ? l.imported : l.saved}</small>
+                    {p.importedAt === null ? l.builtin : importedText(p.savedAt ?? p.importedAt)}
                   </span>
                 </div>
                 <CountList counts={p.counts} base={defaultPack.counts} t={t} className={css.packCounts} />
@@ -336,12 +336,22 @@ function PackList({
                 )}
               </div>
               <div className={css.packActions} role="group" aria-label={fmt(l.actionsLabel, { name: p.name })}>
+                {!isDefault && onEdit && (
+                  <Button className={css.packAction} onPress={() => onEdit(p)}>
+                    {t.editor.editPack}
+                  </Button>
+                )}
                 <Button className={css.packAction} isDisabled={!readable} onPress={() => onView(p)}>
                   {l.view}
                 </Button>
                 <Button className={css.packAction} isDisabled={!readable} onPress={() => onExport(p)}>
                   {l.export}
                 </Button>
+                {onBaseNew && (
+                  <Button className={css.packAction} isDisabled={!readable} onPress={() => onBaseNew(p)}>
+                    {t.editor.basedNew}
+                  </Button>
+                )}
                 {isDefault ? (
                   <span className={css.packLocked}>{l.locked}</span>
                 ) : (
@@ -356,6 +366,85 @@ function PackList({
         {packs.length === 0 && <li className={css.packsNone}>{blocked ? l.noneBlocked : l.none}</li>}
       </ul>
     </section>
+  );
+}
+
+/**
+ * 草稿区（设计规范 20.2「知识包页」）：在「本机的包」下方，有未保存到包库的草稿时才出现（与包库一致的草稿不列）。
+ */
+function DraftList({ t, kernel, lib, onDiscard }: { t: Messages; kernel: Kernel; lib: Extract<LibraryState, { status: 'ready' }>; onDiscard: (d: Draft) => void }) {
+  const lang = useLang();
+  const navigate = useNavigate();
+  const e = t.editor;
+  const def = defaultPackInfo(kernel);
+  const drafts = lib.drafts.filter((d) => !sameAsLibrary(d));
+  if (!drafts.length) return null;
+  return (
+    <section aria-labelledby="knowledge-drafts-title" className={css.drafts}>
+      <div className={css.sectionHead}>
+        <h2 id="knowledge-drafts-title" className={css.sectionTitle}>
+          {e.draftsTitle}
+        </h2>
+        <span className={css.sectionAux}>{e.draftsNote}</span>
+      </div>
+      <ul className={css.packs}>
+        {drafts.map((d) => {
+          const compare = compareOf(kernel, d.raw, lib.packs, def);
+          const errors = draftProblems(kernel, d, compare, lib.packs, lib.drafts).filter((p) => p.level === 'error').length;
+          const name = String((d.raw.source as { name?: string } | undefined)?.name ?? d.raw.id ?? '');
+          return (
+            <li key={d.id} className={css.pack}>
+              <div>
+                <b className={css.packName}>{name}</b>
+                <div className={css.meta}>
+                  <span>{String(d.raw.id ?? '')}</span>
+                  <span>{d.editing ? e.draftKindEdit : e.draftKindNew}</span>
+                  <span>{compare ? fmt(e.basedOn, { name: compare.label }) : e.newPack}</span>
+                  <span>{draftLine(d, t)}</span>
+                  {errors > 0 && <span className={css.draftErrors}>{fmt(e.draftErrors, { n: errors })}</span>}
+                </div>
+              </div>
+              <div className={css.packActions} role="group" aria-label={name}>
+                <Button className={css.packAction} onPress={() => navigate(editorHref(lang, { draft: d.id, from: 'knowledge' }, ''))}>
+                  {e.continueEdit}
+                </Button>
+                <Button className={css.packAction} onPress={() => onDiscard(d)}>
+                  {e.discard}
+                </Button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+/** 丢弃草稿的确认：默认聚焦「取消」。 */
+function DiscardDialog({ t, draft, onCancel, onConfirm }: { t: Messages; draft: Draft; onCancel: () => void; onConfirm: () => void }) {
+  const e = t.editor;
+  const name = String((draft.raw.source as { name?: string } | undefined)?.name ?? draft.raw.id ?? '');
+  return (
+    <ModalOverlay isOpen isDismissable onOpenChange={(o) => !o && onCancel()} className={css.scrim}>
+      <Modal className={css.dialog}>
+        <Dialog role="alertdialog" aria-labelledby="discard-title" aria-describedby="discard-body">
+          <Heading slot="title" id="discard-title" className={css.dialogTitle}>
+            {fmt(e.discardTitle, { name })}
+          </Heading>
+          <p id="discard-body" className={css.dialogBody}>
+            {draft.editing ? fmt(e.discardBodyOwn, { name }) : e.discardBody}
+          </p>
+          <div className={css.dialogActions}>
+            <Button className={controls.ghost} onPress={onCancel} autoFocus>
+              {e.cancel}
+            </Button>
+            <Button className={`${controls.button} ${css.danger}`} onPress={onConfirm}>
+              {e.discard}
+            </Button>
+          </div>
+        </Dialog>
+      </Modal>
+    </ModalOverlay>
   );
 }
 
@@ -435,6 +524,8 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
   const [imp, setImp] = useState<ImportState>({ phase: 'idle' });
   const [viewing, setViewing] = useState<Pack | null>(null);
   const [deleting, setDeleting] = useState<Pack | null>(null);
+  const [creating, setCreating] = useState<{ base: string | null } | null>(null);
+  const [discarding, setDiscarding] = useState<Draft | null>(null);
   const importRef = useRef<HTMLElement>(null);
   const firstControl = useRef<HTMLButtonElement>(null);
 
@@ -501,8 +592,11 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
           <Link className={`${controls.ghost} ${css.headAction}`} href={localePath(lang, '/knowledge/format')}>
             {t.knowledge.formatLink}
           </Link>
+          <Link className={`${controls.button} ${css.headAction}`} href={localePath(lang, '/knowledge/write')}>
+            {t.editor.writeTitle}
+          </Link>
           <Button
-            className={`${controls.button} ${css.headAction}`}
+            className={`${controls.ghost} ${css.headAction}`}
             onPress={() => {
               importRef.current?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
               const target = firstControl.current;
@@ -547,23 +641,36 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
       )}
       <UsePanel t={t} use={use} packs={usable} defaultPack={defaultPack} blocked={blocked} cover={cover} nameOf={nameOf} onChange={changeUse} />
       <div className={css.grid}>
-        <PackList
-          t={t}
-          packs={packs}
-          defaultPack={defaultPack}
-          activeSet={activeSet}
-          broken={broken}
-          blocked={blocked}
-          canReadDefault={kernel !== null}
-          onView={setViewing}
-          onExport={(p) => {
-            const raw = p.raw ?? (kernel ? packRaw(kernel, p) : null);
-            if (!raw) throw new Error('内核装好之前不能导出默认包');
-            download(raw, packFile(p));
-            toast(fmt(t.knowledge.exported, { file: packFile(p) }));
-          }}
-          onDelete={setDeleting}
-        />
+        <div>
+          <PackList
+            t={t}
+            packs={packs}
+            defaultPack={defaultPack}
+            activeSet={activeSet}
+            broken={broken}
+            blocked={blocked}
+            canReadDefault={kernel !== null}
+            onView={setViewing}
+            onExport={(p) => {
+              const raw = p.raw ?? (kernel ? packRaw(kernel, p) : null);
+              if (!raw) throw new Error('内核装好之前不能导出默认包');
+              downloadJson(raw, packFile(p));
+              toast(fmt(t.knowledge.exported, { file: packFile(p) }));
+            }}
+            onDelete={setDeleting}
+            onEdit={
+              ready && kernel
+                ? (p) =>
+                    void act(async () => {
+                      const d = await draftForPack(p, lib.drafts);
+                      navigate(editorHref(lang, { draft: d.id, from: 'knowledge' }, ''));
+                    })
+                : null
+            }
+            onBaseNew={ready && kernel ? (p) => setCreating({ base: p.id }) : null}
+          />
+          {ready && kernel && <DraftList t={t} kernel={kernel} lib={lib} onDiscard={setDiscarding} />}
+        </div>
         <aside className={css.importBox} aria-labelledby="knowledge-import-title" ref={importRef}>
           <div className={css.sectionHead}>
             <h2 id="knowledge-import-title" className={css.sectionTitle}>
@@ -604,6 +711,37 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
           defaultPack={defaultPack}
           t={t}
           onClose={() => setViewing(null)}
+        />
+      )}
+      {creating && ready && kernel && (
+        <NewPackDialog
+          t={t}
+          packs={lib.packs}
+          defaultPack={defaultPack}
+          drafts={lib.drafts}
+          base={creating.base}
+          onCancel={() => setCreating(null)}
+          onStart={(raw) => {
+            setCreating(null);
+            void act(async () => {
+              const d = await newDraft(raw, null);
+              navigate(editorHref(lang, { draft: d.id, from: 'knowledge' }, ''));
+            });
+          }}
+        />
+      )}
+      {discarding && ready && (
+        <DiscardDialog
+          t={t}
+          draft={discarding}
+          onCancel={() => setDiscarding(null)}
+          onConfirm={() => {
+            const d = discarding;
+            setDiscarding(null);
+            void act(async () => {
+              await deleteDraft(d.id);
+            });
+          }}
         />
       )}
       {deleting && ready && (

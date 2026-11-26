@@ -38,6 +38,8 @@ export default [
     route(`${lang}/llms-full.txt`, 'routes/llms-full.ts', { id: `${lang}/llms-full` }),
     route(`${lang}/search.json`, 'routes/search-index.ts', { id: `${lang}/search` }),
     route(`${lang}/knowledge`, 'routes/knowledge.tsx', { id: `${lang}/knowledge` }),
+    route(`${lang}/knowledge/write`, 'routes/knowledge-write.tsx', { id: `${lang}/knowledge/write` }),
+    route(`${lang}/knowledge/edit`, 'routes/knowledge-edit.tsx', { id: `${lang}/knowledge/edit` }),
     ...HELP_SLUGS.flatMap((slug) => [
       route(`${lang}/${docPathOf(slug)}`, 'routes/help.tsx', { id: `${lang}/doc/${slug}` }),
       route(`${lang}/${docPathOf(slug)}.md`, 'routes/doc-markdown.ts', { id: `${lang}/doc/${slug}.md` }),

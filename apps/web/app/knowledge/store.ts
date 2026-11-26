@@ -2,6 +2,7 @@ import type { DBSchema, IDBPDatabase, IDBPTransaction } from 'idb';
 import { type OpenEvents, openLocalDb, writing } from '../lib/local-db';
 import {
   DEFAULT_USE,
+  type Draft,
   type LibraryProblem,
   type Pack,
   type PackRaw,
@@ -12,12 +13,13 @@ import {
   libraryProblems,
   migrateUse,
   repairUse,
+  addLayer,
   withoutPack,
 } from './library';
 
 /**
- * 本机知识包库：浏览器的 IndexedDB（库 `xzw-knowledge`），`packs` 存包的原文与导入时间，`state` 的 `use` 存生效组合。
- * 包只在这台设备的浏览器里，不上传。
+ * 本机知识包库：浏览器的 IndexedDB（库 `xzw-knowledge`），`packs` 存包的原文与导入、保存时间，`state` 的 `use` 存生效组合，
+ * `drafts` 存编辑器的草稿（不进包库、不参与释义）。包与草稿只在这台设备的浏览器里，不上传。
  *
  * 同一个浏览器里可能开着几个标签页，各自内存里的包列表会过时。所以每次改动都在一个读写事务里完成：
  * 先读库里此刻的包与组合，用它们校验，再写入；事务之外不拿内存里的数据做判断。
@@ -26,14 +28,16 @@ import {
 interface Schema extends DBSchema {
   packs: { key: string; value: StoredPack };
   state: { key: 'use'; value: Use };
+  drafts: { key: string; value: Draft };
 }
 
 const DB_NAME = 'xzw-knowledge';
 /**
+ * 4：加编辑器的草稿 `drafts`。
  * 3：生效组合改为有序叠放的列表 `{ layers }`（1、2 存的是叠加 / 整包两种模式，见 `migrateUse`）。
  * 2：组合加了整包模式的叠加 `wholeStack`。
  */
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 /** 按库里此刻的包，要存的包不合本机包库的规则（如另一个标签页刚存了同 id 的包）；这次写入没有发生。 */
 export class LibraryConflictError extends Error {
@@ -43,11 +47,20 @@ export class LibraryConflictError extends Error {
   }
 }
 
-/** 库里此刻的包与生效组合。`repaired` 是这次读取时从组合里移出的包（组合与包库对不上时）。 */
+/** 库里此刻的包、生效组合与草稿（按上次编辑从新到旧）。`repaired` 是这次读取时从组合里移出的包（组合与包库对不上时）。 */
 export interface Snapshot {
   packs: Pack[];
   use: Use;
+  drafts: Draft[];
   repaired: string[];
+}
+
+/** 要保存的草稿不在库里了（别的标签页删除或已保存了它）；这次写入没有发生。 */
+export class DraftGoneError extends Error {
+  constructor(readonly draftId: string) {
+    super(`草稿 ${draftId} 已不在本机`);
+    this.name = 'DraftGoneError';
+  }
 }
 
 function isUse(v: unknown): v is Use {
@@ -57,23 +70,25 @@ function isUse(v: unknown): v is Use {
   return ids(u.layers);
 }
 
-type Tx = IDBPTransaction<Schema, ('packs' | 'state')[], 'readwrite'>;
+type Tx = IDBPTransaction<Schema, ('packs' | 'state' | 'drafts')[], 'readwrite'>;
 
-/** 事务里读出全部包（按导入先后）与生效组合。存的组合形状不对即是数据损坏，报错。 */
-async function readTx(tx: Tx): Promise<{ packs: Pack[]; use: Use }> {
-  const [stored, use] = await Promise.all([tx.objectStore('packs').getAll(), tx.objectStore('state').get('use')]);
+const STORES = ['packs', 'state', 'drafts'] as const;
+
+/** 事务里读出全部包（按导入先后）、生效组合与草稿。存的组合形状不对即是数据损坏，报错。 */
+async function readTx(tx: Tx): Promise<{ packs: Pack[]; use: Use; drafts: Draft[] }> {
+  const [stored, use, drafts] = await Promise.all([tx.objectStore('packs').getAll(), tx.objectStore('state').get('use'), tx.objectStore('drafts').getAll()]);
   if (use !== undefined && !isUse(use)) throw new Error(`本机知识包库里的生效组合损坏：${JSON.stringify(use)}`);
-  const packs = stored.sort((a, b) => a.importedAt - b.importedAt).map((s) => describePack(s.raw, s.importedAt));
-  return { packs, use: use ?? DEFAULT_USE };
+  const packs = stored.sort((a, b) => a.importedAt - b.importedAt).map((s) => describePack(s.raw, s.importedAt, s.savedAt ?? null));
+  return { packs, use: use ?? DEFAULT_USE, drafts: drafts.sort((a, b) => b.updatedAt - a.updatedAt) };
 }
 
 export class Library {
   constructor(private readonly db: IDBPDatabase<Schema>) {}
 
   /** 在一个读写事务里读、改、再读；`run` 抛错时事务里已发出的写入随事务失败作废，错误原样抛出。 */
-  private async change(run: (tx: Tx, now: { packs: Pack[]; use: Use }) => Promise<Use>): Promise<Snapshot> {
+  private async change(run: (tx: Tx, now: { packs: Pack[]; use: Use; drafts: Draft[] }) => Promise<Use>): Promise<Snapshot> {
     return writing(async () => {
-      const tx = this.db.transaction(['packs', 'state'], 'readwrite');
+      const tx = this.db.transaction([...STORES], 'readwrite');
       // run 中途抛错时这里的失败与抛出的是同一件事，由下面 await 处或调用方收到的错误报告。
       const done = tx.done.catch((err: unknown) => err);
       const now = await readTx(tx);
@@ -81,7 +96,7 @@ export class Library {
       const after = await readTx(tx);
       const failed = await done;
       if (failed) throw failed;
-      return { packs: after.packs, use, repaired: [] };
+      return { packs: after.packs, use, drafts: after.drafts, repaired: [] };
     });
   }
 
@@ -91,12 +106,12 @@ export class Library {
    */
   async load(): Promise<Snapshot> {
     return writing(async () => {
-      const tx = this.db.transaction(['packs', 'state'], 'readwrite');
-      const { packs, use } = await readTx(tx);
+      const tx = this.db.transaction([...STORES], 'readwrite');
+      const { packs, use, drafts } = await readTx(tx);
       const fixed = repairUse(use, packs);
       if (fixed.dropped.length) await tx.objectStore('state').put(fixed.use, 'use');
       await tx.done;
-      return { packs, use: fixed.use, repaired: fixed.dropped };
+      return { packs, use: fixed.use, drafts, repaired: fixed.dropped };
     });
   }
 
@@ -132,6 +147,45 @@ export class Library {
     });
   }
 
+  /** 存一份草稿（新建或覆盖同标识的那份）。 */
+  async putDraft(draft: Draft): Promise<Snapshot> {
+    return this.change(async (tx, now) => {
+      await tx.objectStore('drafts').put(draft);
+      return now.use;
+    });
+  }
+
+  /** 丢弃一份草稿；包库不受影响。 */
+  async deleteDraft(id: string): Promise<Snapshot> {
+    return this.change(async (tx, now) => {
+      await tx.objectStore('drafts').delete(id);
+      return now.use;
+    });
+  }
+
+  /**
+   * 把草稿存进包库（设计规范 20.11）；同一个事务里草稿改为编辑这个包、与包库一致，`use` 为真时再把它放到生效组合的最上面（`addLayer`）。
+   * 按库里此刻的数据再查一遍：草稿还在（不在时报 `DraftGoneError`）；新包的标识不与本机已有的包重复，编辑本机包时标识不变
+   * 且那个包还在（不合时报 `LibraryConflictError`）。包格式的检查在调用之前由内核做过。
+   */
+  async saveDraft(draft: Draft, at: number, use: boolean): Promise<Snapshot> {
+    return this.change(async (tx, now) => {
+      if (!(await tx.objectStore('drafts').get(draft.id))) throw new DraftGoneError(draft.id);
+      const id = typeof draft.raw.id === 'string' ? draft.raw.id : '';
+      const problems = libraryProblems(draft.raw, now.packs, draft.editing);
+      if (draft.editing !== null && (id !== draft.editing || !now.packs.some((p) => p.id === id))) problems.push({ code: 'idTaken', id });
+      if (problems.length) throw new LibraryConflictError(problems);
+      const old = await tx.objectStore('packs').get(id);
+      await tx.objectStore('packs').put({ id, raw: draft.raw, importedAt: old?.importedAt ?? at, savedAt: at });
+      // 草稿留下、与包库一致（编辑器接着显示这个包）；与包库一致的草稿不列在草稿区。
+      await tx.objectStore('drafts').put({ ...draft, editing: id, snapshot: draft.raw, updatedAt: at });
+      if (!use) return now.use;
+      const next = addLayer(now.use, id);
+      await tx.objectStore('state').put(next, 'use');
+      return next;
+    });
+  }
+
   close(): void {
     this.db.close();
   }
@@ -149,6 +203,7 @@ export async function openLibrary(events: OpenEvents): Promise<Library> {
         d.createObjectStore('packs', { keyPath: 'id' });
         d.createObjectStore('state');
       }
+      if (oldVersion < 4) d.createObjectStore('drafts', { keyPath: 'id' });
       if (oldVersion >= 1 && oldVersion < 3) {
         // 旧的两种模式无损转成列表。认不出的旧值原样留着：读库时按「组合损坏」报出（见 readTx），不悄悄换成默认组合。
         const state = tx.objectStore('state');

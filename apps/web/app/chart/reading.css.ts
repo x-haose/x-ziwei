@@ -426,3 +426,15 @@ export const barTopicLabel = style({ color: color.fg3 });
 export const barTopicName = style({ fontFamily: font.serif, fontWeight: 600, fontSize: size.body });
 
 export const barAsk = style({ height: space.hit, fontSize: size.small });
+
+/** 「改写这一条」：13px `--fg-3` 链接，读屏名称带条目名。 */
+export const rewrite = style({
+  position: 'relative',
+  display: 'inline-flex',
+  alignItems: 'center',
+  minHeight: 36,
+  fontSize: size.label,
+  color: color.fg3,
+  textDecoration: 'none',
+  selectors: { '&::after': hit(4, 4), '&:hover': { color: color.fg, boxShadow: `inset 0 -1px 0 ${color.line3}` } },
+});

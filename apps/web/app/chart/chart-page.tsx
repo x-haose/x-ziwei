@@ -13,7 +13,7 @@ import * as controls from '../components/controls.css';
 import { CaretIcon, CloseIcon } from '../components/icons';
 import { Segmented } from '../components/segmented';
 import { useToast } from '../components/toast';
-import { HTML_LANG, type Lang } from '../i18n/lang';
+import { HTML_LANG, type Lang, localePath } from '../i18n/lang';
 import { fmt, type Messages } from '../i18n/messages';
 import { useLang, useMessages } from '../i18n/use-lang';
 import { type Kernel, loadKernel, useKernelState } from '../kernel/kernel';
@@ -33,7 +33,7 @@ import type { Density } from './geometry';
 import { LayerPanel, monthLabel } from './layer-panel';
 import { decadalClockwise, decadalOfAge, nominalAge, surround, yearRange } from './model';
 import { PromptFull } from './prompt-full';
-import { Reading, ReadingBar, ReadingEmpty, TopicNav, type WhenKey, WhenNav, smooth } from './reading';
+import { Reading, ReadingBar, ReadingEmpty, RewriteContext, TopicNav, type WhenKey, WhenNav, smooth } from './reading';
 import * as readingCss from './reading.css';
 import { type Today, castChart, chartHour, initialSelection, monthHoroscope, todayOf, useChartView } from './session';
 import { orderedTopics, selectionText, topicOfPalace, topicPalaces, topicSteps } from './topic';
@@ -565,8 +565,15 @@ function ChartBody({
     </div>
   );
 
+  /** 「改写这一条」到编辑器的入口（生辰只在 `#` 之后）。 */
+  const rewriteHref = (section: string, key: string, combo?: string) => {
+    const q = new URLSearchParams({ entry: `${section}/${key}` });
+    if (combo) q.set('combo', combo);
+    return `${localePath(lang, '/knowledge/write')}?${q.toString()}#${hash}`;
+  };
+
   return (
-    <>
+    <RewriteContext.Provider value={rewriteHref}>
       {topic && <TopicNav t={t} className={css.topics} topics={topics} topic={topic.slug} onTopic={(slug) => pickTopic(slug, false)} />}
       <WhenNav
         t={t}
@@ -637,7 +644,7 @@ function ChartBody({
           }}
         />
       )}
-    </>
+    </RewriteContext.Provider>
   );
 }
 

@@ -1,4 +1,5 @@
-import { Fragment, type ReactNode, type RefObject, useId } from 'react';
+import { Fragment, type ReactNode, type RefObject, createContext, useContext, useId } from 'react';
+import { Link } from 'react-router';
 import { Button, Dialog, DialogTrigger, Heading, Modal, ModalOverlay, Popover } from 'react-aria-components';
 import type { KnowledgePack, TopicEntry } from 'x-iztro';
 import { OptionGrid, Picker } from '../birth/picker';
@@ -9,6 +10,7 @@ import { fmt, type Messages } from '../i18n/messages';
 import { useMediaQuery } from '../lib/media';
 import { Markdown } from '../markdown/markdown';
 import type { MethodStep } from '../prompt/method';
+import { SUMMARY_WIDTH, displayWidth } from '../lib/text-width';
 import { media } from '../styles/media';
 import type { PalaceView } from './model';
 import * as css from './reading.css';
@@ -18,15 +20,6 @@ import { type NoteRef, type Rich, type Step, type TermId, TERM_SLUGS, brightness
  * 看盘（设计规范第 21 节）：按主题一步一步读这张盘。事实句由 `topic.ts` 从内核结果拼出；释义、主题说明、
  * 术语解释取自生效组合的原文；每一步的「怎么看」取自解读方法。
  */
-
-/** 摘要层的宽度上限：显示宽度（汉字等全角计 2）不超过它的正文本身就是摘要（与内核的摘要规则一致）。 */
-const SUMMARY_WIDTH = 240;
-
-function displayWidth(text: string): number {
-  let n = 0;
-  for (const ch of text) n += /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/.test(ch) ? 2 : 1;
-  return n;
-}
 
 /** 摘要层：有摘要用摘要，正文不超过 240 宽用正文，否则没有（只给「全文」）。 */
 function shortOf(summary: string | undefined, intro: string | undefined): string | null {
@@ -43,6 +36,21 @@ function fmtNodes(template: string, values: Record<string, ReactNode>): ReactNod
     if (!(x in values)) throw new Error(`文案占位 {${x}} 没有给值：${template}`);
     return <Fragment key={i}>{values[x]}</Fragment>;
   });
+}
+
+/**
+ * 「改写这一条」的地址（设计规范 21.4）：到编辑器的这一条。由排盘页提供（带这张盘），条目为段与标识，组合另带对方主星。
+ */
+export const RewriteContext = createContext<((section: string, key: string, combo?: string) => string) | null>(null);
+
+function Rewrite({ t, section, entryKey, label, combo }: { t: Messages; section: string; entryKey: string; label: string; combo?: string }) {
+  const href = useContext(RewriteContext);
+  if (!href) return null;
+  return (
+    <Link className={css.rewrite} to={href(section, entryKey, combo)} aria-label={fmt(t.editor.rewriteEntryLabel, { name: label })}>
+      {t.editor.rewriteEntry}
+    </Link>
+  );
 }
 
 /* ── 术语 ── */
@@ -69,6 +77,7 @@ function Term({ t, pack, slug, text }: { t: Messages; pack: KnowledgePack; slug:
               <Markdown source={entry.intro} variant="preview" />
             </div>
           )}
+          {slug && <Rewrite t={t} section="concepts" entryKey={slug} label={entry.title ?? text} />}
         </>
       )}
     </Dialog>
@@ -156,6 +165,9 @@ function NoteBlock({ t, pack, note, id, open, onToggle }: { t: Messages; pack: K
       <div className={css.note}>
         <b className={css.noteName}>{note.kind === 'combo' ? fmt(t.read.combo, { a: note.a.name, b: note.b.name }) : note.label}</b>
         <p className={css.noteNone}>{t.read.noEntry}</p>
+        <div className={css.noteActs}>
+          <NoteRewrite t={t} note={note} label={note.kind === 'combo' ? fmt(t.read.combo, { a: note.a.name, b: note.b.name }) : note.label} />
+        </div>
       </div>
     );
   }
@@ -169,11 +181,10 @@ function NoteBlock({ t, pack, note, id, open, onToggle }: { t: Messages; pack: K
           <Markdown source={text.short} variant="preview" />
         </div>
       )}
-      {canOpen && (
-        <div className={css.noteActs}>
-          <MoreButton open={isOpen} label={t.read.full} t={t} onToggle={() => onToggle(id)} />
-        </div>
-      )}
+      <div className={css.noteActs}>
+        {canOpen && <MoreButton open={isOpen} label={t.read.full} t={t} onToggle={() => onToggle(id)} />}
+        <NoteRewrite t={t} note={note} label={text.name} />
+      </div>
       {isOpen && (
         <div className={css.full}>
           {text.quotes && text.quotes.length > 0 && (
@@ -197,6 +208,12 @@ function NoteBlock({ t, pack, note, id, open, onToggle }: { t: Messages; pack: K
       )}
     </div>
   );
+}
+
+/** 一条释义的「改写这一条」：组合释义改的是主星条目里对方主星那一项。 */
+function NoteRewrite({ t, note, label }: { t: Messages; note: NoteRef; label: string }) {
+  const section = note.kind === 'combo' ? 'stars' : note.kind === 'star' ? 'stars' : note.kind === 'mutagen' ? 'mutagens' : 'patterns';
+  return note.kind === 'combo' ? <Rewrite t={t} section={section} entryKey={note.a.key} label={label} combo={note.b.key} /> : <Rewrite t={t} section={section} entryKey={note.key} label={label} />;
 }
 
 const noteId = (n: NoteRef) => (n.kind === 'combo' ? `c:${n.a.key}+${n.b.key}` : `${n.kind}:${n.key}`);
@@ -393,6 +410,7 @@ export function Reading(p: ReadingProps) {
         {topic.intro && (
           <div className={css.intro}>
             <Markdown source={topic.intro} variant="preview" />
+            <Rewrite t={t} section="topics" entryKey={topic.slug} label={name} />
           </div>
         )}
       </header>

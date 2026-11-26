@@ -104,7 +104,7 @@ test('问 AI：复制的材料含内核按主题取材的原文，五个网站�
   await page.goto(SAMPLE);
   const read = side(page);
   await page.getByRole('group', { name: '主题' }).getByRole('button', { name: '事业' }).click();
-  const sites = read.getByRole('link');
+  const sites = read.getByRole('region', { name: '问 AI' }).getByRole('link');
   await expect(sites).toHaveText(['DeepSeek', '豆包', 'Kimi', 'ChatGPT', 'Claude']);
   expect(await sites.evaluateAll((a) => a.map((x) => [x.getAttribute('href'), x.getAttribute('target'), x.getAttribute('rel')]))).toEqual(
     ['https://chat.deepseek.com/', 'https://www.doubao.com/chat/', 'https://www.kimi.com/', 'https://chatgpt.com/', 'https://claude.ai/new'].map((h) => [h, '_blank', 'noopener noreferrer']),

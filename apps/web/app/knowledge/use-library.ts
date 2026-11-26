@@ -1,5 +1,5 @@
 import { type LocalState, localStore } from '../lib/local-store';
-import type { Pack, PackRaw, Use } from './library';
+import type { Draft, Pack, PackRaw, Use } from './library';
 import { type Snapshot, openLibrary } from './store';
 
 /**
@@ -30,4 +30,19 @@ export async function removePack(id: string): Promise<void> {
 /** 改生效组合：`next` 收到库里此刻的组合与包，算出新组合。返回写入后的快照。 */
 export async function updateUse(next: (use: Use, packs: readonly Pack[]) => Use): Promise<Snapshot> {
   return store.mutate((lib) => lib.updateUse(next));
+}
+
+/** 存一份草稿（新建或覆盖）。 */
+export async function putDraft(draft: Draft): Promise<void> {
+  await store.mutate((lib) => lib.putDraft(draft));
+}
+
+/** 丢弃一份草稿。 */
+export async function deleteDraft(id: string): Promise<void> {
+  await store.mutate((lib) => lib.deleteDraft(id));
+}
+
+/** 把草稿存进包库并删掉草稿；`use` 为真时一并放到生效组合的最上面。 */
+export async function saveDraft(draft: Draft, use: boolean): Promise<Snapshot> {
+  return store.mutate((lib) => lib.saveDraft(draft, Date.now(), use));
 }

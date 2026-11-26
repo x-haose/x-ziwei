@@ -39,3 +39,15 @@ test('排盘页的阅读各主题与时间、术语浮层、两种全文视图�
     await page.keyboard.press('Escape');
   }
 });
+
+test('从看盘进编辑器：生辰只在 # 之后（不进查询串），编辑器里也没有元素的 id 带生辰', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`/zh/chart#${encodeBirth(BIRTH)}`);
+  await page.getByRole('region', { name: '用这张盘' }).getByRole('link', { name: '改写这一条：紫微' }).click();
+  await expect(page.getByRole('heading', { level: 2, name: /^紫微/ })).toBeVisible();
+  const url = new URL(page.url());
+  for (const f of FIELDS) expect(url.pathname + url.search, `查询串里带了 ${f}`).not.toContain(f);
+  expect(url.hash).toBe(`#${encodeBirth(BIRTH)}`);
+  const ids = await page.evaluate((f) => [...document.querySelectorAll('[id]')].map((e) => e.id).filter((id) => f.some((x) => id.includes(x))), FIELDS);
+  expect(ids).toEqual([]);
+});

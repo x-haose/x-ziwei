@@ -10,7 +10,7 @@ function watchConsole(page: Page): string[] {
   return problems;
 }
 
-const PAGES = ['/zh', '/en', '/zh/chart', '/en/chart', '/zh/chart#cal=solar&d=2000-8-16&t=2&g=f', '/en/chart#cal=lunar&d=2020-4-3&leap=1&p=evening&h=10&g=m', '/zh/method', '/en/method', '/zh/knowledge', '/en/knowledge', '/zh/install', '/en/install', '/zh/tools', '/en/api', '/zh/privacy'];
+const PAGES = ['/zh', '/en', '/zh/chart', '/en/chart', '/zh/chart#cal=solar&d=2000-8-16&t=2&g=f', '/en/chart#cal=lunar&d=2020-4-3&leap=1&p=evening&h=10&g=m', '/zh/method', '/en/method', '/zh/knowledge', '/en/knowledge', '/zh/knowledge/write', '/en/knowledge/write', '/zh/install', '/en/install', '/zh/tools', '/en/api', '/zh/privacy'];
 
 for (const width of [375, 1440]) {
   for (const scheme of ['light', 'dark'] as const) {

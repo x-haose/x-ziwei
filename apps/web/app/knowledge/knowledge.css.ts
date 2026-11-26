@@ -34,9 +34,9 @@ export const title = style({
 
 export const lede = style({ marginTop: 12, maxWidth: '36em', fontSize: size.prose, lineHeight: 1.75, color: color.fg2 });
 
-export const headActions = style({ display: 'flex', gap: 10, flex: 'none' });
+export const headActions = style({ display: 'flex', flexWrap: 'wrap', gap: 10, flex: 'none', '@media': { [media.s]: { flex: '1 1 100%' } } });
 
-export const headAction = style({ '@media': { [media.s]: { flex: 1 } } });
+export const headAction = style({ '@media': { [media.s]: { flex: '1 1 auto' } } });
 
 /** 存储不可用、读库失败时页头下的提示：2px 赭红左线加 1px 框。 */
 export const notice = style({
@@ -609,3 +609,8 @@ export const danger = style({
 });
 
 globalStyle(`${entryFull} > *:first-child`, { marginTop: 0 });
+
+/** 草稿区：在「本机的包」下方。 */
+export const drafts = style({ marginTop: 28 });
+
+export const draftErrors = style({ color: color.accent });

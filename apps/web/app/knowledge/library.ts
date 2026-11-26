@@ -14,11 +14,28 @@ export type Counts = Record<Section, number>;
 /** 包的 JSON 原文（已通过内核读入）。 */
 export type PackRaw = Record<string, unknown>;
 
-/** 存在本机的包：原文与导入时间（毫秒时间戳）。 */
+/** 存在本机的包：原文、导入时间与在编辑器里最后保存的时间（毫秒时间戳；没在编辑器里保存过为 undefined）。 */
 export interface StoredPack {
   id: string;
   raw: PackRaw;
   importedAt: number;
+  savedAt?: number;
+}
+
+/**
+ * 编辑器的草稿（设计规范 20.11）：包的原文（只含这个包自己写的字段），存在本机包库所在的库里，不进包库、不参与释义。
+ * 对照的包由原文的 `extends` 决定。
+ */
+export interface Draft {
+  /** 草稿标识（与包标识无关；包标识在 `raw.id`）。 */
+  id: string;
+  raw: PackRaw;
+  /** 编辑的是本机哪个包；新包为 null。 */
+  editing: string | null;
+  /** 开始编辑时包库里这个包的原文（编辑本机包时）；新包为 null。 */
+  snapshot: PackRaw | null;
+  createdAt: number;
+  updatedAt: number;
 }
 
 /** 列表与组合里用到的包信息。默认包的 `raw` 为 null（全文在内核里，见 `kernel-pack.ts`），`importedAt` 为 null。 */
@@ -37,6 +54,8 @@ export interface Pack {
   author: string | null;
   raw: PackRaw | null;
   importedAt: number | null;
+  /** 在编辑器里最后保存的时间；没保存过（只导入过）或默认包为 null。 */
+  savedAt: number | null;
 }
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
@@ -57,7 +76,7 @@ export function sectionCounts(raw: PackRaw): Counts {
 }
 
 /** 由原文得出包信息。原文须已有字符串 `id`（本机包库的导入规则保证）。默认包传 `importedAt` 为 null，不留原文。 */
-export function describePack(raw: PackRaw, importedAt: number | null): Pack {
+export function describePack(raw: PackRaw, importedAt: number | null, savedAt: number | null = null): Pack {
   const id = str(raw.id);
   if (!id) throw new Error('包没有 id，不该进到本机包库');
   const source = isRecord(raw.source) ? raw.source : {};
@@ -75,6 +94,7 @@ export function describePack(raw: PackRaw, importedAt: number | null): Pack {
     author: str(source.author),
     raw: importedAt === null ? null : raw,
     importedAt,
+    savedAt,
   };
 }
 
@@ -220,14 +240,15 @@ export function diffAgainst(layer: Pack, below: readonly Pack[]): Diff {
 export type LibraryProblem = { code: 'idMissing' } | { code: 'idDefault' } | { code: 'idTaken'; id: string };
 
 /**
- * 本机包库的导入规则：本机按 `id` 存包，`id` 必须是非空字符串且不与默认包、本机已有的包重复。
+ * 本机包库的导入规则：本机按 `id` 存包，`id` 必须是非空字符串且不与默认包、本机已有的包重复
+ * （编辑器保存本机已有的包时，`self` 是它自己的标识，不算重复）。
  * `extends` 不在这里管：它只是声明，所声明的包不在本机时导入照常，另给提醒（`extendsAdvice`）。
  */
-export function libraryProblems(raw: PackRaw, packs: readonly Pack[]): LibraryProblem[] {
+export function libraryProblems(raw: PackRaw, packs: readonly Pack[], self: string | null = null): LibraryProblem[] {
   const id = str(raw.id);
   if (!id) return [{ code: 'idMissing' }];
   if (id === DEFAULT_PACK_ID) return [{ code: 'idDefault' }];
-  if (packs.some((p) => p.id === id)) return [{ code: 'idTaken', id }];
+  if (id !== self && packs.some((p) => p.id === id)) return [{ code: 'idTaken', id }];
   return [];
 }
 
