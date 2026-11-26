@@ -27,7 +27,7 @@
 | 包管理 | pnpm 12.21.0（`packageManager` 固定）。现阶段 `apps/web` 是独立的 pnpm 项目，自带锁文件，不建根目录工作区；出现第二个 JS 应用或 `packages/*` 时再加 workspaces 与 catalog，不用 Turborepo | npm（依赖提升致未声明依赖可用）；bun。不建根工作区的理由：`site/` 是线上 Vercel 项目，用 npm 与 package-lock 构建，又正被 OpenAI 审核引用，根目录出现 pnpm 工作区会改变它的安装与构建；它随帮助页迁入产品站下线。共享包直接导出 TS 源码，没有可缓存的构建 |
 | 托管 | Cloudflare Workers 静态资源加一个 Worker（wrangler 4.166.0，配置 `apps/web/wrangler.jsonc`）；测试站 `ziwei-beta.x-haose.com`，正式站上线时从 Vercel 切过来 | 维护者定，不用 Pages、不用 Vercel。静态资源负责路由、`_headers`、`_redirects` 与 404 页；Worker 只做静态文件做不到的 `Accept: text/markdown` 协商与无语言段地址按 `Accept-Language` 跳转 |
 | 测试 | Vitest 5.1.1（含 browser mode 组件截图）、Playwright 1.65.1（经 `wrangler dev` 跑构建产物与 Worker）、`@wdio/tauri-service` 1.5.1（桌面冒烟） | Storybook 说不出专门防哪个问题，不加 |
-| 浏览器内对话 | AI SDK 7（ai 7.0.179、@ai-sdk/react 4.0.183） | 各厂商官方 SDK（工具循环要各写一遍）、直接 fetch |
+| 浏览器内对话 | AI SDK 7（2026-11-26 查：ai 7.0.181、@ai-sdk/deepseek 3.0.89、@ai-sdk/openai 4.0.123、@ai-sdk/anthropic 4.0.108、@ai-sdk/openai-compatible 3.0.94），直接用 `streamText`；OpenAI 走 Chat Completions；各厂商的适配按所选服务按需加载 | 各厂商官方 SDK（工具循环要各写一遍）、直接 fetch。不用 @ai-sdk/react 的 useChat 与 DirectChatTransport：它们把错误转成字符串，丢了状态码，分不出 401 与 429 |
 
 仓库结构：`apps/web` 独立安装（理由见上表包管理一行），`site/` 下线、出现共享包后根目录再加 pnpm workspace（成员 `apps/*`、`packages/*`）；`apps/web` 是第二个 Vercel 项目；`apps/desktop/src-tauri` 是独立的 Cargo 项目，不加入根 crate（Dockerfile 只拷根 crate，并入 workspace 会让服务端镜像构建失败）；`packages/*` 只放被两个以上应用用到的代码。
 
@@ -93,7 +93,7 @@
 
 ## 4. 网页用自己的 API Key 对话
 
-未开始。支持 DeepSeek、OpenAI、Anthropic 与兼容 OpenAI 接口的服务，浏览器直连厂商，模型的工具调用在浏览器里执行 x-iztro。2026-11-23 实测跨域预检：DeepSeek、OpenAI 放行；Anthropic 要带 `anthropic-dangerous-direct-browser-access` 请求头。
+进行中（设计见 DESIGN.md 第 19 节）。支持 DeepSeek、OpenAI、Anthropic 与兼容 OpenAI 接口的服务，浏览器直连厂商，模型的工具调用在浏览器里执行 x-iztro。2026-11-26 实测（假 Key）：三家的跨域预检都放行（Anthropic 要带 `anthropic-dangerous-direct-browser-access`）；OpenAI 对话接口的 401 不带跨域头，浏览器里只看得到网络错误，所以连不上时用模型列表接口（它的 401 带跨域头）复核；厂商的 429 是否带跨域头没有真 Key 测不了。
 
 ## 5. 桌面（Tauri）
 

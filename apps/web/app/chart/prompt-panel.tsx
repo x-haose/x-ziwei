@@ -43,7 +43,7 @@ function RawView({ text, questionHeading }: { text: string; questionHeading: str
 type CopyState = { kind: 'idle' } | { kind: 'ok'; which: 'prompt' | 'link' } | { kind: 'failed' };
 
 /**
- * 提示词区（设计规范第 13 节）：勾选盘面各段、写问题、预览（渲染或原文）、复制原文、复制链接、
+ * 提示词页签（设计规范第 13 节、19.1）：勾选盘面各段、写问题、预览（渲染或原文）、复制原文、复制链接、
  * 常用聊天 AI 的入口。`text` 为 null 时（还没有盘）整块禁用，预览写 `emptyText`。
  */
 export function PromptPanel({
@@ -122,11 +122,8 @@ export function PromptPanel({
     );
 
   return (
-    <section className={on ? css.prompt : `${css.prompt} ${css.promptEmpty}`} aria-label={t.chart.prompt}>
-      <div className={css.head}>
-        <h2 className={css.headTitle}>{t.chart.prompt}</h2>
-        <span className={css.headAux}>{t.chart.promptAux}</span>
-      </div>
+    <div className={css.prompt}>
+      <p className={css.head}>{t.chat.promptAux}</p>
       <div className={css.checks}>
         {checks.map((c) => (
           <Checkbox
@@ -204,6 +201,6 @@ export function PromptPanel({
           </a>
         ))}
       </nav>
-    </section>
+    </div>
   );
 }

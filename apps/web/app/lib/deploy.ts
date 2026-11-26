@@ -38,11 +38,10 @@ export function siteOf(name: string | undefined): Site {
   return SITES[siteNameOf(name)];
 }
 
-/** Cloudflare Web Analytics 的统计脚本（手动嵌入方式）与它上报数据的地址，供页面与 CSP 共用。 */
+/** Cloudflare Web Analytics 的统计脚本（手动嵌入方式）与它的来源，供页面与 CSP 共用。上报地址是 https，在 CSP 的 `connect-src` 里。 */
 export const WEB_ANALYTICS = {
   script: 'https://static.cloudflareinsights.com/beacon.min.js',
   scriptOrigin: 'https://static.cloudflareinsights.com',
-  reportOrigin: 'https://cloudflareinsights.com',
 } as const;
 
 /** 统计脚本 `<script>` 的属性；目标不统计时为 null。 */

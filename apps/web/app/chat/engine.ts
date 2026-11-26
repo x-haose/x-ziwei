@@ -1,7 +1,3 @@
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createDeepSeek } from '@ai-sdk/deepseek';
-import { createOpenAI } from '@ai-sdk/openai';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { InvalidToolInputError, type LanguageModel, NoSuchToolError, type ToolSet, jsonSchema, stepCountIs, streamText, tool } from 'ai';
 import type { Messages } from '../i18n/messages';
 import type { AssistantMessage, ChatError, ModelTurn } from './conversation';
@@ -18,20 +14,22 @@ import { TOOLS, type ToolContext, describeCall, isInputError } from './tools';
 const MAX_STEPS = 10;
 
 /**
- * 按设置建模型。OpenAI 走 Chat Completions（与 DeepSeek、兼容服务同一种协议）；Anthropic 加上允许网页直接请求的请求头。
+ * 按设置建模型，只加载所选厂商的适配。OpenAI 走 Chat Completions（与 DeepSeek、兼容服务同一种协议）；
+ * Anthropic 加上允许网页直接请求的请求头。
  */
-export function languageModel(s: ChatSettings): LanguageModel {
+export async function languageModel(s: ChatSettings): Promise<LanguageModel> {
   switch (s.provider) {
     case 'deepseek':
-      return createDeepSeek({ apiKey: s.key }).chat(s.model);
+      return (await import('@ai-sdk/deepseek')).createDeepSeek({ apiKey: s.key }).chat(s.model);
     case 'openai':
-      return createOpenAI({ apiKey: s.key }).chat(s.model);
+      return (await import('@ai-sdk/openai')).createOpenAI({ apiKey: s.key }).chat(s.model);
     case 'anthropic':
-      return createAnthropic({ apiKey: s.key, headers: { 'anthropic-dangerous-direct-browser-access': ANTHROPIC_BROWSER_HEADERS['anthropic-dangerous-direct-browser-access'] } })(
-        s.model,
-      );
+      return (await import('@ai-sdk/anthropic')).createAnthropic({
+        apiKey: s.key,
+        headers: { 'anthropic-dangerous-direct-browser-access': ANTHROPIC_BROWSER_HEADERS['anthropic-dangerous-direct-browser-access'] },
+      })(s.model);
     case 'compatible':
-      return createOpenAICompatible({ name: 'compatible', baseURL: baseOf(s), apiKey: s.key })(s.model);
+      return (await import('@ai-sdk/openai-compatible')).createOpenAICompatible({ name: 'compatible', baseURL: baseOf(s), apiKey: s.key })(s.model);
   }
 }
 
@@ -104,7 +102,7 @@ export async function runTurn(input: TurnInput): Promise<AssistantMessage> {
   };
 
   const result = streamText({
-    model: languageModel(settings),
+    model: await languageModel(settings),
     instructions: input.system,
     messages: input.turns,
     ...(tools ? { tools: toolSet(tools.ctx), stopWhen: stepCountIs(MAX_STEPS) } : {}),

@@ -123,6 +123,12 @@ export function useChartView(kernel: Kernel, chart: Astrolabe, today: Today) {
       apply({ ...sel, layer: 'yearly', decadal, year, month: monthIn(chart, year, sel.month) });
     },
     pickMonth: (month: MonthKey) => apply({ ...sel, layer: 'monthly', month }),
+    /** 换到某年的某个农历月（流月层，闰月取本月那一段），大限随之移到包含该年的一段。 */
+    showMonth: (year: number, month: number) => {
+      const decadal = decadalOfAge(chart, nominalAge(chart, year));
+      if (decadal < 0) throw new Error(`流年 ${year} 不在任何大限内`);
+      apply({ ...sel, layer: 'monthly', decadal, year, month: monthIn(chart, year, { month, part: 'normal' }) });
+    },
   };
 }
 

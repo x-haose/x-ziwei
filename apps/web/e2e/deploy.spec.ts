@@ -104,7 +104,7 @@ test('测试站带 Cloudflare Web Analytics 统计脚本，CSP 只为它放行�
       '<script defer="" src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon="{&quot;token&quot;:&quot;6d526463cb234d90a459ddaa0419d83d&quot;}"></script>',
     );
     const csp = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/)![1]!.split('; ');
-    expect(csp).toContain("connect-src 'self' https://cloudflareinsights.com");
+    expect(csp).toContain("connect-src 'self' https:");
     expect(csp.find((d) => d.startsWith('script-src '))).toMatch(/^script-src 'self' 'wasm-unsafe-eval' https:\/\/static\.cloudflareinsights\.com( 'sha256-[^']+')+$/);
   }
 });

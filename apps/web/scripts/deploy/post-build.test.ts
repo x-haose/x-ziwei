@@ -27,10 +27,10 @@ describe('withCsp', () => {
   it('只有带统计的目标放行统计脚本与上报地址', () => {
     const directives = (html: string) => html.match(/content="([^"]*)"/)![1]!.split('; ');
     const beta = directives(withCsp(page, SITES.beta));
-    expect(beta).toContain("connect-src 'self' https://cloudflareinsights.com");
+    expect(beta).toContain("connect-src 'self' https:");
     expect(beta.find((d) => d.startsWith('script-src'))).toContain(' https://static.cloudflareinsights.com ');
     const dev = directives(withCsp(page, DEV_SITE));
-    expect(dev).toContain("connect-src 'self'");
+    expect(dev).toContain("connect-src 'self' https:");
     expect(dev.join('; ')).not.toContain('cloudflareinsights');
   });
 });

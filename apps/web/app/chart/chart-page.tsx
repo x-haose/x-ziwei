@@ -5,6 +5,9 @@ import { type Birth, EMPTY_DRAFT, PERIODS, decodeBirth, draftOf, encodeBirth } f
 import { BirthForm } from '../birth/birth-form';
 import type { LunarCalendar } from '../birth/calendar';
 import { birthSummary, hourName } from '../birth/labels';
+import type { ChatChart } from '../chat/chat-panel';
+import { SidePanel, useSideTab } from '../chat/side';
+import type { SideTab } from '../chat/store';
 import { type RecentState, pushRecent, removeRecent, useRecent } from '../birth/recent';
 import * as controls from '../components/controls.css';
 import { CaretIcon, CloseIcon } from '../components/icons';
@@ -13,7 +16,7 @@ import { useToast } from '../components/toast';
 import { HTML_LANG, type Lang } from '../i18n/lang';
 import { fmt, type Messages } from '../i18n/messages';
 import { useLang, useMessages } from '../i18n/use-lang';
-import { type Kernel, loadKernel, useKernelState } from '../kernel/kernel';
+import { type Kernel, type KernelState, loadKernel, useKernelState } from '../kernel/kernel';
 import { createLunarCalendar } from '../kernel/lunar';
 import { type ActiveKnowledge, ChartKnowledgeMark, useActiveKnowledge, useBrokenPacks, useRepairNotice, useRetireBroken } from '../knowledge/chart-knowledge';
 import { updateUse, useLibrary } from '../knowledge/use-library';
@@ -26,7 +29,7 @@ import type { Density } from './geometry';
 import { CentreState, ChartCentre, LoadingBar } from './centre';
 import * as css from './chart-page.css';
 import { LayerPanel, monthLabel } from './layer-panel';
-import { decadalClockwise, decadalOfAge, nominalAge } from './model';
+import { decadalClockwise, decadalOfAge, nominalAge, yearRange } from './model';
 import { PromptPanel } from './prompt-panel';
 import { ReadPanel } from './read-panel';
 import { type Today, castChart, chartHour, todayOf, useChartView } from './session';
@@ -169,6 +172,11 @@ function ChartBody({
   onInput,
   knowledge,
   mark,
+  hash,
+  kstate,
+  tab,
+  onTab,
+  onOpenChart,
 }: {
   kernel: Kernel;
   lunar: LunarCalendar;
@@ -181,8 +189,14 @@ function ChartBody({
   onInput: (next: PromptInput) => void;
   /** 释义用的包与出处；本机包库还在读取时为 null（提示词暂不出）。 */
   knowledge: ActiveKnowledge | null;
-  /** 提示词区的释义标记。 */
+  /** 提示词区与对话栏的释义标记。 */
   mark: ReactNode;
+  /** 地址 `#` 之后的生辰参数（不含 `#`）。 */
+  hash: string;
+  kstate: KernelState;
+  tab: SideTab;
+  onTab: (tab: SideTab) => void;
+  onOpenChart: (hash: string) => void;
 }) {
   const view = useChartView(kernel, chart, today);
   const { sel, layers, palaces } = view;
@@ -220,6 +234,44 @@ function ChartBody({
     return buildPrompt({ lang, method: READING_METHOD[lang], sections: [note, source, ...sections].filter((x) => x !== null), question });
   }, [t, birth, chart, sel, choice, knowledge, lunar, lang, question]);
 
+  const s = birthSummary(t, birth);
+  const birthText = `${s.date} ${birth.time.kind === 'hour' ? s.time : hourName(t, chartHour(birth))} ${s.gender}`;
+  const layerText =
+    sel.layer === 'natal'
+      ? t.chat.layerNatal
+      : sel.layer === 'decadal'
+        ? fmt(t.chat.layerDecadal, { gz: act ? `${act.stem}${act.branch}` : '', a: decadal.ageRange[0], b: decadal.ageRange[1] })
+        : sel.layer === 'yearly' || !monthItem
+          ? fmt(t.chat.layerYearly, { y: sel.year })
+          : fmt(t.chat.layerMonthly, { y: sel.year, month: monthLabel(t, monthItem) });
+  const [firstYear, lastYear] = yearRange(chart);
+  const now = new Date();
+  const chat: ChatChart | null = knowledge && {
+    hash,
+    birth: birthText,
+    context: fmt(t.chat.context, { birth: birthText, layer: layerText, palace: palaces[view.palace]?.name ?? '' }),
+    kernel,
+    chart,
+    pack: knowledge.pack,
+    packSource: knowledge.source,
+    today: `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`,
+    year: today.year,
+    chartText: () => `${chart.toText()}\n${chart.horoscopeOfYear(today.year).toText()}`,
+    canFocus: (f) => f.kind === 'palace' || (f.year >= firstYear && f.year <= lastYear),
+    focus: (f) => {
+      if (f.kind === 'palace') {
+        view.select(f.palace);
+        return fmt(t.chat.calls.seenPalace, { palace: palaces[f.palace]?.name ?? '' });
+      }
+      if (f.kind === 'year') {
+        view.pickYear(f.year);
+        return fmt(t.chat.calls.seenYear, { y: f.year });
+      }
+      view.showMonth(f.year, f.month);
+      return fmt(t.chat.calls.seenMonth, { y: f.year, month: t.lunarMonths[f.month - 1] ?? String(f.month) });
+    },
+  };
+
   const hitTitles = palaces.map((p) => fmt(t.layer.pickDecadal, { a: p.decadal[0], b: p.decadal[1], palace: p.name }));
   const cellLabels = palaces.map((p) =>
     fmt(t.read.cell, { name: p.name, gz: `${p.stem}${p.branch}`, stars: p.majors.map((s) => s.name).join(t.read.starsSep) || t.read.noMajor }),
@@ -252,19 +304,33 @@ function ChartBody({
         centre={(density) => <ChartCentre chart={chart} density={density} layer={act} layerLabel={layerLabel} t={t} />}
       />
       <ReadPanel chart={chart} palaces={palaces} layers={layers} surround={view.surround} onSelect={view.select} t={t} />
-      <PromptPanel
+      <SidePanel
         t={t}
         lang={lang}
-        text={text}
-        emptyText=""
-        choice={choice}
-        onChoice={(next) => onInput({ choice: next, question })}
-        yearLabel={monthItem ? fmt(t.chart.checkMonth, { y: sel.year, month: monthLabel(t, monthItem) }) : fmt(t.chart.checkYear, { y: sel.year })}
-        yearsLabel={fmt(t.chart.checkYears, { a: decadal.yearRange[0], b: decadal.yearRange[1] })}
-        question={question}
-        onQuestion={(next) => onInput({ choice, question: next })}
-        questionHeading={questionHeading(lang)}
+        tab={tab}
+        onTab={onTab}
+        chart={chat}
+        birthLabel={birthText}
+        kernel={kstate}
         mark={mark}
+        className={css.side}
+        onOpenChart={onOpenChart}
+        prompt={
+          <PromptPanel
+            t={t}
+            lang={lang}
+            text={text}
+            emptyText=""
+            choice={choice}
+            onChoice={(next) => onInput({ choice: next, question })}
+            yearLabel={monthItem ? fmt(t.chart.checkMonth, { y: sel.year, month: monthLabel(t, monthItem) }) : fmt(t.chart.checkYear, { y: sel.year })}
+            yearsLabel={fmt(t.chart.checkYears, { a: decadal.yearRange[0], b: decadal.yearRange[1] })}
+            question={question}
+            onQuestion={(next) => onInput({ choice, question: next })}
+            questionHeading={questionHeading(lang)}
+            mark={mark}
+          />
+        }
       />
     </>
   );
@@ -316,6 +382,9 @@ export function ChartPage() {
   );
   const [formOpen, setFormOpen] = useState(false);
   const reported = useRef('');
+  const { tab, setTab } = useSideTab(t);
+  const bare = hash.replace(/^#/, '');
+  const openChart = (h: string) => navigate({ hash: h }, { replace: true, preventScrollReset: true });
 
   useEffect(() => {
     // 失败会记进内核状态，盘区显示原因与重试按钮。
@@ -379,7 +448,7 @@ export function ChartPage() {
   }
 
   return (
-    <main className={css.page}>
+    <main className={[css.page, tab === 'chat' ? css.chatOn : '', chart ? css.withBar : ''].filter(Boolean).join(' ')}>
       <section className={css.birth} aria-label={t.chart.birth}>
         {birth && hour !== null && (
           <BirthSummary
@@ -415,6 +484,11 @@ export function ChartPage() {
           onInput={setPromptInput}
           knowledge={knowledge}
           mark={mark}
+          hash={bare}
+          kstate={kstate}
+          tab={tab}
+          onTab={setTab}
+          onOpenChart={openChart}
         />
       ) : (
         <>
@@ -428,18 +502,32 @@ export function ChartPage() {
             ring={waiting && kstate.status === 'loading' ? { kind: 'loading', progress } : { kind: 'blank' }}
             centre={centre}
           />
-          <PromptPanel
+          <SidePanel
             t={t}
             lang={lang}
-            text={null}
-            emptyText={waiting ? t.chart.loadingPreview : t.chart.previewEmpty}
-            choice={DEFAULT_CHOICE}
-            onChoice={() => undefined}
-            yearLabel={today ? fmt(t.chart.checkYear, { y: today.year }) : t.chart.checks.year}
-            yearsLabel={t.chart.checks.years}
-            question=""
-            onQuestion={() => undefined}
-            questionHeading={questionHeading(lang)}
+            tab={tab}
+            onTab={setTab}
+            chart={null}
+            birthLabel={null}
+            kernel={kstate}
+            mark={null}
+            className={`${css.side} ${css.sideEmpty}`}
+            onOpenChart={openChart}
+            prompt={
+              <PromptPanel
+                t={t}
+                lang={lang}
+                text={null}
+                emptyText={waiting ? t.chart.loadingPreview : t.chart.previewEmpty}
+                choice={DEFAULT_CHOICE}
+                onChoice={() => undefined}
+                yearLabel={today ? fmt(t.chart.checkYear, { y: today.year }) : t.chart.checks.year}
+                yearsLabel={t.chart.checks.years}
+                question=""
+                onQuestion={() => undefined}
+                questionHeading={questionHeading(lang)}
+              />
+            }
           />
         </>
       )}

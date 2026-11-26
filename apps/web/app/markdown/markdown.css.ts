@@ -113,6 +113,17 @@ p('td', { padding: '4px 8px 4px 0', borderBottom: hair(color.line), verticalAlig
 /* 单元格至少约五个字宽：「103-112」这类区间不被拆开；各列加起来放不下时表格横向滚动。 */
 p('th, td', { minWidth: '5em' });
 
+/* ── 对话的回答（设计规范 19.4）：同预览的规则，正文 15px 行高 1.8，表格 14px、表头 12px ── */
+
+export const chat = style({ fontSize: size.body, lineHeight: 1.8, color: color.fg });
+
+const c = within(chat);
+c('p', { margin: '0 0 .75em' });
+c('ul, ol', { margin: '0 0 .75em' });
+c(`${tableWrap}`, { margin: '.4em 0 .9em' });
+c('table', { fontSize: size.small });
+c('th', { fontSize: size.label });
+
 /* ── 内容页正文（设计规范第 14 节） ── */
 
 export const prose = style({

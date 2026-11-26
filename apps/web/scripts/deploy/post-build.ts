@@ -66,7 +66,11 @@ const REACT_ARIA_PRESS_STYLE = '@layer {\n  [data-react-aria-pressable] {\n    t
  * 一个页面的内容安全策略。内联脚本与样式逐段按 SHA-256 放行：主题引导、根路径跳转、插入字体样式表的脚本，
  * 以及 React Router 每页不同的水合数据与入口脚本；关键字体的 @font-face 样式与 React Aria 运行时插入的样式。
  * `'wasm-unsafe-eval'` 供排盘内核编译 WebAssembly；`style-src-attr 'unsafe-inline'` 供预渲染 HTML 里 React 写出的 `style` 属性。
- * 部署目标带统计时另放行统计脚本的来源与它的上报地址（Cloudflare 文档「What do I need to add to my CSP」）。
+ * 部署目标带统计时另放行统计脚本的来源（Cloudflare 文档「What do I need to add to my CSP」）。
+ *
+ * `connect-src` 放行 `'self'` 与任意 https 地址：排盘页的对话从浏览器直连用户选的模型厂商，兼容服务的 Base URL
+ * 由用户填，构建时写不进来；meta CSP 运行时只能收紧不能放宽，站内跳转又沿用最初那一页的 CSP，所以全站一致。
+ * 统计的上报地址也在其中。http 地址（含本机）不放行。
  */
 export function contentSecurityPolicy(html: string, site: Site): string {
   const { scripts, styles } = inlineBlocks(html);
@@ -78,7 +82,7 @@ export function contentSecurityPolicy(html: string, site: Site): string {
     "style-src-attr 'unsafe-inline'",
     "img-src 'self'",
     "font-src 'self'",
-    ["connect-src 'self'", ...(stats ? [WEB_ANALYTICS.reportOrigin] : [])].join(' '),
+    "connect-src 'self' https:",
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'self'",

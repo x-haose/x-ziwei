@@ -2,6 +2,8 @@ import { globalStyle, style } from '@vanilla-extract/css';
 import { media } from '../styles/media';
 import { color, font, motion, size, space, stroke } from '../styles/tokens.css';
 import { boardHeight, boardWidth, ringBand } from './board.css';
+import { section as layerSection } from './layer-panel.css';
+import { section as readSection } from './read-panel.css';
 
 /**
  * 排盘页网格（设计规范第 4 节）：
@@ -98,48 +100,94 @@ export const recentDelete = style({
 
 export const recentNone = style({ padding: '6px 0', fontSize: size.aux, color: color.fg3 });
 
-/* ── 提示词 ── */
+/* ── 右栏：「对话 | 提示词」（设计规范 19.2；对话栏内部的样式在 chat/chat.css.ts） ── */
 
-export const prompt = style({
+/**
+ * 页面在「对话」页签时的网格：XL 右栏放宽到 ≥480px；L 盘在左上、生辰运限读数排在盘下，右栏整列是对话；
+ * M、S 同第 4 节（对话在全屏面板里）。≥1024 时右栏吸顶，对话记录在栏内滚动。
+ */
+export const chatOn = style({
+  vars: { [boardWidth]: `min(calc(100vh - 100px), calc(100vw - 228px - 480px - 2 * ${space.gap} - 2 * ${space.pad}))` },
+  gridTemplateColumns: '228px auto minmax(480px, 1fr)',
+  '@media': {
+    [media.lDown]: {
+      gridTemplateColumns: 'auto minmax(420px, 1fr)',
+      gridTemplateRows: 'auto auto auto auto 1fr',
+      gridTemplateAreas: '"board prompt" "birth prompt" "layer prompt" "read prompt" ". prompt"',
+      vars: { [boardWidth]: `min(calc(100vh - 100px), calc(100vw - 420px - ${space.gap} - 2 * ${space.pad}))` },
+    },
+    [media.mDown]: {
+      gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+      gridTemplateRows: 'auto auto auto auto',
+      gridTemplateAreas: '"birth birth" "layer layer" "board board" "read prompt"',
+      vars: { [boardWidth]: `min(calc(100vw - 2 * ${space.pad}), 900px)` },
+    },
+    [media.s]: {
+      gridTemplateColumns: 'minmax(0, 1fr)',
+      gridTemplateAreas: '"birth" "layer" "board" "read" "prompt"',
+      vars: { [boardWidth]: '100vw' },
+    },
+  },
+});
+
+/** 手机上有盘时底部固定着「对话 | 提示词」一条，页面底部留出它的高度。 */
+export const withBar = style({ '@media': { [media.s]: { paddingBottom: 84 } } });
+
+export const side = style({
   gridArea: 'prompt',
   display: 'flex',
   flexDirection: 'column',
   minHeight: 0,
   minWidth: 0,
   height: boardHeight,
+  selectors: {
+    [`${chatOn} &`]: { height: 'calc(100vh - 104px)', position: 'sticky', top: 20 },
+  },
   '@media': {
     [media.lDown]: {
       height: 'auto',
+      marginTop: 40,
+      selectors: { [`${chatOn} &`]: { height: 'calc(100vh - 100px)', marginTop: 0 } },
+    },
+    [media.mDown]: {
+      marginTop: 20,
+      selectors: { [`${chatOn} &`]: { height: 'auto', position: 'static', marginTop: 20 } },
+    },
+    [media.s]: { paddingTop: 28, marginTop: 0, selectors: { [`${chatOn} &`]: { marginTop: 0 } } },
+  },
+});
+
+/** 还没有盘时，手机上整个右栏不显示。 */
+export const sideEmpty = style({ '@media': { [media.s]: { display: 'none' } } });
+
+/* ── 提示词页签 ── */
+
+export const prompt = style({
+  display: 'flex',
+  flexDirection: 'column',
+  flex: 1,
+  minHeight: 0,
+  minWidth: 0,
+  '@media': {
+    [media.lDown]: {
       display: 'grid',
       gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.3fr)',
       gridTemplateRows: 'auto auto auto auto 1fr auto auto',
       gridTemplateAreas: '"h h" "checks pvh" "know pv" "ask pv" "acts pv" "msg pv" "ai pv"',
       columnGap: space.gap,
-      marginTop: 40,
     },
-    [media.mDown]: { display: 'flex', marginTop: 20 },
-    [media.s]: { paddingTop: 28, marginTop: 0 },
+    [media.mDown]: { display: 'flex' },
   },
 });
 
-/** 还没有盘时，手机上整块提示词区不显示。 */
-export const promptEmpty = style({ '@media': { [media.s]: { display: 'none' } } });
-
 export const head = style({
   gridArea: 'h',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 8,
-  minHeight: 30,
   paddingBottom: 6,
+  fontSize: size.small,
+  color: color.fg3,
   borderBottom: `${stroke.hair} solid ${color.line}`,
   '@media': { [media.lDown]: { marginBottom: 6 } },
 });
-
-export const headTitle = style({ fontFamily: font.serif, fontSize: size.subtitle, fontWeight: 600, color: color.fg });
-
-export const headAux = style({ fontSize: size.label, color: color.fg3 });
 
 export const checks = style({
   gridArea: 'checks',
@@ -335,3 +383,8 @@ export const candidates = style({
 
 export const candidatesLabel = style({ flex: 'none', fontSize: size.label, color: color.fg3 });
 export const candidatesSeg = style({ flex: 1 });
+
+/* L 档对话页签：生辰、运限、读数排在盘下，不宽于盘。 */
+globalStyle(`${chatOn} > ${birth}, ${chatOn} > ${layerSection}, ${chatOn} > ${readSection}`, {
+  '@media': { [media.lDown]: { maxWidth: boardWidth }, [media.mDown]: { maxWidth: 'none' } },
+});
