@@ -341,6 +341,7 @@ function ChartBody({
               t={t}
               kernel={kernel}
               chart={chart}
+              lunar={lunar}
               view={view}
               pack={knowledge.pack}
               packLabel={knowledge.label}
@@ -421,6 +422,12 @@ export function ChartPage() {
   const reported = useRef('');
   const { tab, setTab } = useSideTab(t);
   const [reading, setReading] = useState<ReadingState>(INITIAL_READING);
+  // 展开的条目与流年一览所翻到的大限属于当前这张盘：换盘时清掉，只留所在的子页签。
+  const [readingFor, setReadingFor] = useState(hash);
+  if (readingFor !== hash) {
+    setReadingFor(hash);
+    setReading((r) => ({ ...INITIAL_READING, view: r.view }));
+  }
   const bare = hash.replace(/^#/, '');
   const openChart = (h: string) => navigate({ hash: h }, { replace: true, preventScrollReset: true });
 
@@ -457,6 +464,8 @@ export function ChartPage() {
 
   const waiting = (birth !== null || decoded.kind === 'unsupported') && kstate.status !== 'ready';
   const progress = kstate.status === 'loading' ? kstate.loaded / kstate.total : 0;
+  /** 还没有盘时右栏的状态：没填生辰、内核加载中、内核加载失败（重试按钮在盘面上）。 */
+  const side = !waiting ? 'empty' : kstate.status === 'error' ? 'failed' : 'loading';
 
   let centre: (density: Density) => ReactNode;
   if (kstate.status === 'error' && waiting) {
@@ -557,12 +566,14 @@ export function ChartPage() {
             panels={{
               read: (
                 <div className={readingCss.empty}>
-                  <h3 className={readingCss.emptyTitle}>{waiting ? t.read.loadingTitle : t.read.emptyTitle}</h3>
+                  <h3 className={readingCss.emptyTitle}>{side === 'failed' ? t.read.failedTitle : side === 'loading' ? t.read.loadingTitle : t.read.emptyTitle}</h3>
                   <p className={readingCss.emptyBody}>
-                    {waiting && kstate.status === 'loading'
-                      ? fmt(t.read.loadingBody, { a: Math.round(kstate.loaded / 1024), b: Math.round(kstate.total / 1024) })
-                      : waiting
-                        ? t.chart.loading
+                    {side === 'failed'
+                      ? t.read.failedBody
+                      : side === 'loading'
+                        ? kstate.status === 'loading'
+                          ? fmt(t.read.loadingBody, { a: Math.round(kstate.loaded / 1024), b: Math.round(kstate.total / 1024) })
+                          : t.read.loadingWait
                         : t.read.emptyBody}
                   </p>
                 </div>
@@ -572,7 +583,7 @@ export function ChartPage() {
                   t={t}
                   lang={lang}
                   text={null}
-                  emptyText={waiting ? t.chart.loadingPreview : t.chart.previewEmpty}
+                  emptyText={side === 'failed' ? t.chart.previewFailed : side === 'loading' ? t.chart.loadingPreview : t.chart.previewEmpty}
                   choice={DEFAULT_CHOICE}
                   onChoice={() => undefined}
                   yearLabel={today ? fmt(t.chart.checkYear, { y: today.year }) : t.chart.checks.year}

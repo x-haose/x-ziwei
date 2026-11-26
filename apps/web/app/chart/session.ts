@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { Astrolabe } from 'x-iztro';
+import type { Astrolabe, Horoscope } from 'x-iztro';
 import type { Birth } from '../birth/birth';
 import type { LunarCalendar } from '../birth/calendar';
 import type { Kernel } from '../kernel/kernel';
@@ -45,6 +45,17 @@ export function castChart(kernel: Kernel, birth: Birth, hour: number): Astrolabe
   return birth.cal === 'solar'
     ? kernel.astro.bySolar(date, hour as Parameters<Kernel['astro']['bySolar']>[1], gender)
     : kernel.astro.byLunar(date, hour as Parameters<Kernel['astro']['byLunar']>[1], gender, { isLeapMonth: birth.leap });
+}
+
+/**
+ * 所选流月段的运限。常规月按农历月查；闰月的前后两段没有按月的查询，取该段首日（初一或十六）按日查，
+ * 用到流月为止（`toText` 时传 `through: 'monthly'`）。
+ */
+export function monthHoroscope(chart: Astrolabe, lunar: LunarCalendar, year: number, key: MonthKey): Horoscope {
+  if (key.part === 'normal') return chart.horoscopeOfMonth(year, key.month);
+  const start = lunar.toSolar({ year, month: key.month, leap: true, day: key.part === 'first' ? 1 : 16 });
+  if (!start) throw new Error(`农历 ${year} 年没有闰 ${key.month} 月`);
+  return chart.horoscope(`${start.year}-${start.month}-${start.day}`);
 }
 
 /** 某个流年内选流月段：沿用原月号（闰月段换年后落到同号常规月），该年没有就取正月。 */

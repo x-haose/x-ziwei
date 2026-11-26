@@ -4,6 +4,7 @@ import { PERIODS } from '../birth/birth';
 import type { LunarCalendar } from '../birth/calendar';
 import { candidatesText, hourName, periodName } from '../birth/labels';
 import type { LayerSelection } from '../chart/model';
+import { monthHoroscope } from '../chart/session';
 import { fmt, type Messages } from '../i18n/messages';
 
 /** 提示词里勾选的盘面各段。 */
@@ -41,13 +42,10 @@ export function chartSections({
   const out: string[] = [];
   if (choice.natal) out.push(chart.toText(opts));
   if (choice.year) {
-    if (sel.layer === 'monthly' && sel.month.part === 'normal') {
-      out.push(chart.horoscopeOfMonth(sel.year, sel.month.month).toText(opts));
-    } else if (sel.layer === 'monthly') {
-      // 闰月的前后两段：取该段首日（初一或十六）发起运限，写到流月为止。
-      const start = lunar.toSolar({ year: sel.year, month: sel.month.month, leap: true, day: sel.month.part === 'first' ? 1 : 16 });
-      if (!start) throw new Error(`农历 ${sel.year} 年没有闰 ${sel.month.month} 月`);
-      out.push(chart.horoscope(`${start.year}-${start.month}-${start.day}`).toText({ ...opts, through: 'monthly' }));
+    if (sel.layer === 'monthly') {
+      // 闰月的前后两段按该段首日发起运限，写到流月为止（见 monthHoroscope）。
+      const h = monthHoroscope(chart, lunar, sel.year, sel.month);
+      out.push(h.toText(sel.month.part === 'normal' ? opts : { ...opts, through: 'monthly' }));
     } else {
       // 与 MCP 工具 ziwei_get_horoscope 问某一年时的返回一致：运限写到流年，文末附该年的流月一览。
       out.push(`${chart.horoscopeOfYear(sel.year).toText(opts)}\n${chart.monthlyListToText(sel.year, opts)}`);

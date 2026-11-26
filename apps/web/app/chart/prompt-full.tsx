@@ -27,8 +27,10 @@ function RawView({ text, questionHeading }: { text: string; questionHeading: str
         );
       })}
       {question && (
-        <span className={css.rawQuestion} data-level={1}>
-          {question}
+        <span className={css.rawQuestion}>
+          {/* 只有标题行带层级：目录与窄屏头部取的是带 data-level 元素的全部文字。 */}
+          <span data-level={1}>{questionHeading}</span>
+          {question.slice(questionHeading.length)}
         </span>
       )}
     </>

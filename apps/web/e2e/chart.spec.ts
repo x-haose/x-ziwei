@@ -45,7 +45,13 @@ test('内核加载失败明确报错并可重试', async ({ page }) => {
     else await route.continue();
   });
   await page.goto(SAMPLE);
-  await expect(page.getByText('排盘内核加载失败')).toBeVisible();
+  await expect(page.getByRole('button', { name: '重试' })).toBeVisible();
+  // 右栏不再说「加载中」，指向盘面上的重试。
+  const read = page.getByRole('tabpanel', { name: '看盘' });
+  await expect(read.getByRole('heading', { name: '排盘内核加载失败' })).toBeVisible();
+  await expect(read).toContainText('点盘面上的「重试」重新加载');
+  await page.getByRole('tab', { name: '提示词' }).click();
+  await expect(page.getByRole('tabpanel', { name: '提示词' })).toContainText('排盘内核加载失败，提示词无法生成');
   fail = false;
   await page.getByRole('button', { name: '重试' }).click();
   await expect(page.getByRole('button', { name: /^命宫，壬午，主星紫微$/ })).toBeVisible();
@@ -92,6 +98,11 @@ test('流月含闰月：2020 年的闰四月拆成前后两段', async ({ page }
   await page.getByRole('button', { name: '闰四月（十六至月末）' }).click();
   await expect(page.getByText(/2020 闰四月下/).first()).toBeVisible();
   await expect(page.getByRole('tabpanel', { name: '看盘' })).toContainText('流月 2020 闰四月下');
+  // 闰月的一段也列流月格局（按该段首日起运限）。
+  const read = page.getByRole('tabpanel', { name: '看盘' });
+  await read.getByRole('radiogroup', { name: '看盘的内容' }).getByRole('radio', { name: '格局' }).click();
+  await expect(read.getByRole('heading', { name: /^流月 2020 闰四月下/ })).toContainText('5 个');
+  await expect(read).toContainText('杀破狼');
 });
 
 test('提示词：内核文本、方法正文与问题，复制原文与链接', async ({ page, context }) => {

@@ -89,6 +89,7 @@ const zh = {
     loading: '排盘内核加载中',
     loadingBytes: '{a} / {b} KB',
     loadingPreview: '内核装好后生成提示词。',
+    previewFailed: '排盘内核加载失败，提示词无法生成。点盘面上的「重试」重新加载。',
     failed: '排盘内核加载失败',
     retry: '重试',
     summaryEdit: '修改',
@@ -221,6 +222,9 @@ const zh = {
     emptyBody: '排盘后，这里按宫位读这张盘：点盘上的宫，看这一宫的星曜、四化、释义与格局；格局、大限、流年各有一览。',
     loadingTitle: '排盘内核加载中',
     loadingBody: '星曜、四化与格局都由内核算出，装好后显示（{a} / {b} KB）。',
+    loadingWait: '星曜、四化与格局都由内核算出，装好后显示。',
+    failedTitle: '排盘内核加载失败',
+    failedBody: '星曜、四化与格局都由内核算出。点盘面上的「重试」重新加载。',
   },
 
   board: {
@@ -840,6 +844,7 @@ const en: Messages = {
     loading: 'Loading the chart engine',
     loadingBytes: '{a} / {b} KB',
     loadingPreview: 'The prompt is built once the engine is ready.',
+    previewFailed: 'The chart engine failed to load, so the prompt cannot be built. Press Retry on the chart to load it again.',
     failed: 'The chart engine failed to load',
     retry: 'Retry',
     summaryEdit: 'Edit',
@@ -972,6 +977,9 @@ const en: Messages = {
     emptyBody: 'Once a chart is cast, read it here palace by palace: click a palace on the chart to see its stars, transformations, notes and patterns; patterns, decades and years each have an overview.',
     loadingTitle: 'The chart engine is loading',
     loadingBody: 'Stars, transformations and patterns are all computed by the engine and show once it is ready ({a} / {b} KB).',
+    loadingWait: 'Stars, transformations and patterns are all computed by the engine and show once it is ready.',
+    failedTitle: 'The chart engine failed to load',
+    failedBody: 'Stars, transformations and patterns are all computed by the engine. Press Retry on the chart to load it again.',
   },
 
   board: {

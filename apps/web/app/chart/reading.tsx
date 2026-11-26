@@ -9,7 +9,8 @@ import * as boardCss from './board.css';
 import { monthLabel } from './layer-panel';
 import { type HuaMark, type LayerView, type PalaceView, type StarView, decadalOfAge, nominalAge } from './model';
 import * as css from './reading.css';
-import type { ChartView } from './session';
+import { type ChartView, monthHoroscope } from './session';
+import type { LunarCalendar } from '../birth/calendar';
 
 /**
  * 看盘（设计规范 21.4）：给人读的结构化阅读，以盘为索引。事实全部取自排盘内核的结构化结果（星曜、亮度、各层四化与宫名、
@@ -18,7 +19,7 @@ import type { ChartView } from './session';
 
 export type ReadingView = 'palace' | 'patterns' | 'decades' | 'years';
 
-/** 看盘的界面状态：子页签、展开了的全文、流年一览翻到的大限（null 为所选大限）。由排盘页持有，换页签不丢。 */
+/** 看盘的界面状态：子页签、展开了的全文、流年一览翻到的大限序号（null 为所选大限）。由排盘页持有，换页签不丢；换盘时除子页签外清空。 */
 export interface ReadingState {
   view: ReadingView;
   open: ReadonlySet<string>;
@@ -93,7 +94,7 @@ interface LayerInfo {
   patterns: PatternHit[];
 }
 
-function layerInfos(chart: Astrolabe, view: ChartView, t: Messages): LayerInfo[] {
+function layerInfos(chart: Astrolabe, lunar: LunarCalendar, view: ChartView, t: Messages): LayerInfo[] {
   const { sel, layers } = view;
   if (sel.layer === 'natal') return [];
   const decadal = chart.decadalList()[sel.decadal];
@@ -108,8 +109,7 @@ function layerInfos(chart: Astrolabe, view: ChartView, t: Messages): LayerInfo[]
     } else {
       const m = chart.monthlyList(sel.year).find((x) => x.month === sel.month.month && x.part === sel.month.part);
       if (!m) throw new Error(`农历 ${sel.year} 年没有这一段流月`);
-      // 闰月的前后两段没有单独的运限查询，流月格局只在常规月里算。
-      const patterns = sel.month.part === 'normal' ? chart.horoscopeOfMonth(sel.year, sel.month.month).patterns('monthly') : [];
+      const patterns = monthHoroscope(chart, lunar, sel.year, sel.month).patterns('monthly');
       out.push({ kind: l.kind, label: `${sel.year} ${monthLabel(t, m)}`, view: l, item: m, patterns });
     }
   }
@@ -301,25 +301,36 @@ function PatternItem({
   );
 }
 
-/** 合并同一格局（同键、同本宫）在几层里的命中，层按本命、大限、流年、流月排。 */
+/**
+ * 一条命中的标识：格局、本宫、口径、破格与所用的星（按星与所在宫去重排序）都相同才算同一条。
+ * 同一格局在同一本宫可以有几条命中（口径不同或所用的星不同），各自成条。
+ */
+function hitId(h: PatternHit): string {
+  const stars = [...new Set(h.stars.map((s) => `${s.key}@${s.palaceIndex}`))].sort();
+  return `${h.key}@${h.palaceIndex}/${h.variant ?? ''}/${h.broken ? 1 : 0}/${stars.join(',')}`;
+}
+
+/** 合并同一条命中（见 hitId）在几层里的出现，层按传入顺序（本命、大限、流年、流月）排。 */
 function mergeHits(groups: readonly { scope: 'natal' | LayerView['kind']; hits: readonly PatternHit[] }[], keep: (h: PatternHit) => boolean) {
-  const out: { hit: PatternHit; scopes: ('natal' | LayerView['kind'])[] }[] = [];
+  const out = new Map<string, { id: string; hit: PatternHit; scopes: ('natal' | LayerView['kind'])[] }>();
   for (const g of groups) {
     for (const h of g.hits) {
       if (!keep(h)) continue;
-      const same = out.find((x) => x.hit.key === h.key && x.hit.palaceIndex === h.palaceIndex);
+      const id = hitId(h);
+      const same = out.get(id);
       if (same) {
         if (!same.scopes.includes(g.scope)) same.scopes.push(g.scope);
-      } else out.push({ hit: h, scopes: [g.scope] });
+      } else out.set(id, { id, hit: h, scopes: [g.scope] });
     }
   }
-  return out;
+  return [...out.values()];
 }
 
 export function ReadingPanel({
   t,
   kernel,
   chart,
+  lunar,
   view,
   pack,
   packLabel,
@@ -332,6 +343,7 @@ export function ReadingPanel({
   t: Messages;
   kernel: Kernel;
   chart: Astrolabe;
+  lunar: LunarCalendar;
   view: ChartView;
   /** 本机生效的知识包组合合并后的包，与它的组合名。 */
   pack: KnowledgePack;
@@ -347,7 +359,7 @@ export function ReadingPanel({
   const scroller = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const { palaces, sel } = view;
-  const layers = useMemo(() => layerInfos(chart, view, t), [chart, view, t]);
+  const layers = useMemo(() => layerInfos(chart, lunar, view, t), [chart, lunar, view, t]);
   const natalPatterns = useMemo(() => chart.patterns(), [chart]);
   const decadals = useMemo(() => chart.decadalList(), [chart]);
   const starName = (key: string) => kernel.i18n.translate(key, 'zh-CN') ?? key;
@@ -537,14 +549,14 @@ export function ReadingPanel({
           {pats.length ? (
             pats.map((x) => (
               <PatternItem
-                key={`${x.hit.key}@${x.hit.palaceIndex}`}
+                key={x.id}
                 t={t}
                 hit={x.hit}
                 scopes={x.scopes}
                 palaces={palaces}
                 pack={pack}
                 packLabel={packLabel}
-                id={`p-${i}-${x.hit.key}-${x.hit.palaceIndex}`}
+                id={`p-${i}-${x.id}`}
                 onPalace={goPalace}
                 state={state}
                 onState={onState}
@@ -593,29 +605,29 @@ export function ReadingPanel({
       </>
     );
   } else if (state.view === 'patterns') {
-    const groups: { key: string; title: string; hits: readonly PatternHit[]; scope: 'natal' | LayerView['kind'] }[] = [
-      { key: 'natal', title: t.read.layerNames.natal, hits: natalPatterns, scope: 'natal' },
+    const groups = [
+      { key: 'natal', title: t.read.layerNames.natal, hits: natalPatterns, scope: 'natal' as const },
       ...layers.map((l) => ({ key: l.kind, title: `${t.read.layerNames[l.kind]} ${l.label}`, hits: l.patterns, scope: l.kind })),
-    ];
+    ].map((g) => ({ ...g, items: mergeHits([g], () => true) }));
     body = (
       <>
         {groups.map((g) => (
           <section key={g.key} className={css.section}>
             <h4 className={css.sectionTitle}>
               {g.title}
-              <span className={css.sectionAside}>{fmt(t.read.groupCount, { n: g.hits.length })}</span>
+              <span className={css.sectionAside}>{fmt(t.read.groupCount, { n: g.items.length })}</span>
             </h4>
-            {g.hits.length ? (
-              g.hits.map((h) => (
+            {g.items.length ? (
+              g.items.map((x) => (
                 <PatternItem
-                  key={`${h.key}@${h.palaceIndex}`}
+                  key={x.id}
                   t={t}
-                  hit={h}
-                  scopes={[g.scope]}
+                  hit={x.hit}
+                  scopes={x.scopes}
                   palaces={palaces}
                   pack={pack}
                   packLabel={packLabel}
-                  id={`g-${g.key}-${h.key}-${h.palaceIndex}`}
+                  id={`g-${g.key}-${x.id}`}
                   onPalace={goPalace}
                   state={state}
                   onState={onState}
