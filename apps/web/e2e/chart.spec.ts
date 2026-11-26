@@ -126,6 +126,14 @@ test('问 AI：复制的材料是解读方法、主题原文、所选运限与�
   await expect(preview).toContainText('# 运限');
   await closePrompt(page);
 
+  // 选这十年：附所选大限的运限（写到大限为止），不附全部大限的一览。
+  await page.getByRole('button', { name: /^这十年/ }).click();
+  preview = await openPromptRaw(page, 'topic');
+  await expect(preview).toContainText('## 大限 · 命宫: 本命夫妻 (庚辰)');
+  await expect(preview).not.toContainText('# 大限一览');
+  await expect(preview).not.toContainText('## 流年');
+  await closePrompt(page);
+
   preview = await openPromptRaw(page, 'chart');
   await expect(page.getByRole('dialog', { name: '整张盘的完整提示词' })).toBeVisible();
   await expect(preview).toContainText('# 命盘 2000-8-16 寅时 女');

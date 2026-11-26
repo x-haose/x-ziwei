@@ -395,7 +395,8 @@ function ChartBody({
       sel.layer === 'natal'
         ? []
         : sel.layer === 'decadal'
-          ? [chart.decadalListToText(opts)]
+          ? // 所选大限的完整运限（写到大限为止）；sel.year 总在所选大限之内（见 useChartView）。
+            [chart.horoscopeOfYear(sel.year).toText({ ...opts, through: 'decadal' })]
           : sel.layer === 'yearly'
             ? [chart.horoscopeOfYear(sel.year).toText(opts)]
             : [monthHoroscope(chart, lunar, sel.year, sel.month).toText(sel.month.part === 'normal' ? opts : { ...opts, through: 'monthly' })];
