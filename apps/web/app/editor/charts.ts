@@ -10,11 +10,27 @@ import { createLunarCalendar } from '../kernel/lunar';
 import { useHydrated } from '../lib/media';
 import { castChart, chartHour } from '../chart/session';
 
-/** 编辑器里可选的一张盘：地址参数（不含 `#`）、显示名与排好的盘。 */
+/** 编辑器里可选的一张盘：地址参数（不含 `#`）、本页用的随机标识（选择器的键）、显示名与排好的盘。 */
 export interface ChartChoice {
   hash: string;
+  id: string;
   label: string;
   chart: Astrolabe;
+}
+
+/**
+ * 盘在选择器里的键：同一个地址参数在本页生命周期内一直用同一个随机标识。键会进选项的 DOM id，不能带生辰；
+ * 生辰的取值空间小，哈希能穷举反推，所以用随机标识。
+ */
+const choiceIds = new Map<string, string>();
+
+function choiceId(hash: string): string {
+  let id = choiceIds.get(hash);
+  if (!id) {
+    id = crypto.randomUUID();
+    choiceIds.set(hash, id);
+  }
+  return id;
 }
 
 /** 示例盘：首页与排盘页的示例（公历 2000-8-16 寅时 女）。 */
@@ -39,7 +55,7 @@ export function useChartChoices(kernel: Kernel, t: Messages): ChartChoice[] {
       if (d.kind !== 'ok') continue;
       const s = birthSummary(t, d.birth);
       const time = d.birth.time.kind === 'hour' ? s.time : hourName(t, chartHour(d.birth));
-      out.push({ hash: h, label: `${s.date} ${time} ${s.gender}`, chart: castChart(kernel, d.birth, chartHour(d.birth)) });
+      out.push({ hash: h, id: choiceId(h), label: `${s.date} ${time} ${s.gender}`, chart: castChart(kernel, d.birth, chartHour(d.birth)) });
     }
     return out;
   }, [here, recent, lunar, kernel, t]);

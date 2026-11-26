@@ -164,7 +164,15 @@ function WriteBody({ kernel, lib }: { kernel: Kernel; lib: Extract<LibraryState,
   };
 
   if (parsed && !parsed.ok) return <BadEntry t={t} problem={parsed.problem} entry={entry ?? ''} />;
-  if (entryError) return <p className={css.hint}>{entryError}</p>;
+  if (entryError)
+    return (
+      <div className={css.empty} role="alert">
+        <p className={css.emptyBody}>{entryError}</p>
+        <Link className={controls.ghost} href={localePath(lang, '/knowledge')}>
+          {e.toDrafts}
+        </Link>
+      </div>
+    );
   if (parsed) return null;
 
   const chart: Astrolabe | null = choice?.chart ?? null;
@@ -326,7 +334,7 @@ export function ChartPicker({ t, charts, value, onChange }: { t: Messages; chart
           columns={1}
           row
           autoFocus
-          options={charts.map((c) => ({ key: c.hash, text: c.label, content: <b>{c.label}</b> }))}
+          options={charts.map((c) => ({ key: c.hash, stableKey: c.id, text: c.label, content: <b>{c.label}</b> }))}
           selected={cur?.hash ?? null}
           onSelect={(h) => {
             close();

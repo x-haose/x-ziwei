@@ -42,6 +42,11 @@ export async function writeDraft(id: string, raw: PackRaw, known: number, at: nu
   await store.mutate((lib) => lib.writeDraft(id, raw, known, at));
 }
 
+/** 把编辑本机包的草稿改成新包草稿（另存为新包，见 `Library.detachDraft`）。 */
+export async function detachDraft(id: string, raw: PackRaw, known: number, at: number): Promise<void> {
+  await store.mutate((lib) => lib.detachDraft(id, raw, known, at));
+}
+
 /** 丢弃一份草稿。 */
 export async function deleteDraft(id: string): Promise<void> {
   await store.mutate((lib) => lib.deleteDraft(id));

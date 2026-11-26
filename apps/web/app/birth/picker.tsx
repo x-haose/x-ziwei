@@ -158,6 +158,11 @@ export interface GridOption<K extends string | number> {
   now?: boolean;
   /** 选项的无障碍名称；缺省用内容文字。 */
   label?: string;
+  /**
+   * 选项在网格里的键（React Aria 会把它拼进选项的 DOM id）：不能含用户数据，要与选项一一对应、打开期间不变。
+   * 不给时用序号，只适合打开期间不会变的列表（年月日、时辰）。
+   */
+  stableKey?: string;
 }
 
 /**
@@ -188,11 +193,12 @@ export function OptionGrid<K extends string | number>({
   /** 列表式选项：一行里左名右注。 */
   row?: boolean;
 }) {
-  // 集合的键用序号，不用选项的值：React Aria 会把键拼进选项的 DOM id，而值可能是生辰（年月日）或盘的地址参数，
-  // 统计脚本会上报元素选择器。
-  const byIndex = new Map(options.map((o, i) => [String(i), o.key]));
-  const indexOf = (k: K) => options.findIndex((o) => o.key === k);
-  const sel = selected === null ? -1 : indexOf(selected);
+  // 集合的键不用选项的值：React Aria 会把键拼进选项的 DOM id，而值可能是生辰（年月日）或盘的地址参数，统计脚本会上报元素选择器。
+  // 用调用方给的稳定键，没给时用序号。
+  const keyOf = (o: GridOption<K>, i: number) => o.stableKey ?? String(i);
+  const byKey = new Map(options.map((o, i) => [keyOf(o, i), o.key]));
+  const at = selected === null ? -1 : options.findIndex((o) => o.key === selected);
+  const selKey = at < 0 ? null : keyOf(options[at]!, at);
   return (
     <ListBox
       ref={listRef}
@@ -200,7 +206,7 @@ export function OptionGrid<K extends string | number>({
       layout="grid"
       selectionMode="single"
       escapeKeyBehavior="none"
-      selectedKeys={sel < 0 ? [] : [String(sel)]}
+      selectedKeys={selKey === null ? [] : [selKey]}
       onSelectionChange={(keys) => {
         if (keys === 'all') throw new Error('单选网格不会选中全部');
         const [first] = keys;
@@ -209,19 +215,19 @@ export function OptionGrid<K extends string | number>({
           onSelect(selected);
           return;
         }
-        const key = byIndex.get(String(first));
+        const key = byKey.get(String(first));
         if (key === undefined) throw new Error(`选中的项不在网格里：${String(first)}`);
         onSelect(key);
       }}
-      disabledKeys={options.flatMap((o, i) => (o.disabledReason !== undefined ? [String(i)] : []))}
+      disabledKeys={options.flatMap((o, i) => (o.disabledReason !== undefined ? [keyOf(o, i)] : []))}
       autoFocus={autoFocus ? 'first' : false}
       className={css.options}
       style={assignInlineVars({ [css.columns]: String(columns) })}
     >
       {options.map((o, i) => (
         <ListBoxItem
-          key={i}
-          id={String(i)}
+          key={keyOf(o, i)}
+          id={keyOf(o, i)}
           textValue={o.text}
           aria-label={o.label}
           className={[css.option, row ? css.optionRow : '', o.now ? css.optionNow : ''].filter(Boolean).join(' ')}

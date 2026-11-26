@@ -22,7 +22,7 @@ import { importedText } from '../knowledge/parts';
 import { StorageFullError } from '../lib/local-db';
 import { downloadJson } from '../lib/download';
 import { useMediaQuery } from '../lib/media';
-import { type LibraryState, saveDraft, updateUse, useLibrary, writeDraft } from '../knowledge/use-library';
+import { type LibraryState, detachDraft, saveDraft, updateUse, useLibrary, writeDraft } from '../knowledge/use-library';
 import { addLayer } from '../knowledge/library';
 import { media } from '../styles/media';
 import { type EditorFrom, StaleDraftError, draftForPack, editorHref, newDraft } from './actions';
@@ -143,6 +143,9 @@ function libraryProblem(lib: LibraryState, t: Messages): { title: string; body: 
 
 type Ready = Extract<LibraryState, { status: 'ready' }>;
 
+const FROMS: readonly EditorFrom[] = ['read', 'write', 'knowledge'];
+const isFrom = (v: string | null): v is EditorFrom => v !== null && (FROMS as readonly string[]).includes(v);
+
 function Editor({ kernel, lib, stored, libNote }: { kernel: Kernel; lib: Ready; stored: Draft; libNote: { title: string; body: string } | null }) {
   const t = useMessages();
   const e = t.editor;
@@ -151,7 +154,9 @@ function Editor({ kernel, lib, stored, libNote }: { kernel: Kernel; lib: Ready; 
   const navigate = useNavigate();
   const { hash } = useLocation();
   const [params, setParams] = useSearchParams();
-  const from = (params.get('from') ?? 'knowledge') as EditorFrom;
+  // 地址参数是外部输入：来源、范围与主题不对时按缺省处理，并在标题栏下写一句（见 paramNotes）。
+  const fromParam = params.get('from');
+  const from: EditorFrom = isFrom(fromParam) ? fromParam : 'knowledge';
   const def = defaultPackInfo(kernel);
   const xl = useMediaQuery('(min-width: 1360px)');
   const narrow = useMediaQuery(media.mDown);
@@ -255,8 +260,8 @@ function Editor({ kernel, lib, stored, libNote }: { kernel: Kernel; lib: Ready; 
   useEffect(() => {
     titleRef.current?.focus({ preventScroll: true });
   }, [entryParam]);
-  const initialScope: Scope = params.get('scope') === 'all' ? 'all' : params.get('topic') ? { topic: params.get('topic')! } : 'chart';
-  const [scope, setScope] = useState<Scope>(initialScope);
+  const scopeParam = params.get('scope');
+  const topicParam = params.get('topic');
   const charts = useChartChoices(kernel, t);
   const [chartHash, setChartHash] = useState<string | null>(null);
   const chart: ChartChoice | undefined = charts.find((c) => c.hash === (chartHash ?? hash.replace(/^#/, ''))) ?? charts[0];
@@ -264,7 +269,15 @@ function Editor({ kernel, lib, stored, libNote }: { kernel: Kernel; lib: Ready; 
   const active = useActiveKnowledge(kernel, lib, broken);
   const layers = withoutPacks(lib.use, broken.keys()).layers;
   const topics = active ? orderedTopics(active.pack) : orderedTopics(builtinPack(kernel));
+  const initialScope: Scope =
+    scopeParam === 'all' ? 'all' : topicParam !== null && topics.some((x) => x.slug === topicParam) ? { topic: topicParam } : 'chart';
+  const [scope, setScope] = useState<Scope>(initialScope);
   const topic: TopicEntry | undefined = typeof scope === 'object' ? topics.find((x) => x.slug === scope.topic) : undefined;
+  const paramNotes = [
+    fromParam !== null && !isFrom(fromParam) ? e.badFrom : null,
+    scopeParam !== null && scopeParam !== 'all' ? e.badScope : null,
+    topicParam !== null && !topics.some((x) => x.slug === topicParam) ? fmt(e.badTopic, { topic: topicParam }) : null,
+  ].filter((x) => x !== null);
 
   /* 右栏（≥1360）或抽屉（更窄）：预览与问题。 */
   const [panel, setPanel] = useState<'preview' | 'issues'>('preview');
@@ -274,13 +287,26 @@ function Editor({ kernel, lib, stored, libNote }: { kernel: Kernel; lib: Ready; 
     if (!xl) setDrawer(true);
   };
 
-  /** 另存为新包：复制这一页的原文建一份新包草稿（标识加序号），聚焦包信息里的标识。 */
+  /**
+   * 另存为新包：标识换成没人用的（加序号），聚焦包信息里的标识。编辑的包已被删除或在包库里换了版本时，就把这份草稿改成新包草稿，
+   * 不留那份存不回去的；其余情况（包信息里另存、别的标签页改过这份草稿）复制一份新包草稿。
+   */
   const saveAsNew = () => {
-    const copy = { ...structuredClone(latest.current), id: freshId(String(latest.current.id), lib.packs, lib.drafts) };
-    newDraft(copy, null).then(
-      (d) => navigate(editorHref(lang, { draft: d.id, from, entry: 'info' }, hash.replace(/^#/, ''))),
-      (err: unknown) => toast(fmt(t.knowledge.actionFailed, { reason: err instanceof Error ? err.message : String(err) })),
-    );
+    const next = { ...structuredClone(latest.current), id: freshId(String(latest.current.id), lib.packs, lib.drafts) };
+    const fail = (err: unknown) => toast(fmt(t.knowledge.actionFailed, { reason: err instanceof Error ? err.message : String(err) }));
+    if (conflict && store !== 'edited') {
+      clearTimeout(timer.current);
+      const at = Date.now();
+      detachDraft(stored.id, next, known.current, at).then(() => {
+        known.current = at;
+        written.current = next;
+        setRaw(next);
+        setSavedAt(at);
+        select('info');
+      }, fail);
+      return;
+    }
+    newDraft(next, null).then((d) => navigate(editorHref(lang, { draft: d.id, from, entry: 'info' }, hash.replace(/^#/, ''))), fail);
   };
 
   /* 保存到包库：先写下待写的草稿，再在一个事务里按库里此刻的数据存包（见 `Library.saveDraft`）。 */
@@ -529,6 +555,11 @@ function Editor({ kernel, lib, stored, libNote }: { kernel: Kernel; lib: Ready; 
           </p>
         )}
       </header>
+      {paramNotes.length > 0 && (
+        <div className={css.strip} role="status">
+          <span className={css.stripText}>{paramNotes.join(' ')}</span>
+        </div>
+      )}
       {libNote && (
         <div className={css.strip} role="alert">
           <span className={css.stripText}>

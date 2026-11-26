@@ -204,6 +204,18 @@ test('删掉正在编辑的包：草稿留着并写明包已删除；重新导�
   await page.getByRole('group', { name: /导入的包/ }).getByRole('button', { name: '编辑' }).click();
   await expect(page.getByRole('status').filter({ hasText: /草稿区里有一份编辑「导入的包」的草稿/ })).toBeVisible();
   await expect(page).toHaveURL(/\/zh\/knowledge$/);
+
+  // 在编辑器里另存为新包：这份草稿改成新包草稿，不留过期的那份；再点「编辑」就能打开导入的包。
+  await page.getByRole('region', { name: '草稿' }).getByRole('button', { name: '继续编辑' }).click();
+  await page.getByRole('button', { name: '另存为新包' }).first().click();
+  await expect(page.locator('#pack-id')).toHaveValue('my-pack-2');
+  await expect(page.getByText(/已被删除：这份草稿不能再存回去/)).toHaveCount(0);
+  await page.getByRole('link', { name: '‹ 知识包' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '留作草稿，离开' }).click();
+  await expect(page.getByRole('region', { name: '草稿' })).not.toContainText('这个包已被删除');
+  await page.getByRole('group', { name: /导入的包/ }).getByRole('button', { name: '编辑' }).click();
+  await expect(page.getByRole('textbox', { name: '正文' })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/zh\/knowledge\/edit\?/);
 });
 
 test('地址里的条目不对时写明原因、给回第一屏的入口，不打开条目', async ({ page }) => {
@@ -250,4 +262,34 @@ test('本机存储不可用：看盘没有「改写这一条」，编辑器写�
   await expect(side(page).getByRole('link', { name: /^改写这一条/ })).toHaveCount(0);
   await page.goto('/zh/knowledge/edit?draft=x&from=knowledge');
   await expect(page.getByRole('alert')).toContainText('这个浏览器不让本页存数据');
+});
+
+test('盘选择器打开期间列表变了（别的标签页排了新盘）：焦点和回车仍是原来那一项', async ({ page, context }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/zh/knowledge/write');
+  const picker = page.getByRole('region', { name: '从一张盘开始' }).getByRole('button', { name: /^盘/ });
+  await expect(picker).toContainText('2000-8-16 寅时 女');
+  await picker.click();
+  const dialog = page.getByRole('dialog', { name: '盘' });
+  await expect(dialog.getByRole('option', { name: '2000-8-16 寅时 女' })).toBeFocused();
+  const other = await context.newPage();
+  await other.goto('/zh/install');
+  await other.evaluate(() => localStorage.setItem('xzw-recent', JSON.stringify([{ hash: 'cal=solar&d=1990-1-1&t=6&g=m', ts: Date.now() }])));
+  await expect(dialog.getByRole('option')).toHaveCount(2);
+  await expect(dialog.getByRole('option', { name: '2000-8-16 寅时 女' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(picker).toContainText('2000-8-16 寅时 女');
+});
+
+test('编辑器地址里的来源、范围与主题不对时按缺省处理，并写一句说明', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await rewriteZiwei(page);
+  const url = new URL(page.url());
+  url.searchParams.set('from', 'xyz');
+  url.searchParams.set('topic', 'nope');
+  await page.goto(url.toString());
+  await expect(page.getByText(/地址里的来源参数不对，返回按「知识包」处理。/)).toBeVisible();
+  await expect(page.getByText(/地址里的主题「nope」在你用的释义里没有，左栏按这张盘列。/)).toBeVisible();
+  await expect(page.getByRole('link', { name: '‹ 知识包' })).toBeVisible();
+  await expect(page.getByRole('radiogroup', { name: '列哪些条目' }).getByRole('radio', { name: '这张盘' })).toBeChecked();
 });

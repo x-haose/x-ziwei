@@ -46,7 +46,7 @@ test('从看盘进编辑器：生辰只在 # 之后（不进查询串），编�
   await page.getByRole('region', { name: '用这张盘' }).getByRole('link', { name: '改写这一条：紫微' }).click();
   await expect(page.getByRole('heading', { level: 2, name: /^紫微/ })).toBeVisible();
   const url = new URL(page.url());
-  // 草稿标识是随机串，可能碰巧含「t=2」一类片段：查询串只核对它以外的参数，并核对参数只有这几个。
+  // 草稿标识是随机的十六进制串，可能碰巧含「2000」这类片段，紧跟在「draft=」后面时还可能拼出「t=2」：查询串只核对它以外的参数，并核对参数只有这几个。
   expect([...url.searchParams.keys()].sort()).toEqual(['draft', 'entry', 'from']);
   const rest = [...url.searchParams].filter(([k]) => k !== 'draft').map(([k, v]) => `${k}=${v}`).join('&');
   for (const f of FIELDS) expect(rest, `查询串里带了 ${f}`).not.toContain(f);

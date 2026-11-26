@@ -5,7 +5,7 @@ import {
   type Draft,
   type DraftConflict,
   draftConflict,
-    type LibraryProblem,
+  type LibraryProblem,
   type Pack,
   type PackRaw,
   type StoredPack,
@@ -160,7 +160,6 @@ export class Library {
     });
   }
 
-  /** 存一份草稿（新建或覆盖同标识的那份）。 */
   /** 新建一份草稿。 */
   async createDraft(draft: Draft): Promise<Snapshot> {
     return this.change(async (tx, now) => {
@@ -179,6 +178,20 @@ export class Library {
       if (!cur) throw new DraftGoneError(id);
       if (cur.updatedAt !== known) throw new DraftConflictError('edited');
       await tx.objectStore('drafts').put({ ...cur, raw, updatedAt: at });
+      return now.use;
+    });
+  }
+
+  /**
+   * 把编辑本机包的草稿改成新包草稿（另存为新包）：换原文（新的标识），不再编辑哪个包、没有包库快照。原来那份不留。
+   * 冲突与不在时的处理同 `writeDraft`。
+   */
+  async detachDraft(id: string, raw: PackRaw, known: number, at: number): Promise<Snapshot> {
+    return this.change(async (tx, now) => {
+      const cur = await tx.objectStore('drafts').get(id);
+      if (!cur) throw new DraftGoneError(id);
+      if (cur.updatedAt !== known) throw new DraftConflictError('edited');
+      await tx.objectStore('drafts').put({ ...cur, raw, editing: null, snapshot: null, updatedAt: at });
       return now.use;
     });
   }

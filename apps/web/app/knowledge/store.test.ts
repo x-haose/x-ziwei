@@ -252,6 +252,9 @@ describe('与其他标签页的版本协调', () => {
       await expect(lib.saveDraft('d1', { ...overlay('mine'), version: '2' }, 1, 7, false)).rejects.toMatchObject({ kind: 'stale' });
       snap = await lib.load();
       expect(snap.packs.map((p) => [p.id, p.version])).toEqual([['mine', 'imported']]);
+      // 另存为新包：同一份草稿改成新包草稿，不留过期的那份。
+      snap = await lib.detachDraft('d1', { ...overlay('mine-2'), version: '2' }, 1, 8);
+      expect(snap.drafts.map((d) => [d.id, d.editing, d.snapshot, d.raw.id])).toEqual([['d1', null, null, 'mine-2']]);
       lib.close();
     });
 
