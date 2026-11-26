@@ -293,3 +293,23 @@ test('编辑器地址里的来源、范围与主题不对时按缺省处理，�
   await expect(page.getByRole('link', { name: '‹ 知识包' })).toBeVisible();
   await expect(page.getByRole('radiogroup', { name: '列哪些条目' }).getByRole('radio', { name: '这张盘' })).toBeChecked();
 });
+
+test('「写进」选择器打开期间别的标签页导入了一个包：焦点和回车仍是原来那一项', async ({ page, context }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/zh/knowledge/write');
+  const picker = page.getByRole('button', { name: /^写进/ });
+  await expect(picker).toContainText('新包（叠在 iztro-docs 上）');
+  await picker.click();
+  const dialog = page.getByRole('dialog', { name: '写进' });
+  await expect(dialog.getByRole('option', { name: /^新包（叠在 iztro-docs 上）/ })).toBeFocused();
+  const other = await context.newPage();
+  await other.goto('/zh/knowledge');
+  await other.getByRole('tab', { name: '粘贴 JSON' }).click();
+  await other.getByRole('textbox', { name: '粘贴知识包 JSON' }).fill(JSON.stringify({ schema: 1, id: 'other-tab', version: '1', language: 'zh-CN', source: { name: '另一页导入的' }, stars: { ziweiMaj: { intro: '另一页。' } } }));
+  await other.getByRole('button', { name: '校验并导入' }).click();
+  await expect(other.getByText('已导入「另一页导入的」')).toBeVisible();
+  await expect(dialog.getByRole('option')).toHaveCount(2);
+  await expect(dialog.getByRole('option', { name: /^新包（叠在 iztro-docs 上）/ })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(picker).toContainText('新包（叠在 iztro-docs 上）');
+});

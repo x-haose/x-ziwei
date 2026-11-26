@@ -49,6 +49,8 @@ export function KnowledgeMark({
   const current = 0;
   const grid: GridOption<number>[] = options.map((o, i) => ({
     key: i,
+    // 列表在打开期间会随别的标签页变（导入、删包），键用组合本身（包标识的序列）与项一一对应。
+    stableKey: o.layers.join('+'),
     text: o.label,
     label: fmt(t.chart.knowOption, { label: o.label, kind: o.kind }),
     content: (

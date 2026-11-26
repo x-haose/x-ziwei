@@ -512,6 +512,8 @@ test('生效组合里有一个不选宫的主题：照常列出，阅读写明�
   await openPage(page);
   await paste(page, { schema: 1, id: 'notopic', version: '2026-11-20', language: 'zh-CN', extends: 'iztro-docs', source: { name: '空主题' }, topics: { aaa: { title: '空主题' } } });
   await page.getByRole('button', { name: '加入生效组合', exact: true }).click();
+  // 写库完成后再跳转：跳转会中止还没完成的 IndexedDB 事务。
+  await expect(page.locator('[aria-live="polite"]').filter({ hasText: '已导入' })).toContainText('已在生效');
   await page.goto(SAMPLE);
   await page.getByRole('group', { name: '主题' }).getByRole('button', { name: '空主题' }).click();
   const read = page.getByRole('region', { name: '用这张盘' });

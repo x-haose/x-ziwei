@@ -196,6 +196,8 @@ function WriteBody({ kernel, lib }: { kernel: Kernel; lib: Extract<LibraryState,
               autoFocus
               options={intos.map((x) => ({
                 key: intoKey(x.into),
+                // 列表在打开期间会随别的标签页变（导入、存包），键要与项一一对应；包标识与草稿标识不含生辰。
+                stableKey: intoKey(x.into),
                 text: x.label,
                 content: (
                   <>
