@@ -113,6 +113,7 @@
 
 - OpenAI 审核通过（0.3.0 上架）后合并分支 `deps/x-iztro-0.9`：服务端升 x-iztro 0.9.0、知识包加载时逐条报问题（错误体带 `issues`）、stdio 握手后退出的修复、`site/content` 的知识包 / 自托管 / 接口说明。合并即触发 Dokploy 部署（约 6 分钟）；部署后用 HTTP 与 MCP 各验一次默认包与一份有问题的包（错误里列出全部 `issues`，`retryable` 为 false）。
 - `ziwei.x-haose.com` 从 Vercel 项目 `x-ziwei` 切到正式站 Worker `x-ziwei-web`（构建命令 `pnpm build:production`，部署命令 `pnpm deploy:production`）。
+- 知识包格式页（`site/content/knowledge.mdx` 与 `knowledge.en.mdx` 第 54、75 行附近，网页的 `/{lang}/knowledge/format` 也读它）分开说明两套规则：插件服务端是 `extends` 为 `iztro-docs` 时合并到默认包上，否则独立使用；网页是同级的有序叠放，`extends` 只作建议。在此之前测试站的格式页与网页行为有出入。
 - 下线 `site/` 与它的 Vercel 项目：`site/content` 搬进 `apps/web` 并改内容源路径，AGENTS.md「站点」一节随之改写。
 - 隐私政策（`privacy.mdx` 与 `privacy.en.mdx`，改生效日期）按渠道分述，草稿：
   - 适用范围：公开服务 `https://ziwei-mcp.x-haose.com`（插件、MCP 与 HTTP 接口）和网站 `https://ziwei.x-haose.com`。
