@@ -73,6 +73,7 @@ export function CodeBlock({ code, lang, title }: { code: string; lang: string; t
   );
 }
 
+/** 标题带锚点 id（内容页的目录与站内锚点用）。 */
 function heading(level: 1 | 2 | 3 | 4) {
   const Tag = `h${level}` as const;
   return function Heading({ node, children }: { node?: HastNode | undefined; children?: ReactNode }) {
@@ -81,7 +82,18 @@ function heading(level: 1 | 2 | 3 | 4) {
   };
 }
 
-const components: Components = {
+/**
+ * 不带 id 的标题：提示词、对话的回答里的标题含生辰（「命盘 2000-8-16 寅时 女」）或模型照抄的生辰，
+ * 生辰不能进元素 id（统计脚本会上报元素选择器）；这些地方不需要锚点。
+ */
+function plainHeading(level: 1 | 2 | 3 | 4) {
+  const Tag = `h${level}` as const;
+  return function Heading({ children }: { children?: ReactNode }) {
+    return <Tag>{children}</Tag>;
+  };
+}
+
+const proseComponents: Components = {
   h1: heading(1),
   h2: heading(2),
   h3: heading(3),
@@ -135,9 +147,12 @@ const components: Components = {
   },
 };
 
+const plainComponents: Components = { ...proseComponents, h1: plainHeading(1), h2: plainHeading(2), h3: plainHeading(3), h4: plainHeading(4) };
+
 /**
  * Markdown 渲染：提示词预览、对话的回答与内容页共用同一套元素映射，样式按 `variant` 区分
  * （`preview` 见设计规范第 13 节，`chat` 见 19.4，`full` 见 21.5，`prose` 见第 14 节）。
+ * 只有 `prose` 的标题带锚点 id，其余的不带。
  * 输入先经 remend 补全未闭合的标记，流式输出途中的半截文本也能正常显示。
  */
 export function Markdown({ source, variant }: { source: string; variant: 'preview' | 'chat' | 'full' | 'prose' }) {
@@ -148,7 +163,7 @@ export function Markdown({ source, variant }: { source: string; variant: 'previe
         allowedElements={ALLOWED}
         unwrapDisallowed
         skipHtml
-        components={components}
+        components={variant === 'prose' ? proseComponents : plainComponents}
       >
         {remend(source)}
       </ReactMarkdown>
