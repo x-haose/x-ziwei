@@ -1,8 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as kernel from 'x-iztro';
 import { MESSAGES } from '../i18n/messages';
-import { type AssistantMessage, type ChatMessage, type Conversation, estimateTokens, modelHistory, settled, titleOf } from './conversation';
-import { classify, kindOf, toolsUnsupported } from './errors';
+import { type AssistantMessage, type ChatMessage, type Conversation, estimateTokens, modelHistory, settled, shorterFrom, titleOf } from './conversation';
+import { classify, contextExceeded, kindOf, toolsUnsupported } from './errors';
 import { checkBaseUrl, defaultModel, maskKey, parseModels } from './providers';
 import { TOOLS, type ToolContext, clockToTimeIndex, describeCall, parseTarget } from './tools';
 
@@ -27,6 +28,15 @@ describe('工具', () => {
     expect(run('ziwei_get_decadal_overview', {})).toBe(ctx.chart.decadalListToText());
     expect(run('ziwei_get_yearly_overview', { from_year: 2026, to_year: 2030 })).toBe(ctx.chart.yearlyOverviewToText(2026, 2030));
     expect(run('ziwei_get_topic_palaces', { topic: 'career' })).toBe(ctx.chart.topicToText('career', { knowledge: ctx.pack, knowledgeDepth: 'summary' }));
+  });
+
+  it('运限与服务端同目标的返回逐字一致（年、年加月、日期、日期加时辰）', () => {
+    // 金标是同一版本内核（x-iztro 0.9.0）的服务端 POST /v1/horoscope 对同一生辰的返回，生成方式见 tests/fixtures/horoscope/README.md。
+    const golden = (name: string) => readFileSync(new URL(`../../../../tests/fixtures/horoscope/${name}.md`, import.meta.url), 'utf8');
+    expect(run('ziwei_get_horoscope', { target: { year: 2026 } })).toBe(golden('year'));
+    expect(run('ziwei_get_horoscope', { target: { year: 2026, month: 7 } })).toBe(golden('month'));
+    expect(run('ziwei_get_horoscope', { target: { date: '2026-11-26' } })).toBe(golden('day'));
+    expect(run('ziwei_get_horoscope', { target: { date: '2026-11-26', clock: '23:10' } })).toBe(golden('hour'));
   });
 
   it('知识包条目与目录按标识取原文，标识不认识时整次失败', () => {
@@ -103,6 +113,14 @@ describe('发给模型的历史', () => {
     expect(h.turns.at(-1)!.content).toMatch(/最后一问$/);
   });
 
+  it('sendFrom 之前的不发；「较早的消息不再发」从仍发送的问题的中间一问起，只剩一问时没有可少发的', () => {
+    const msgs = [user('1', '甲'), answer('2', '答甲'), user('3', '乙'), answer('4', '答乙'), user('5', '丙'), answer('6', '答丙'), user('7', '丁')];
+    expect(modelHistory(msgs, 1e9, 4)).toMatchObject({ firstSent: 4, dropped: 4 });
+    expect(shorterFrom(msgs, 1e9, 0)).toBe(4);
+    expect(shorterFrom(msgs, 1e9, 4)).toBe(6);
+    expect(shorterFrom(msgs, 1e9, 6)).toBeNull();
+  });
+
   it('粗估 token：汉字按 1 个，其余 4 个字符 1 个', () => {
     expect(estimateTokens('紫微abcd')).toBe(3);
   });
@@ -144,12 +162,18 @@ describe('错误分类', () => {
     expect(kindOf(503, null)).toBe('other');
     expect(kindOf(null, null)).toBe('network');
     expect(toolsUnsupported('model does not support function calling')).toBe(true);
+    expect(kindOf(400, "This model's maximum context length is 131072 tokens. However, you requested 140000 tokens.")).toBe('context');
+    expect(kindOf(400, 'prompt is too long: 210000 tokens > 200000 maximum')).toBe('context');
+    expect(kindOf(400, 'input length and `max_tokens` exceed context limit: 190000 + 32000 > 200000')).toBe('context');
+    expect(contextExceeded('Invalid value for tool_choice')).toBe(false);
   });
 
   it('厂商错误体里的说明原文；浏览器里的网络失败是 TypeError', () => {
     const apiError = Object.assign(new Error('bad'), { statusCode: 401, responseBody: '{"error":{"message":"Incorrect API key"}}' });
     expect(classify(apiError)).toEqual({ kind: 'auth', status: 401, detail: 'Incorrect API key' });
     expect(classify(new TypeError('Failed to fetch'))).toMatchObject({ kind: 'network', status: null });
+    const coded = Object.assign(new Error('bad'), { statusCode: 400, responseBody: '{"error":{"message":"Too long.","code":"context_length_exceeded"}}' });
+    expect(classify(coded)).toMatchObject({ kind: 'context', detail: 'Too long.' });
     expect(classify(new Error('stream broke'))).toEqual({ kind: 'other', status: null, detail: 'stream broke' });
   });
 });

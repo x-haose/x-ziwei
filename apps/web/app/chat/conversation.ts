@@ -5,8 +5,11 @@ import type { ChartFocus } from './tools';
  * 对话的数据形状与纯计算：标题、发给模型的历史与按上下文长度截断。存在本机（见 `store.ts`），不上传。
  */
 
-/** 出错的种类，决定错误块的标题与动作（设计规范 19.8）。`page`：本页自己的缺陷（工具实现或内核内部错误），不是厂商的问题。 */
-export type ChatErrorKind = 'auth' | 'rate' | 'network' | 'tools' | 'other' | 'page';
+/**
+ * 出错的种类，决定错误块的标题与动作（设计规范 19.8）。`context`：发给模型的内容超过了它的上下文长度；
+ * `empty`：一轮结束了却没有正文（查工具用满了步数等）；`page`：本页自己的缺陷（工具实现或内核内部错误），不是厂商的问题。
+ */
+export type ChatErrorKind = 'auth' | 'rate' | 'network' | 'tools' | 'context' | 'empty' | 'other' | 'page';
 
 /** `status` 为 HTTP 状态码（网络层失败时为 null）；`detail` 为厂商返回的说明原文（没有时为 null）。 */
 export interface ChatError {
@@ -66,6 +69,11 @@ export interface Conversation {
   messages: ChatMessage[];
   /** 不用工具继续（设计规范 19.10）：盘面以文本附在每次提问前。换模型后退出。 */
   noTools: boolean;
+  /**
+   * 下标小于它的消息不再发给模型（厂商报上下文超长、用户选了「较早的消息不再发给模型」之后前移）；缺省为 0。
+   * 按长度估算的截断在它之后另算。
+   */
+  sendFrom?: number;
 }
 
 /** 标题取第一问的前 24 字（按字计，不拆代理对）。 */
@@ -99,7 +107,12 @@ export function estimateTokens(text: string): number {
 
 /** 列表接口没给上下文长度时按这么长估（token）。 */
 export const DEFAULT_CONTEXT = 64_000;
-/** 留给回答与本轮工具结果的余量（token）。 */
+/**
+ * 留给回答与本轮工具结果的余量（token）。按本仓库的示例盘（x-iztro 0.9.0，`estimateTokens` 粗估）量过：本命盘只有事实约 1.9k、
+ * 附摘要释义约 6.3k、附全文释义约 17.9k；一年运限连流月一览附全文释义约 8.5k；主题选宫附全文释义约 8.7k。
+ * 24000 够一轮里常见的组合（本命附摘要、当年运限附全文、一个主题，约 17k）加一段几千 token 的回答；
+ * 同一轮里本命与运限都要全文释义时（约 26k）会超出，厂商报上下文超长时由用户选择少发较早的消息再试（`ChatErrorKind` 的 `context`）。
+ */
 export const RESERVE = 24_000;
 
 /**
@@ -108,11 +121,17 @@ export const RESERVE = 24_000;
  *
  * - 只发文本：用户消息带上下文行；回答只发正文，查过的工具结果不重发（模型需要时再查）。
  * - 出错的回答连同它的问题都不发；没有正文的回答（停止得太早）不发。最后一问总是发。
- * - 估算的长度超过 `budget` 时从最早的消息起不再发送，最后一问除外。没有截断时 `firstSent`、`dropped` 为 0。
+ * - 下标小于 `from` 的不发（见 `Conversation.sendFrom`）。
+ * - 估算的长度超过 `budget` 时从最早的消息起不再发送，最后一问除外。两者都没有截掉什么时 `firstSent`、`dropped` 为 0。
  */
-export function modelHistory(messages: readonly ChatMessage[], budget: number): { turns: ModelTurn[]; firstSent: number; dropped: number } {
+export function modelHistory(
+  messages: readonly ChatMessage[],
+  budget: number,
+  from = 0,
+): { turns: ModelTurn[]; firstSent: number; dropped: number } {
   const keep: { index: number; turn: ModelTurn }[] = [];
   messages.forEach((m, i) => {
+    if (i < from && i < messages.length - 1) return;
     const last = i === messages.length - 1;
     if (m.role === 'user') {
       const answer = messages[i + 1];
@@ -132,7 +151,7 @@ export function modelHistory(messages: readonly ChatMessage[], budget: number): 
   while (start < keep.length - 1 && keep[start]!.turn.role === 'assistant') start++;
   const sent = keep.slice(start);
   // 没有截断时（含只是略过了出错的问答）不画分隔线。
-  const firstSent = start > 0 ? (sent[0]?.index ?? 0) : 0;
+  const firstSent = start > 0 || from > 0 ? (sent[0]?.index ?? 0) : 0;
   return { turns: sent.map((k) => k.turn), firstSent, dropped: firstSent };
 }
 
@@ -147,4 +166,16 @@ export function settled(c: Conversation): Conversation {
         : m,
     ),
   };
+}
+
+/**
+ * 「较早的消息不再发给模型」之后的 `sendFrom`：在当前仍会发送的问题里，从中间那一问起发（只剩最后一问时只发它）。
+ * `messages` 的最后一条是要回答的问题；当前只发它一条、没有可以再少发的时为 null。
+ */
+export function shorterFrom(messages: readonly ChatMessage[], budget: number, from: number): number | null {
+  const { firstSent } = modelHistory(messages, budget, from);
+  const last = messages.length - 1;
+  const users = messages.map((m, i) => (m.role === 'user' && i >= firstSent ? i : -1)).filter((i) => i >= 0);
+  if (users.length < 2 || users.at(-1) !== last) return null;
+  return users[Math.ceil((users.length - 1) / 2)]!;
 }

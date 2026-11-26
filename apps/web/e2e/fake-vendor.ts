@@ -13,6 +13,8 @@ import type { AddressInfo } from 'node:net';
  * - 最后一问里的标记：`[401]` `[429]` `[500]` 对应状态码；`[cors]` 响应不带跨域头（浏览器里是网络错误）；
  *   `[notools]` 在请求带工具时报「不支持工具调用」；`[slow]` 慢慢地流出 30 段；`[table]` 回答里带一张宽表；
  *   `[image]` 回答里带一张站外图片与一段原始 HTML（网页不该加载、不该渲染）；
+ *   `[empty]` 正常结束但没有正文；`[loop]` 带工具时每一步都再查一次；
+ *   `[toolong]` 请求里不止一个问题时报上下文超长（OpenAI 的错误码与说明，Anthropic 协议用它的说明），只剩一问时正常回答；
  *   `[topic]` 先查主题选宫；`[plain]` 不查工具直接回答。
  * - 其余：请求带工具且还没有工具结果时，先调 `ziwei_get_horoscope`（2026 年），拿到结果后流式回答。
  */
@@ -77,7 +79,7 @@ function sse(res: ServerResponse, cors: boolean): (data: unknown, event?: string
 function plan(text: string, body: Record<string, unknown>) {
   const tools = Array.isArray(body.tools) && body.tools.length > 0;
   const call =
-    tools && !hasToolResult(body) && !text.includes('[plain]')
+    tools && (!hasToolResult(body) || text.includes('[loop]')) && !text.includes('[plain]')
       ? text.includes('[topic]')
         ? { name: 'ziwei_get_topic_palaces', input: { topic: 'career' } }
         : { name: 'ziwei_get_horoscope', input: { target: { year: 2026 } } }
@@ -86,7 +88,7 @@ function plan(text: string, body: Record<string, unknown>) {
   const pieces = slow
     ? Array.from({ length: 30 }, (_, i) => `第 ${i + 1} 段。`)
     : [...ANSWER, ...(text.includes('[table]') ? [TABLE] : []), ...(text.includes('[image]') ? [IMAGE] : [])];
-  return { call, pieces, gap: slow ? 150 : 15 };
+  return { call, pieces: text.includes('[empty]') ? [] : pieces, gap: slow ? 150 : 15 };
 }
 
 async function openaiChat(res: ServerResponse, body: Record<string, unknown>, text: string, cors: boolean): Promise<void> {
@@ -179,6 +181,14 @@ export async function startFakeVendor(opts: { port?: number; tls?: { key: string
     if (text.includes('[401]')) return json(res, 401, { error: { message: 'Authentication Fails', type: 'authentication_error' } });
     if (text.includes('[429]')) return json(res, 429, { error: { message: 'Rate limit reached for requests', type: 'rate_limit_error' } });
     if (text.includes('[500]')) return json(res, 500, { error: { message: 'The server had an error while processing your request', type: 'server_error' } });
+    const questions = ((body.messages as { role: string }[] | undefined) ?? []).filter((m) => m.role === 'user').length;
+    if (text.includes('[toolong]') && questions > 1) {
+      return path.endsWith('/messages')
+        ? json(res, 400, { type: 'error', error: { type: 'invalid_request_error', message: 'prompt is too long: 9000 tokens > 3000 maximum' } })
+        : json(res, 400, {
+            error: { message: "This model's maximum context length is 3000 tokens. However, your messages resulted in 9000 tokens.", type: 'invalid_request_error', code: 'context_length_exceeded' },
+          });
+    }
     if (text.includes('[notools]') && Array.isArray(body.tools)) {
       return json(res, 400, { error: { message: `${String(body.model)} does not support tools`, type: 'invalid_request_error' } });
     }

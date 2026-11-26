@@ -207,7 +207,8 @@ export const TOOLS: readonly ToolSpec[] = [
         case 'month':
           return chart.horoscopeOfMonth(target.year, target.month).toText(opts);
         case 'day':
-          return chart.horoscope(target.date).toText(opts);
+          // 按日期查询时内核的精度是流时（代表时辰由内核挑），问到哪一天就只写到流日，与服务端一致。
+          return chart.horoscope(target.date).toText({ ...opts, through: 'daily' });
         case 'hour':
           return chart.horoscope(target.date, target.hour as TimeIndex).toText(opts);
       }

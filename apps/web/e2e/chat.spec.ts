@@ -406,3 +406,35 @@ test('全站的 CSP 一致（只有内联脚本与样式的哈希不同）：con
     expect(directives).toContain(d);
   }
 });
+
+test('上下文超长：错误块说明并由用户选择少发较早的消息再试，记录里画出分隔线', async ({ page }) => {
+  const now = Date.now();
+  const messages = [
+    { id: 'u0', role: 'user', text: '早先的问题', context: '上下文', at: now },
+    { id: 'a1', role: 'assistant', provider: 'deepseek', service: 'DeepSeek', model: 'deepseek-flash', text: '早先的回答', calls: [], status: 'done', error: null, at: now },
+  ];
+  await seed(page, {
+    provider: 'deepseek',
+    key: 'sk-good',
+    conversations: [{ id: 'ctx', title: '超长', chart: 'cal=solar&d=2000-8-16&t=2&g=f', birth: '2000-8-16 寅时 女', createdAt: now, updatedAt: now, messages, noTools: false }],
+  });
+  await openChat(page);
+  await page.getByRole('button', { name: '记录' }).click();
+  await page.getByRole('button', { name: /^超长/ }).click();
+  await ask(page, '接着问 [toolong][plain]');
+  const alert = page.getByRole('alert');
+  await expect(alert).toContainText('对话太长，DeepSeek 放不下（400）');
+  await alert.getByRole('button', { name: '较早的消息不再发给模型，重试' }).click();
+  await expect(answer(page)).toContainText('自己拿主意的力量很足。');
+  await expect(answer(page)).toContainText('以上 2 条不再发给模型，仍存在本机');
+  await expect(answer(page)).toContainText('早先的问题');
+});
+
+test('一轮结束却没有正文：说明查了几次仍没回答，可以重试', async ({ page }) => {
+  await seed(page, { provider: 'deepseek', key: 'sk-good' });
+  await openChat(page);
+  await ask(page, '空的 [empty]');
+  const alert = page.getByRole('alert');
+  await expect(alert).toContainText('查了 1 次仍没给出回答');
+  await expect(alert.getByRole('button', { name: '重试' })).toBeVisible();
+});

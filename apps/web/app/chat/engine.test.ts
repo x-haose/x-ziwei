@@ -74,6 +74,27 @@ describe('一轮回答（真实 HTTP 与 SSE）', () => {
     expect((await turn('[500]').done).error).toMatchObject({ kind: 'other', status: 500, detail: 'The server had an error while processing your request' });
   });
 
+  it('上下文超长单独归类；正常结束却没有正文按 empty 处理，查满步数也是', async () => {
+    const r = runTurn({
+      settings: settings(),
+      system: 'sys',
+      turns: [
+        { role: 'user', content: '前一问' },
+        { role: 'assistant', content: '前一答' },
+        { role: 'user', content: '[toolong]' },
+      ],
+      tools: null,
+      signal: new AbortController().signal,
+      base,
+      onUpdate: () => undefined,
+    });
+    expect((await r).error).toMatchObject({ kind: 'context', status: 400 });
+    expect((await turn('[empty][plain]').done).error).toEqual({ kind: 'empty', status: null, detail: null });
+    const loop = await turn('[loop]').done;
+    expect(loop.error?.kind).toBe('empty');
+    expect(loop.calls).toHaveLength(10);
+  });
+
   it('连不上时报 network；列表接口能问到 401 时改判为 Key 无效', async () => {
     const down = await turn('你好', { s: { baseURL: 'http://127.0.0.1:1' } }).done;
     expect(down.error).toMatchObject({ kind: 'network', status: null });

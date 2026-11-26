@@ -12,6 +12,7 @@ import {
   RESERVE,
   estimateTokens,
   modelHistory,
+  shorterFrom,
   titleOf,
 } from './conversation';
 import { instructions } from './instructions';
@@ -176,7 +177,7 @@ async function generate(conv: Conversation, deps: TurnDeps): Promise<void> {
   const { settings, t } = deps;
   const tools = !conv.noTools;
   const system = instructions(deps.lang, deps.today, tools);
-  const { turns } = modelHistory(conv.messages, historyBudget(settings, system));
+  const { turns } = modelHistory(conv.messages, historyBudget(settings, system), conv.sendFrom ?? 0);
   const last = turns.at(-1);
   if (!last || last.role !== 'user') throw new Error('对话的最后一条不是问题');
   if (!tools) turns[turns.length - 1] = { ...last, content: `<chart>${deps.chartText()}</chart>\n\n${last.content}` };
@@ -260,6 +261,17 @@ export async function editLast(conv: Conversation, text: string, deps: TurnDeps)
   if (!q || q.role !== 'user') throw new Error('对话里没有问题可改');
   const messages = [...conv.messages.slice(0, i), { ...q, text, at: Date.now() }];
   await generate({ ...conv, messages, title: i === 0 ? titleOf(text) : conv.title }, deps);
+}
+
+/**
+ * 厂商报上下文超长后，用户选了「较早的消息不再发给模型」：把 `sendFrom` 前移到当前仍发送的问题的中间一问，用同一问题重新生成。
+ * 记录里已有的分隔线随之移到新的位置。只剩最后一问可发时什么也不做（界面不给这个动作）。
+ */
+export async function retryShorter(conv: Conversation, deps: TurnDeps): Promise<void> {
+  const messages = conv.messages.at(-1)?.role === 'assistant' ? conv.messages.slice(0, -1) : conv.messages;
+  const from = shorterFrom(messages, historyBudget(deps.settings, instructions(deps.lang, deps.today, !conv.noTools)), conv.sendFrom ?? 0);
+  if (from === null) return;
+  await retry({ ...conv, sendFrom: from }, deps);
 }
 
 /** 无工具模式：盘面以文本附在提问前，用同一问题重新生成。 */

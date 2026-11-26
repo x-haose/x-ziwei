@@ -10,7 +10,7 @@ import type { Kernel, KernelState } from '../kernel/kernel';
 import { useMediaQuery } from '../lib/media';
 import { Markdown } from '../markdown/markdown';
 import * as css from './chat.css';
-import { type AssistantMessage, type ChatError, type Conversation, type UserMessage, modelHistory } from './conversation';
+import { type AssistantMessage, type ChatError, type Conversation, type UserMessage, modelHistory, shorterFrom } from './conversation';
 import { instructions } from './instructions';
 import { type ChatSettings, hostOf } from './providers';
 import { ModelPicker, SetupForm } from './setup';
@@ -24,6 +24,7 @@ import {
   editLast,
   historyBudget,
   retry,
+  retryShorter,
   selectConversation,
   send,
   setEditing,
@@ -124,6 +125,9 @@ function ErrorBlock({
   onUsePrompt,
   onSwitch,
   onNoTools,
+  onShorter,
+  onNewChat,
+  calls,
 }: {
   t: Messages;
   error: ChatError;
@@ -134,6 +138,11 @@ function ErrorBlock({
   onUsePrompt: () => void;
   onSwitch: ((model: string) => void) | null;
   onNoTools: (() => void) | null;
+  /** 上下文超长时「较早的消息不再发给模型，重试」；已没有可以少发的时为 null。 */
+  onShorter: (() => void) | null;
+  onNewChat: () => void;
+  /** 这条回答查了几次工具。 */
+  calls: number;
 }) {
   const e = t.chat.errors;
   const service = serviceName(settings, t);
@@ -202,6 +211,32 @@ function ErrorBlock({
               {e.noToolsGo}
             </button>
           )}
+        </>
+      );
+      break;
+    case 'context':
+      title = fmt(e.contextTitle, { service, status });
+      body = fmt(e.contextBody, { model });
+      actions = (
+        <>
+          {onShorter && (
+            <button type="button" className={ghost} onClick={onShorter}>
+              {e.shorter}
+            </button>
+          )}
+          <button type="button" className={ghost} onClick={onNewChat}>
+            {t.chat.newChat}
+          </button>
+        </>
+      );
+      break;
+    case 'empty':
+      title = calls > 0 ? fmt(e.emptyAfterCalls, { n: calls }) : e.emptyTitle;
+      body = e.emptyBody;
+      actions = (
+        <>
+          {retryButton}
+          {promptButton}
         </>
       );
       break;
@@ -616,7 +651,10 @@ export function ChatColumn({
       },
     );
 
-  const history = conv && chart ? modelHistory(messages, historyBudget(settings, instructions(lang, chart.today, !conv.noTools))) : null;
+  const budget = conv && chart ? historyBudget(settings, instructions(lang, chart.today, !conv.noTools)) : 0;
+  const history = conv && chart ? modelHistory(messages, budget, conv.sendFrom ?? 0) : null;
+  const pending = messages.at(-1)?.role === 'assistant' ? messages.slice(0, -1) : messages;
+  const canShorten = conv !== null && shorterFrom(pending, budget, conv.sendFrom ?? 0) !== null;
   const lastUser = messages.findLastIndex((m) => m.role === 'user');
   const lastIndex = messages.length - 1;
   const kernelLoading = kernel.status !== 'ready';
@@ -732,6 +770,9 @@ export function ChatColumn({
                     onUsePrompt={onUsePrompt}
                     onSwitch={last && !generating ? (model) => void pickModel(model) : null}
                     onNoTools={last && !generating ? () => run((d) => continueWithoutTools(conv, d)) : null}
+                    onShorter={last && !generating && canShorten ? () => run((d) => retryShorter(conv, d)) : null}
+                    onNewChat={() => selectConversation(null)}
+                    calls={m.calls.length}
                   />
                 )}
                 {!streaming && m.status !== 'error' && (

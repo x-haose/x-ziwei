@@ -5276,14 +5276,14 @@ function kpState(name){
    浏览器直连厂商；Key 只存本机；模型通过工具在浏览器里取盘面事实。
    稿件里的请求是模拟的：工具调用与回答按脚本走，错误按稿件状态注入。 */
 const PROVIDERS = {
-  deepseek: { name:'DeepSeek', host:'api.deepseek.com', models:[['deepseek-chat', true], ['deepseek-reasoner', false]] },
+  deepseek: { name:'DeepSeek', host:'api.deepseek.com', models:[['deepseek-flash', true], ['some-model', false]] },
   openai: { name:'OpenAI', host:'api.openai.com', models:[['gpt-4.1', true], ['gpt-4.1-mini', true]] },
   anthropic: { name:'Anthropic', host:'api.anthropic.com', models:[['claude-sonnet-4-5', true], ['claude-haiku-4-5', true]] },
   compat: { name:'兼容 OpenAI 的服务', host:'', models:[['qwen-plus', true]] },
 };
 const chat = {
   side: 'chat', sheet: false,
-  cfg: { provider:'deepseek', key:'', keyMask:'', savedAt:0, base:'', model:'deepseek-chat', status:'none' },  /* status: none | ok | bad401 | checking | net */
+  cfg: { provider:'deepseek', key:'', keyMask:'', savedAt:0, base:'', model:'deepseek-flash', status:'none' },  /* status: none | ok | bad401 | checking | net */
   draft: { provider:'deepseek', key:'', base:'', show:false, result:null },
   convs: [], cur: null, busy: null, nextFail: null, noTools: false, editing: null, openTools: new Set(),
 };
@@ -5648,13 +5648,13 @@ function cDone(c, q){ const kind = scriptFor(q); c.msgs.push({ id:++msgSeq, role
 function chatState(name){
   if (chat.busy){ clearTimeout(chat.busy.timer); chat.busy = null; }
   if (chat.drawer) closeDrawer(); if (chat.confirm) closeConfirm2();
-  chat.cfg = { provider:'deepseek', key:'sk-demo0000000000a3f9', keyMask:'sk-…a3f9', savedAt:Date.now(), base:'', model:'deepseek-chat', status:'ok' };
+  chat.cfg = { provider:'deepseek', key:'sk-demo0000000000a3f9', keyMask:'sk-…a3f9', savedAt:Date.now(), base:'', model:'deepseek-flash', status:'ok' };
   chat.convs = []; chat.noTools = false; chat.nextFail = null; chat.editing = null; chat.openTools = new Set(); chat.draftText = '';
   chat.side = name === 'c-prompt' ? 'prompt' : 'chat';
   const old = newConv(); cDone(old, '这张盘的命宫怎么看'); old.created = old.updated = Date.UTC(2026, 10, 20, 12);
   const old2 = newConv(); cDone(old2, '感情方面要看哪几宫'); old2.msgs[1].text = ANSWERS.soul; old2.created = old2.updated = Date.UTC(2026, 10, 18, 3);
   const c = newConv();
-  if (name === 'c-nokey'){ chat.cfg = { provider:'deepseek', key:'', keyMask:'', savedAt:0, base:'', model:'deepseek-chat', status:'none' }; chat.draft = { provider:'deepseek', key:'', base:'', show:false, result:null }; chat.convs = [c]; }
+  if (name === 'c-nokey'){ chat.cfg = { provider:'deepseek', key:'', keyMask:'', savedAt:0, base:'', model:'deepseek-flash', status:'none' }; chat.draft = { provider:'deepseek', key:'', base:'', show:false, result:null }; chat.convs = [c]; }
   if (['c-done','c-tools','c-table','c-401','c-429','c-net','c-notools','c-retry','c-kernel','c-edit','c-hist','c-gen','c-prompt'].includes(name)) cDone(c, '今年适合换工作吗');
   if (name === 'c-table'){ cDone(c, '把这几个宫列成表'); }
   if (name === 'c-long'){ for (let k = 0; k < 8; k++){ cDone(c, ['今年适合换工作吗','这张盘的命宫怎么看','把这几个宫列成表'][k % 3]); } c.cutAt = 12; }
@@ -5667,7 +5667,7 @@ function chatState(name){
     renderSide();
     if (matchMedia('(max-width:1023px)').matches && name !== 'c-prompt') openSheet(); else renderChat(true);
     const fail = { 'c-401':'bad401', 'c-429':'limit429', 'c-net':'net', 'c-notools':'notools', 'c-retry':'limit429' }[name];
-    if (name === 'c-notools'){ chat.cfg.model = 'deepseek-reasoner'; }
+    if (name === 'c-notools'){ chat.cfg.model = 'some-model'; }
     if (fail){ chat.nextFail = fail; send(name === 'c-notools' ? '流年忌星落在哪一宫' : '那明年呢'); }
     if (name === 'c-retry') setTimeout(() => { const m = curConv().msgs[curConv().msgs.length - 1]; retry(m.id); }, 900);
     if (name === 'c-gen'){ send('把这几个宫列成表'); }
@@ -5899,7 +5899,7 @@ window.addEventListener('resize', () => { if (!$('chart').hidden){ if (chat.shee
 window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (Math.abs(innerWidth - lastW) < 2 && !document.getElementById('home').hidden) return drawLeader(); lastW = innerWidth; if (!$('home').hidden) renderHome(); else if (!$('chart').hidden) renderBoard(false); }, 120); });
 applyTheme(document.documentElement.dataset.pref);
 kpLoad();
-chat.cfg = { provider:'deepseek', key:'sk-demo0000000000a3f9', keyMask:'sk-…a3f9', savedAt:Date.now(), base:'', model:'deepseek-chat', status:'ok' };
+chat.cfg = { provider:'deepseek', key:'sk-demo0000000000a3f9', keyMask:'sk-…a3f9', savedAt:Date.now(), base:'', model:'deepseek-flash', status:'ok' };
 { const c = newConv(); cDone(c, '今年适合换工作吗'); }
 if (new URLSearchParams(location.search).has('clean')) document.body.classList.add('clean');
 route();

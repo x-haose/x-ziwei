@@ -96,6 +96,9 @@ export async function runTurn(input: TurnInput): Promise<AssistantMessage> {
     status: 'stopped',
     calls: msg.calls.map((c) => (c.state === 'running' ? { ...c, state: 'skipped', ms: null } : c)),
   });
+  /** 正常结束：没有正文（查工具用满了步数，或模型最后一步什么也没说）时按出错处理，界面给出说明与重试。 */
+  const settle = (): AssistantMessage =>
+    msg.text.trim() === '' ? { ...msg, status: 'error', error: { kind: 'empty', status: null, detail: null } } : { ...msg, status: 'done' };
   const finishCall = (id: string, state: 'done' | 'failed') => {
     const t0 = started.get(id);
     update({ ...msg, calls: msg.calls.map((c) => (c.id === id ? { ...c, state, ms: t0 === undefined ? null : Math.round(performance.now() - t0) } : c)) });
@@ -145,7 +148,7 @@ export async function runTurn(input: TurnInput): Promise<AssistantMessage> {
           update(stop());
           return msg;
         case 'finish':
-          update({ ...msg, status: 'done' });
+          update(settle());
           return msg;
         default:
           break;
@@ -160,6 +163,6 @@ export async function runTurn(input: TurnInput): Promise<AssistantMessage> {
     update({ ...msg, status: 'error', error: await refine(classify(err), settings) });
     return msg;
   }
-  update(signal.aborted ? stop() : { ...msg, status: 'done' });
+  update(signal.aborted ? stop() : settle());
   return msg;
 }

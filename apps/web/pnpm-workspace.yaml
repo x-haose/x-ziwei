@@ -1,6 +1,3 @@
 allowBuilds:
   esbuild: true
   workerd: true
-minimumReleaseAgeExclude:
-  - x-iztro@0.9.0
-  - fumadocs-core@16.19.7
