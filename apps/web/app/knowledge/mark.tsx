@@ -26,6 +26,7 @@ export function KnowledgeMark({
   use,
   packs,
   defaultPack,
+  trigger,
   onPick,
 }: {
   t: Messages;
@@ -33,6 +34,8 @@ export function KnowledgeMark({
   use: Use;
   packs: readonly Pack[];
   defaultPack: Pack;
+  /** 只放选择器的触发钮（阅读页脚的「换一套释义」）：钮上的字与样式。不给时是「释义 组合名 更换」一行。 */
+  trigger?: { text: string; className: string };
   /** 选了另一种组合：由库里此刻的组合算出新组合的函数，以及新组合名。 */
   onPick: (next: (use: Use) => Use, label: string) => void;
 }) {
@@ -55,44 +58,48 @@ export function KnowledgeMark({
       </>
     ),
   }));
+  const picker = (
+    <Picker
+      label={`${t.chart.knowMark}：${label}`}
+      title={t.chart.knowPickerTitle}
+      value={trigger ? trigger.text : t.chart.knowChange}
+      placeholder={t.chart.knowChange}
+      width={340}
+      triggerClass={trigger ? trigger.className : css.change}
+      bare={!!trigger}
+    >
+      {(close) => (
+        <>
+          <OptionGrid
+            label={t.chart.knowListLabel}
+            columns={1}
+            row
+            autoFocus
+            options={grid}
+            selected={current}
+            onSelect={(i) => {
+              close();
+              const o = options[i];
+              if (!o) throw new Error(`选择器里没有第 ${i} 项`);
+              if (i !== current) onPick(() => ({ layers: o.layers }), o.label);
+            }}
+          />
+          <Link className={css.manage} href={localePath(lang, '/knowledge')}>
+            {t.chart.knowManage}
+            <PageIcon dir={1} />
+          </Link>
+        </>
+      )}
+    </Picker>
+  );
+  if (trigger) return picker;
   return (
     <div className={css.mark}>
       <span>{t.chart.knowMark}</span>
       <b className={css.name} title={label}>
         {label}
       </b>
-      <Picker
-        label={`${t.chart.knowMark}：${label}`}
-        title={t.chart.knowPickerTitle}
-        value={t.chart.knowChange}
-        placeholder={t.chart.knowChange}
-        width={340}
-        triggerClass={css.change}
-      >
-        {(close) => (
-          <>
-            <OptionGrid
-              label={t.chart.knowListLabel}
-              columns={1}
-              row
-              autoFocus
-              options={grid}
-              selected={current}
-              onSelect={(i) => {
-                close();
-                const o = options[i];
-                if (!o) throw new Error(`选择器里没有第 ${i} 项`);
-                if (i !== current) onPick(() => ({ layers: o.layers }), o.label);
-              }}
-            />
-            <Link className={css.manage} href={localePath(lang, '/knowledge')}>
-              {t.chart.knowManage}
-              <PageIcon dir={1} />
-            </Link>
-          </>
-        )}
-      </Picker>
+      {picker}
     </div>
   );
 }
-

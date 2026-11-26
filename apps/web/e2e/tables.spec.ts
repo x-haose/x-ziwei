@@ -37,20 +37,9 @@ test.use({ viewport: { width: 375, height: 800 } });
 test('375 宽：提示词全文渲染态的表格保持行列', async ({ page }) => {
   await page.goto('/zh/chart#cal=solar&d=2000-8-16&t=2&g=f');
   await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
-  await page.getByRole('tab', { name: '提示词' }).click();
-  await page.getByRole('button', { name: /^查看全文/ }).click();
-  await expect(page.getByRole('dialog', { name: '提示词全文' }).getByRole('radio', { name: '渲染' })).toBeChecked();
+  await page.getByRole('button', { name: '整张盘的完整提示词' }).click();
+  await expect(page.getByRole('dialog', { name: '整张盘的完整提示词' }).getByRole('radio', { name: '渲染' })).toBeChecked();
   await checkTables(page, '提示词全文');
-});
-
-test('375 宽：看盘的大限与流年一览保持行列，页面不横向溢出', async ({ page }) => {
-  await page.goto('/zh/chart#cal=solar&d=2000-8-16&t=2&g=f');
-  await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
-  const views = page.getByRole('radiogroup', { name: '看盘的内容' });
-  await views.getByRole('radio', { name: '大限' }).click();
-  await checkTables(page, '看盘大限');
-  await views.getByRole('radio', { name: '流年' }).click();
-  await checkTables(page, '看盘流年');
 });
 
 for (const path of ['/zh/tools', '/en/api', '/zh/knowledge/format', '/zh/self-host']) {

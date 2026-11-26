@@ -4,7 +4,7 @@ import { type Conversation, settled } from './conversation';
 import type { ChatSettings } from './providers';
 
 /**
- * 本机对话库：浏览器的 IndexedDB（库 `xzw-chat`，与知识包库分开）。`state` 存服务设置（含 API Key）与上次选的页签，
+ * 本机对话库：浏览器的 IndexedDB（库 `xzw-chat`，与知识包库分开）。`state` 存服务设置（含 API Key），
  * `conversations` 存对话。都只在这台设备的浏览器里，不上传。
  *
  * Key 存在这里是明文：同一浏览器里能读本站存储的（本站页面里运行的脚本、能打开这台设备开发者工具的人）都能读到；
@@ -13,25 +13,17 @@ import type { ChatSettings } from './providers';
  * 一段对话整段写入：同一段对话在两个标签页里同时生成时，后写完的那次为准。
  */
 
-/** 排盘页右栏的页签，按显示顺序。 */
-export const SIDE_TABS = ['read', 'chat', 'prompt'] as const;
-
-export type SideTab = (typeof SIDE_TABS)[number];
-
-const isSideTab = (v: unknown): v is SideTab => (SIDE_TABS as readonly unknown[]).includes(v);
-
 interface Schema extends DBSchema {
-  state: { key: 'settings' | 'tab'; value: ChatSettings | string };
+  state: { key: 'settings'; value: ChatSettings };
   conversations: { key: string; value: Conversation };
 }
 
 const DB_NAME = 'xzw-chat';
 const DB_VERSION = 1;
 
-/** 库里此刻的设置、页签与对话（按最后更新从新到旧）。 */
+/** 库里此刻的设置与对话（按最后更新从新到旧）。 */
 export interface ChatSnapshot {
   settings: ChatSettings | null;
-  tab: SideTab | null;
   conversations: Conversation[];
 }
 
@@ -42,16 +34,13 @@ export class ChatDb {
 
   async load(): Promise<ChatSnapshot> {
     const tx = this.db.transaction(['state', 'conversations'], 'readonly');
-    const [settings, tab, conversations] = await Promise.all([
+    const [settings, conversations] = await Promise.all([
       tx.objectStore('state').get('settings'),
-      tx.objectStore('state').get('tab'),
       tx.objectStore('conversations').getAll(),
       tx.done,
     ]);
     return {
-      settings: (settings as ChatSettings | undefined) ?? null,
-      // 存的页签以后可能不再有（页签改名或去掉）：认不出就当没存过。
-      tab: isSideTab(tab) ? tab : null,
+      settings: settings ?? null,
       conversations: conversations.map(settled).sort((a, b) => b.updatedAt - a.updatedAt),
     };
   }
@@ -71,10 +60,6 @@ export class ChatDb {
   /** 存服务设置；null 为删除 Key 与设置。 */
   saveSettings(settings: ChatSettings | null): Promise<ChatSnapshot> {
     return this.write((tx) => (settings ? tx.objectStore('state').put(settings, 'settings') : tx.objectStore('state').delete('settings')));
-  }
-
-  saveTab(tab: SideTab): Promise<ChatSnapshot> {
-    return this.write((tx) => tx.objectStore('state').put(tab, 'tab'));
   }
 
   putConversation(c: Conversation): Promise<ChatSnapshot> {

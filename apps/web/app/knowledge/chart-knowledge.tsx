@@ -77,13 +77,14 @@ export function libraryNote(lib: LibraryState, t: Messages): string | null {
   return null;
 }
 
-/** 提示词区的释义标记，本机包库读取失败时下方写明原因。`onPick` 收到算新组合的函数与新组合名。 */
+/** 释义标记（对话面板里）或阅读页脚的「换一套释义」；标记形式在本机包库读取失败时下方写明原因。`onPick` 收到算新组合的函数与新组合名。 */
 export function ChartKnowledgeMark({
   t,
   lang,
   kernel,
   lib,
   broken,
+  trigger,
   onPick,
 }: {
   t: Messages;
@@ -91,12 +92,15 @@ export function ChartKnowledgeMark({
   kernel: Kernel;
   lib: LibraryState;
   broken: ReadonlyMap<string, KnowledgeIssue[]>;
+  /** 只放「换一套释义」触发钮（阅读页脚）；暂用默认包的说明由调用方按 `libraryNote` 另写。 */
+  trigger?: { text: string; className: string };
   onPick: (next: (use: Use) => Use, label: string) => void;
 }) {
   const def = defaultPackInfo(kernel);
   const note = libraryNote(lib, t);
   const use = lib.status === 'ready' ? withoutPacks(lib.use, broken.keys()) : DEFAULT_USE;
   const packs = lib.status === 'ready' ? lib.packs.filter((p) => !broken.has(p.id)) : [];
+  if (trigger) return <KnowledgeMark t={t} lang={lang} use={use} packs={packs} defaultPack={def} trigger={trigger} onPick={onPick} />;
   return (
     <div className={css.area}>
       <KnowledgeMark

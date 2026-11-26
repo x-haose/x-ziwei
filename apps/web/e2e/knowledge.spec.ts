@@ -210,6 +210,8 @@ test('独立的新包可以单独生效，也能与默认包任意顺序叠放�
 
   await page.goto(SAMPLE);
   await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
+  // 这套组合里没有主题：阅读写明原因，页脚照常可用。
+  await expect(page.getByRole('region', { name: '用这张盘' }).getByRole('heading', { name: '这套释义里没有主题' })).toBeVisible();
   let preview = await openPromptRaw(page);
   await expect(preview).toContainText('门内又说紫微。');
   await expect(preview).toContainText('释义摘自知识包 school 2025-03-01 + school-notes 2026-11-20');
@@ -385,7 +387,7 @@ test('别的标签页开着旧版本的库：提示关掉它们，排盘页提�
   const preview = await openPromptRaw(page);
   await expect(preview).toContainText('释义摘自知识包 iztro-docs 2026-08-19');
   await closePrompt(page);
-  await expect(page.getByRole('button', { name: '复制提示词' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: '整张盘的完整提示词' })).toBeEnabled();
 
   const other = await context.newPage();
   await other.goto('/zh/knowledge');

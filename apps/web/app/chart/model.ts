@@ -105,22 +105,18 @@ export interface LayerSelection {
   month: MonthKey;
 }
 
-/** 当前层及其之上的各层（本命不算一层）：大限 → 流年 → 流月。 */
-export function activeLayers(chart: Astrolabe, sel: LayerSelection): LayerView[] {
-  const out: LayerView[] = [];
-  if (sel.layer === 'natal') return out;
-  const decadal = chart.decadalList()[sel.decadal];
-  if (!decadal) throw new Error(`大限序号越界：${sel.decadal}`);
-  out.push(layerOf('decadal', decadal));
-  if (sel.layer === 'decadal') return out;
-  out.push(layerOf('yearly', chart.horoscopeOfYear(sel.year).yearly));
-  if (sel.layer === 'yearly') return out;
-  const month = chart
-    .monthlyList(sel.year)
-    .find((m) => m.month === sel.month.month && m.part === sel.month.part);
+/** 所选的那一层（设计规范 21.3：盘上只叠这一层）；本命为 null。 */
+export function selectedLayer(chart: Astrolabe, sel: LayerSelection): LayerView | null {
+  if (sel.layer === 'natal') return null;
+  if (sel.layer === 'decadal') {
+    const decadal = chart.decadalList()[sel.decadal];
+    if (!decadal) throw new Error(`大限序号越界：${sel.decadal}`);
+    return layerOf('decadal', decadal);
+  }
+  if (sel.layer === 'yearly') return layerOf('yearly', chart.horoscopeOfYear(sel.year).yearly);
+  const month = chart.monthlyList(sel.year).find((m) => m.month === sel.month.month && m.part === sel.month.part);
   if (!month) throw new Error(`农历 ${sel.year} 年没有这一段流月：${sel.month.month} ${sel.month.part}`);
-  out.push(layerOf('monthly', month));
-  return out;
+  return layerOf('monthly', month);
 }
 
 function starView(star: Star, layers: readonly LayerView[], hua: readonly string[]): StarView {

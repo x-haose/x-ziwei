@@ -407,8 +407,10 @@ export interface BoardProps {
   /** 中宫的内容：盘面基本信息，或空、加载、出错状态。紧凑盘只放更少的信息，所以按密度给出。 */
   centre: (density: Density) => ReactNode;
   ring: RingMode;
-  /** 选中宫的三方四正 [本宫, 对宫, 三合, 三合]（宫位索引）；不选为 null。 */
+  /** 选中宫的三方四正 [本宫, 对宫, 三合, 三合]（宫位索引），画星官连线；不选为 null。 */
   surround: readonly [number, number, number, number] | null;
+  /** 铺底色的宫（选中宫除外）；不给时铺选中宫的三方四正。 */
+  highlight?: readonly number[];
   /** 当前大限所在宫（页脚岁数标强调色）；没有为 null。 */
   nowDecadal: number | null;
   /** 点宫时调用；不给时宫格不可点（首页的示例盘）。 */
@@ -426,7 +428,7 @@ export interface BoardProps {
  * 命盘（设计规范第 5–7 节）：Grid 排格子与文字，SVG 画外圈刻度与星官连线。
  * 密度按实测格宽定；每次画盘后逐宫检查重叠并按顺序收起。
  */
-export function Board({ palaces, layers, centre, ring, surround, nowDecadal, onSelect, cellLabels, drawKey, className, rootRef }: BoardProps) {
+export function Board({ palaces, layers, centre, ring, surround, highlight, nowDecadal, onSelect, cellLabels, drawKey, className, rootRef }: BoardProps) {
   const own = useRef<HTMLDivElement>(null);
   const ref = rootRef ?? own;
   const gridRef = useRef<HTMLDivElement>(null);
@@ -453,6 +455,7 @@ export function Board({ palaces, layers, centre, ring, surround, nowDecadal, onS
   });
 
   const selected = surround?.[0] ?? null;
+  const shaded = highlight ?? surround ?? [];
   const act = layers.at(-1);
   const names = palaces ? (act ? act.names : palaces.map((p) => p.name)) : null;
 
@@ -476,7 +479,7 @@ export function Board({ palaces, layers, centre, ring, surround, nowDecadal, onS
                   className={css.cell}
                   data-index={p.index}
                   data-sel={selected === p.index ? '' : undefined}
-                  data-rel={surround && surround.includes(p.index) && selected !== p.index ? '' : undefined}
+                  data-rel={shaded.includes(p.index) && selected !== p.index ? '' : undefined}
                   data-now={nowDecadal === p.index ? '' : undefined}
                   style={{ gridArea: `${p.cell[0] + 1} / ${p.cell[1] + 1}` }}
                 >

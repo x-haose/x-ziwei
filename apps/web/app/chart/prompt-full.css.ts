@@ -2,7 +2,7 @@ import { globalStyle, style } from '@vanilla-extract/css';
 import { media } from '../styles/media';
 import { color, font, size, space, stroke } from '../styles/tokens.css';
 
-/** 提示词全文（设计规范 21.5）：全屏阅读视图。 */
+/** 提示词全文（设计规范 21.6）：全屏阅读视图。 */
 
 const hair = (c: string) => `${stroke.hair} solid ${c}`;
 

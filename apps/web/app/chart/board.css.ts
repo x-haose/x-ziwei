@@ -37,7 +37,7 @@ export const grid = style({
 });
 
 /**
- * 宫格。状态用 data 属性：`data-sel` 选中、`data-rel` 三方四正其余三宫、`data-now` 当前大限所在宫；
+ * 宫格。状态用 data 属性：`data-sel` 选中、`data-rel` 铺底色的宫（阅读这一步看的其他宫，缺省为三方四正其余三宫）、`data-now` 当前大限所在宫；
  * `data-fold` 是宫内收起的级数（见 `board.tsx` 的收起顺序）。
  */
 export const cell = style({

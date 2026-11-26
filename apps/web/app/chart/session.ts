@@ -7,11 +7,11 @@ import {
   type LayerKind,
   type LayerSelection,
   type MonthKey,
-  activeLayers,
   decadalOfAge,
   huaTexts,
   nominalAge,
   palaceViews,
+  selectedLayer,
   surround,
   yearRange,
 } from './model';
@@ -68,17 +68,16 @@ function monthIn(chart: Astrolabe, year: number, want: MonthKey): MonthKey {
 }
 
 /**
- * 打开一张盘时的初始选择：今天落在可选流年范围内就停在今年的流年，否则停在本命。
+ * 打开一张盘时的初始选择（设计规范 21.3）：停在本命；大限、流年预先放在今天（超出可选范围时取最近的一端），
  * 流月取今天所在的那一段。
  */
 export function initialSelection(chart: Astrolabe, today: Today): LayerSelection {
   const [from, to] = yearRange(chart);
   const year = Math.min(Math.max(today.year, from), to);
-  const inRange = today.year >= from && today.year <= to;
   const decadal = decadalOfAge(chart, nominalAge(chart, year));
   if (decadal < 0) throw new Error(`流年 ${year} 不在任何大限内`);
   return {
-    layer: inRange ? 'yearly' : 'natal',
+    layer: 'natal',
     decadal,
     year,
     month: monthIn(chart, year, monthKeyOf(today.month, today.leap, today.day)),
@@ -87,7 +86,7 @@ export function initialSelection(chart: Astrolabe, today: Today): LayerSelection
 
 /** 某层的命宫宫位索引；本命为本命命宫。 */
 function soulOf(chart: Astrolabe, sel: LayerSelection): number {
-  const act = activeLayers(chart, sel).at(-1);
+  const act = selectedLayer(chart, sel);
   if (act) return act.soul;
   const soul = chart.palace('soulPalace');
   if (!soul) throw new Error('盘上没有命宫');
@@ -103,7 +102,8 @@ export function useChartView(kernel: Kernel, chart: Astrolabe, today: Today) {
   const [sel, setSel] = useState<LayerSelection>(() => initialSelection(chart, today));
   const [palace, setPalace] = useState<number>(() => soulOf(chart, initialSelection(chart, today)));
   const hua = useMemo(() => huaTexts(kernel), [kernel]);
-  const layers = useMemo(() => activeLayers(chart, sel), [chart, sel]);
+  const layer = useMemo(() => selectedLayer(chart, sel), [chart, sel]);
+  const layers = useMemo(() => (layer ? [layer] : []), [layer]);
   const palaces = useMemo(() => palaceViews(chart, layers, hua), [chart, layers, hua]);
   const set = useMemo(() => surround(chart, palace), [chart, palace]);
 
@@ -115,6 +115,7 @@ export function useChartView(kernel: Kernel, chart: Astrolabe, today: Today) {
   return {
     sel,
     palace,
+    layer,
     layers,
     palaces,
     surround: set,

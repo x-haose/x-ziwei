@@ -6,7 +6,7 @@ import { CaretIcon, CloseIcon } from '../components/icons';
 import { useToast } from '../components/toast';
 import { HTML_LANG, type Lang } from '../i18n/lang';
 import { fmt, type Messages } from '../i18n/messages';
-import type { Kernel, KernelState } from '../kernel/kernel';
+import type { Kernel } from '../kernel/kernel';
 import { useMediaQuery } from '../lib/media';
 import { Markdown } from '../markdown/markdown';
 import * as css from './chat.css';
@@ -518,13 +518,11 @@ function autosize(el: HTMLTextAreaElement | null): void {
 /**
  * 对话栏（设计规范 19.3–19.12）：工具行、释义标记、上下文行、对话记录、常驻说明、输入框与费用说明。
  * 没有 Key 时整栏是设置表单。`inSheet` 为全屏面板里的那一份：工具行不重复「新对话」「记录」（在面板头部）。
- * `chart` 为 null 时（未排盘、内核加载中）输入不可用。
  */
 export function ChatColumn({
   t,
   lang,
   chart,
-  kernel,
   mark,
   inSheet,
   drawer,
@@ -534,8 +532,7 @@ export function ChatColumn({
 }: {
   t: Messages;
   lang: Lang;
-  chart: ChatChart | null;
-  kernel: KernelState;
+  chart: ChatChart;
   mark: ReactNode;
   inSheet: boolean;
   drawer: DrawerKind;
@@ -555,10 +552,10 @@ export function ChatColumn({
 
   const ready = db.status === 'ready' ? db : null;
   const settings = ready?.settings ?? null;
-  const conv = ready && chart ? shownConversation(sess, ready.conversations, chart.hash) : null;
+  const conv = ready ? shownConversation(sess, ready.conversations, chart.hash) : null;
   const messages = conv?.messages ?? [];
   const generating = sess.live !== null;
-  const key = chart ? draftKey(conv?.id ?? null, chart.hash) : '';
+  const key = draftKey(conv?.id ?? null, chart.hash);
   const draft = sess.drafts[key] ?? '';
 
   useLayoutEffect(() => {
@@ -634,14 +631,11 @@ export function ChatColumn({
   };
   const ask = (text: string) => {
     const q = text.trim();
-    if (!q || !chart || generating || !settings.model) return;
+    if (!q || generating || !settings.model) return;
     run((d) => send({ text: q, chart: chart.hash, birth: chart.birth, context: chart.context, existing: conv }, d));
     input.current?.focus();
   };
-  const onFocus = (f: ChartFocus) => {
-    if (!chart) return;
-    toast(chart.focus(f));
-  };
+  const onFocus = (f: ChartFocus) => toast(chart.focus(f));
   const pickModel = (m: string) =>
     switchModel(settings, m, conv).then(
       () => toast(fmt(t.chat.picker.picked, { model: m })),
@@ -651,14 +645,13 @@ export function ChatColumn({
       },
     );
 
-  const budget = conv && chart ? historyBudget(settings, instructions(lang, chart.today, !conv.noTools)) : 0;
-  const history = conv && chart ? modelHistory(messages, budget, conv.sendFrom ?? 0) : null;
+  const budget = conv ? historyBudget(settings, instructions(lang, chart.today, !conv.noTools)) : 0;
+  const history = conv ? modelHistory(messages, budget, conv.sendFrom ?? 0) : null;
   const pending = messages.at(-1)?.role === 'assistant' ? messages.slice(0, -1) : messages;
   const canShorten = conv !== null && shorterFrom(pending, budget, conv.sendFrom ?? 0) !== null;
   const lastUser = messages.findLastIndex((m) => m.role === 'user');
   const lastIndex = messages.length - 1;
-  const kernelLoading = kernel.status !== 'ready';
-  const canSend = chart !== null && !generating && settings.model !== '' && draft.trim() !== '';
+  const canSend = !generating && settings.model !== '' && draft.trim() !== '';
   const service = serviceName(settings, t);
   /** 当前服务里第一个能调用工具的其他模型：「换成 …」用。 */
   const toolModel = settings.models.find((m) => m.tools === true && m.id !== settings.model)?.id ?? null;
@@ -690,11 +683,9 @@ export function ChatColumn({
         </button>
       </div>
       {mark}
-      {chart && (
-        <p className={css.context}>
-          {chart.context} {t.chat.contextTools}
-        </p>
-      )}
+      <p className={css.context}>
+        {chart.context} {t.chat.contextTools}
+      </p>
       <div
         ref={logRef}
         className={css.log}
@@ -714,7 +705,7 @@ export function ChatColumn({
             <ul className={css.suggestions}>
               {t.chat.empty.suggestions.map((s) => (
                 <li key={s}>
-                  <button type="button" className={css.suggestion} disabled={!chart || generating || !settings.model} onClick={() => ask(s)}>
+                  <button type="button" className={css.suggestion} disabled={generating || !settings.model} onClick={() => ask(s)}>
                     {s}
                   </button>
                 </li>
@@ -752,7 +743,7 @@ export function ChatColumn({
             return (
               <div key={m.id} className={css.answer} aria-busy={streaming || undefined}>
                 {cut}
-                <Calls t={t} m={m} focus={wide && !inSheet && chart ? chart.canFocus : null} onFocus={onFocus} />
+                <Calls t={t} m={m} focus={wide && !inSheet ? chart.canFocus : null} onFocus={onFocus} />
                 {(m.text || streaming) && (
                   <div>
                     <Markdown source={m.text} variant="chat" />
@@ -792,27 +783,6 @@ export function ChatColumn({
           })
         )}
       </div>
-      {kernelLoading && (
-        <div className={css.note}>
-          <b className={css.noteLead}>{kernel.status === 'error' ? t.chart.failed : t.chat.kernelLead}</b>
-          {kernel.status === 'error' && fmt(t.chat.kernelFailed, { reason: kernel.message })}
-          {kernel.status === 'loading' && (
-            <>
-              {fmt(t.chat.kernelBody, { a: Math.round(kernel.loaded / 1024), b: Math.round(kernel.total / 1024) })}
-              <div
-                className={css.noteBar}
-                role="progressbar"
-                aria-label={t.chart.loading}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={Math.round((kernel.loaded / kernel.total) * 100)}
-              >
-                <i className={css.noteBarFill} style={{ width: `${Math.round((kernel.loaded / kernel.total) * 100)}%` }} />
-              </div>
-            </>
-          )}
-        </div>
-      )}
       {!settings.model && (
         <p className={css.note}>
           <b className={css.noteLead}>{t.chat.noModelLead}</b>
@@ -830,7 +800,7 @@ export function ChatColumn({
           </div>
         </div>
       )}
-      {conv?.noTools && chart && (
+      {conv?.noTools && (
         <div className={css.note}>
           <b className={css.noteLead}>{t.chat.noTools.lead}</b>
           {fmt(t.chat.noTools.body, { model: settings.model, y: chart.year })}
@@ -856,7 +826,6 @@ export function ChatColumn({
           rows={1}
           aria-label={t.chat.ask}
           placeholder={keyboard ? t.chat.placeholderKeyboard : t.chat.placeholderTouch}
-          disabled={chart === null || kernelLoading}
           value={draft}
           onChange={(e) => setDraft(key, e.target.value)}
           onKeyDown={(e) => {
@@ -900,7 +869,7 @@ export function ChatColumn({
           onOpen={(c) => {
             onDrawer(null);
             selectConversation(c.id);
-            if (!chart || c.chart !== chart.hash) onOpenChart(c.chart);
+            if (c.chart !== chart.hash) onOpenChart(c.chart);
           }}
         />
       )}

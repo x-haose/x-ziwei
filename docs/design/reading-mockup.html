@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>看盘：x-ziwei</title>
+<title>看盘第二版：x-ziwei</title>
 <script>
 /* 主题在首帧前定下来：本机记住的选择优先，否则跟随系统 */
 (function(){
@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500&family=Geist+Mono:wght@400&family=Noto+Sans+SC:wght@300;400;500&family=Noto+Serif+SC:wght@300;500;600&display=swap" rel="stylesheet">
 <style>
-/* 令牌：取值与用途见同目录的 DESIGN.md */
+/* 令牌：取值与用途见 design/DESIGN.md */
 :root{
   --serif:"Noto Serif SC","Songti SC",serif;
   --sans:"Geist","Noto Sans SC","PingFang SC",sans-serif;
@@ -1176,6 +1176,170 @@ body.pf-open [data-page]{visibility:hidden}
   .rdg .rtab td.fm{min-width:120px}
 }
 
+/* ══ 看盘第二版：左栏生辰、看什么、看哪段时间；中间盘；右栏是按主题的五步阅读，读完问 AI ══ */
+.chartpage.v4{grid-template-columns:228px auto minmax(480px,1fr);grid-template-rows:auto auto auto auto 1fr;
+  grid-template-areas:"birth board prompt" "topics board prompt" "when board prompt" "layer board prompt" ". board prompt"}
+.chartpage.v4 .kpm,.chartpage.v4 .sidetabs,.chartpage.v4 #readTab{display:none}
+.chartpage.v4:not(.showlayer) .layer{display:none}
+.chartpage.v4 .layer{padding-top:12px}
+.chartpage[data-mode=empty] .topics,.chartpage[data-mode=empty] .when{display:none}
+.topics{grid-area:topics;padding-top:16px;min-width:0}
+.when{grid-area:when;padding-top:16px;min-width:0}
+.navh{font-family:var(--serif);font-size:15px;font-weight:600;padding-bottom:6px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+.tlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:4px}
+.tlist button{min-height:44px;font-family:var(--serif);font-size:15px;color:var(--fg-2);box-shadow:inset 0 0 0 1px var(--line-2);transition:background var(--t-fast),color var(--t-fast)}
+.tlist button:hover{color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-3)}
+.tlist button[aria-pressed=true]{background:var(--btn);color:var(--btn-fg);box-shadow:none}
+.tlist button:disabled{color:var(--fg-3);cursor:not-allowed}
+.wseg button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-height:52px;font-family:var(--serif);font-size:15px;line-height:1.2}
+.wseg button small{font-family:var(--num);font-size:12px;color:inherit;opacity:.8}
+.wnow{font-size:13px;color:var(--fg-2);margin-top:8px}
+.morel{padding:0;gap:6px;margin-top:4px;font-size:13px}
+.morel svg{transition:transform var(--t-base)}
+.morel[aria-expanded=true] svg{transform:rotate(180deg)}
+.chartpage.v4 .prompt{height:calc(100vh - 104px);position:sticky;top:20px;margin-top:0;padding-top:0}
+.rv2host{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--line-2) transparent;scroll-padding-top:8px}
+.rv2host[hidden]{display:none}
+#chatWrap{display:flex;flex-direction:column;flex:1;min-height:0}
+#chatWrap[hidden]{display:none}
+#chatBack .tbtn{padding:0;margin-bottom:4px}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.cell.rel .pn{color:var(--fg)}
+
+/* 阅读 */
+.rv2{padding:0 2px 40px 0}
+.rv2h{padding:4px 0 16px;border-bottom:1px solid var(--line-2)}
+.rv2top{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:32px}
+.rv2h .eyebrow{font-size:13px;color:var(--fg-3)}
+.jumpask{height:32px;padding:0 12px;font-size:13px;color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-3);position:relative}
+.jumpask::after{content:"";position:absolute;inset:-6px 0}
+.jumpask:hover{box-shadow:inset 0 0 0 1px var(--fg)}
+.rv2h h2{font-family:var(--serif);font-weight:600;font-size:30px;line-height:1.25;color:var(--fg);margin-top:2px}
+.rv2h h2:focus,.st2 h3:focus,.ask2 h3:focus{outline:none}
+.rv2h .sel{font-size:15px;line-height:1.75;color:var(--fg);margin-top:6px}
+.kn2.tintro{margin-top:10px;padding:10px 12px;background:var(--bg-2)}
+.kn2.tintro p{font-size:14px;line-height:1.75;color:var(--fg-2)}
+.term{display:inline;font:inherit;color:inherit;padding:0;box-shadow:inset 0 -1px 0 var(--line-3);position:relative}
+.term::after{content:"";position:absolute;inset:-10px -2px}
+.term:hover{box-shadow:inset 0 -1px 0 var(--fg)}
+.rv2 .steps{margin:18px 0 0}
+.rv2 .steps li.st2{padding:0 0 24px 44px}
+.rv2 .steps li.st2::before{top:8px;transition:background var(--t-fast),color var(--t-fast)}
+.rv2 .steps li.st2::after{top:42px}
+.rv2 .steps li.st2.on::before{background:var(--btn);color:var(--btn-fg);box-shadow:none}
+.sthd{display:flex;align-items:center;gap:10px;min-height:44px}
+.sthd h3{font-family:var(--serif);font-weight:600;font-size:19px;flex:1}
+.seeb{padding:0 4px;font-size:13px}
+.seeb[aria-pressed=true]{color:var(--fg)}
+.mini{display:none}
+.sfacts{margin-top:2px}
+.sfacts p{font-size:16px;line-height:1.8;color:var(--fg)}
+.sfacts p+p{margin-top:4px}
+.stacts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.stacts .btn{height:44px;padding:0 16px;font-size:14px}
+.how{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 10px;font-size:14px;line-height:1.7;color:var(--fg-2);margin-top:10px;padding:8px 0;border-top:1px solid var(--line)}
+.how span{font-size:12px;color:var(--fg-3);line-height:24px}
+.kns{margin-top:6px}
+.knh{font-size:12px;color:var(--fg-3);margin:6px 0 2px}
+.kn2{padding:8px 0;border-top:1px solid var(--line)}
+.knh+.kn2{border-top:0;padding-top:2px}
+.kn2>b{font-family:var(--serif);font-weight:600;font-size:16px}
+.kn2>p{font-size:14px;line-height:1.8;color:var(--fg-2);margin-top:2px}
+.kn2.none>p{color:var(--fg-3)}
+.knact{display:flex;align-items:center;flex-wrap:wrap;gap:0 16px}
+.rv2 .rmore{position:relative;display:inline-flex;align-items:center;gap:4px;min-height:36px;font-size:13px;color:var(--fg-2);text-align:left}
+.rv2 .rmore::after{content:"";position:absolute;inset:-4px -4px}
+.rv2 .rmore:hover{color:var(--fg)}
+.rv2 .rmore svg{flex:none;transition:transform var(--t-base)}
+.rv2 .rmore[aria-expanded=true] svg{transform:rotate(180deg)}
+.rewrite{position:relative;display:inline-flex;align-items:center;min-height:36px;font-size:13px;color:var(--fg-3);text-decoration:none;box-shadow:inset 0 -1px 0 transparent}
+.rewrite::after{content:"";position:absolute;inset:-4px -4px}
+.rewrite:hover{color:var(--fg);box-shadow:inset 0 -1px 0 var(--line-3)}
+.kgrp{padding:4px 0;border-top:1px solid var(--line)}
+.kgrp>.rmore{font-size:14px;line-height:1.5;padding:4px 0}
+.kgrp .kn2{padding-left:12px;box-shadow:inset 1px 0 0 var(--line-2)}
+.rv2 .knfull{margin:2px 0 6px;padding:10px 12px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line)}
+.rv2 .knfull .md{font-size:14px;line-height:1.8}
+.rv2 .knfull .lab{font-size:12px;color:var(--fg-3);margin:10px 0 2px}
+.rv2 .knfull .lab:first-child{margin-top:0}
+.rv2 .qt{font-family:var(--serif);font-size:14px;line-height:1.8}
+.askstep{padding:0;font-size:13px;margin-top:2px}
+.rempty{padding:24px 0}
+.rempty h3{font-family:var(--serif);font-weight:600;font-size:17px}
+.rempty p{font-size:14px;line-height:1.75;color:var(--fg-2);margin-top:6px}
+
+/* 问 AI */
+.ask2{margin-top:24px;padding:18px 16px 16px;box-shadow:inset 0 0 0 1px var(--line-3)}
+.ask2 h3{font-family:var(--serif);font-weight:600;font-size:21px}
+.ask2 .fld{display:block;margin-top:10px}
+.ask2 .lb{display:block;font-size:13px;color:var(--fg-2);margin-bottom:4px}
+.ask2 textarea{width:100%;min-height:76px;resize:vertical;padding:10px 12px;font:inherit;font-size:16px;line-height:1.6;color:var(--fg);background:var(--well);box-shadow:inset 0 0 0 1px var(--line-2);border:0}
+.ask2 textarea:focus{box-shadow:inset 0 0 0 1px var(--fg);outline:none}
+.ask2 .pfsum{font-size:14px;line-height:1.7;color:var(--fg-2);margin-top:8px}
+.ask2 .pfsum #q2n{font-family:var(--num);color:var(--fg)}
+.tbtn.inl{height:auto;min-height:32px;padding:0 0 0 6px;font-size:13px;color:var(--fg);box-shadow:inset 0 -1px 0 var(--line-3);vertical-align:baseline;position:relative}
+.tbtn.inl::after{content:"";position:absolute;inset:-6px -4px}
+.lab2{font-size:13px;color:var(--fg-2);margin-top:14px}
+.aigrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:6px}
+.aigrid .btn{height:44px;padding:0 4px;font-size:14px;text-decoration:none}
+.inpage{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 16px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.inpage p{flex:1 1 200px;font-size:14px;line-height:1.6;color:var(--fg-2)}
+.inpage .btn{height:44px;padding:0 16px;font-size:14px}
+.rv2f{margin-top:20px;font-size:14px;line-height:1.7;color:var(--fg-3)}
+.rv2f .kpnote{margin:0 0 8px;font-size:14px}
+.fbtns{display:flex;flex-wrap:wrap;gap:0 16px;margin-top:2px}
+.fbtns .tbtn{padding:0;font-size:13px}
+
+/* 术语浮层 */
+.termpop{position:fixed;z-index:70;max-width:calc(100vw - 16px);max-height:min(60vh,420px);overflow:auto;padding:12px 14px 6px;background:var(--bg);box-shadow:inset 0 0 0 1px var(--line-3),0 0 0 1px var(--bg)}
+.termpop[hidden]{display:none}
+.termpop .tp-h{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.termpop .tp-h b{font-family:var(--serif);font-weight:600;font-size:16px}
+.termpop .tp-h button{width:44px;height:44px;display:grid;place-items:center;margin:-10px -12px -10px 0;color:var(--fg-2)}
+.termpop .md{font-size:14px;line-height:1.8;color:var(--fg-2);margin-top:4px}
+.termpop .tp-f{margin-top:2px}
+.termpop.sheet{left:0;right:0;bottom:0;top:auto;width:auto;max-width:none;max-height:70vh;padding:12px var(--pad) max(10px,env(safe-area-inset-bottom));box-shadow:0 -1px 0 var(--line-3)}
+.termscrim{position:fixed;inset:0;z-index:69;background:color-mix(in oklch,var(--bg) 60%,transparent)}
+.termscrim[hidden]{display:none}
+
+/* 手机底栏：看哪个主题、问 AI */
+.mbar #mTopic{gap:6px;font-size:14px}
+.mbar #mTopic span{color:var(--fg-3)}
+.mbar #mTopic b{font-family:var(--serif);font-weight:600;font-size:16px}
+
+@media (max-width:1359px){
+  .chartpage.v4{grid-template-columns:auto minmax(420px,1fr);grid-template-rows:auto auto auto auto auto 1fr;
+    grid-template-areas:"board prompt" "birth prompt" "topics prompt" "when prompt" "layer prompt" ". prompt"}
+  .chartpage.v4 .prompt{height:calc(100vh - 100px)}
+  .chartpage.v4 .birth,.chartpage.v4 .topics,.chartpage.v4 .when,.chartpage.v4 .layer{max-width:var(--w)}
+  .chartpage.v4 .when .wseg{max-width:420px}
+}
+@media (max-width:1023px){
+  .chartpage.v4{grid-template-columns:minmax(0,1fr);grid-template-rows:auto;grid-template-areas:"birth" "board" "topics" "when" "layer" "prompt";padding-bottom:92px}
+  .chartpage.v4 .prompt{height:auto;position:static;margin-top:20px;padding-top:0}
+  .chartpage.v4 .birth,.chartpage.v4 .topics,.chartpage.v4 .when,.chartpage.v4 .layer{max-width:none}
+  .chartpage.v4 .when .wseg{max-width:none}
+  .topics{padding-top:24px}
+  .rv2host{overflow:visible}
+  .seeb,.jumpask{display:none}
+  .mini{display:grid;grid-template-columns:repeat(4,30px);grid-template-rows:repeat(4,22px);flex:none;box-shadow:inset 0 0 0 1px var(--line-2);position:relative}
+  .mini::after{content:"";position:absolute;inset:-4px}
+  .mini span{display:grid;place-items:center;font-family:var(--serif);font-size:12px;line-height:1;color:var(--fg-3);box-shadow:inset 0 0 0 .5px var(--line)}
+  .mini span.on{background:var(--bg-3);color:var(--fg)}
+  .mini span.f{background:var(--bg-3);color:var(--accent);font-weight:600}
+  .st2 .sthd{display:block;min-height:0}
+  .st2 .sthd h3{line-height:44px}
+  .mini{float:right;margin:2px 0 6px 12px}
+  .st2 .how,.st2 .kns,.st2 .stacts{clear:both}
+  .rv2 .steps li.st2{padding-bottom:12px}
+  .mbar{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
+}
+@media (max-width:699px){
+  .rv2h h2{font-size:26px}
+  .aigrid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .ask2{padding:16px 12px 14px;margin-left:-4px;margin-right:-4px}
+}
+
 </style>
 </head>
 <body>
@@ -1240,10 +1404,13 @@ body.pf-open [data-page]{visibility:hidden}
     </nav>
   </header>
 
-  <main class="chartpage v3">
+  <main class="chartpage v3 v4">
     <section class="birth" id="birth" aria-label="生辰"></section>
 
-    <section class="layer" aria-label="运限">
+    <nav class="topics" id="topicNav" aria-label="看什么"></nav>
+    <section class="when" id="whenNav" aria-label="看哪段时间"></section>
+
+    <section class="layer" id="layerSec" aria-label="运限">
       <div class="sec-h"><h2>运限</h2><span class="aux" id="layerAux"></span></div>
       <div class="seg ltabs" id="ltabs" role="group" aria-label="运限层"></div>
       <div id="lsub"></div>
@@ -1256,14 +1423,16 @@ body.pf-open [data-page]{visibility:hidden}
 
     <section class="read" id="read" aria-label="看盘"></section>
 
-    <section class="prompt" aria-label="用这张盘">
+    <section class="prompt" aria-label="阅读">
+      <div class="rv2host" id="rv2Host"></div>
+      <div id="chatWrap" hidden><div id="chatBack"></div>
       <div class="seg sidetabs" role="tablist" aria-label="用这张盘">
         <button type="button" role="tab" id="tabRead" data-side="read" aria-controls="readTab" aria-selected="true" aria-pressed="true">看盘</button>
         <button type="button" role="tab" id="tabChat" data-side="chat" aria-controls="chatTab" aria-selected="false" aria-pressed="false">对话</button>
         <button type="button" role="tab" id="tabPrompt" data-side="prompt" aria-controls="promptTab" aria-selected="false" aria-pressed="false">提示词</button>
       </div>
       <div class="rtab-p" id="readTab" role="tabpanel" aria-labelledby="tabRead"></div>
-      <div class="ctab" id="chatTab" role="tabpanel" aria-labelledby="tabChat" hidden></div>
+      <div class="ctab" id="chatTab" role="tabpanel" aria-labelledby="tabChat"></div></div>
       <div id="promptSlot">
       <div class="ptab" id="promptTab" role="tabpanel" aria-labelledby="tabPrompt" hidden>
       <p class="ptab-aux">复制后粘贴到任意聊天 AI；没有 API Key 时用这里</p>
@@ -1287,7 +1456,7 @@ body.pf-open [data-page]{visibility:hidden}
       </div>
     </section>
   </main>
-  <div class="mbar" id="mbar"><button type="button" class="btn ghost" data-goto-read>看盘</button><button type="button" class="btn ghost" data-open-chat>对话</button><button type="button" class="btn ghost" data-goto-prompt>提示词</button></div>
+  <div class="mbar" id="mbar"><button type="button" class="btn ghost" id="mTopic" data-pick="mtopic" aria-haspopup="dialog" aria-expanded="false"></button><button type="button" class="btn" data-m-ask>问 AI</button></div>
 </div>
 
 <!-- ═════════ 内容页 ═════════ -->
@@ -1350,7 +1519,7 @@ body.pf-open [data-page]{visibility:hidden}
 </div>
 
 <section class="csheet" id="csheet" hidden role="dialog" aria-modal="true" aria-labelledby="csheetTitle">
-  <div class="csheet-h"><button type="button" class="x" data-close-chat aria-label="关闭对话"><svg width="12" height="12"><use href="#i-x"/></svg></button><div><b id="csheetTitle">对话</b><small id="csheetSub"></small></div><button type="button" class="tbtn" data-chat-act="hist">记录</button><button type="button" class="tbtn" data-chat-act="new">新对话</button></div>
+  <div class="csheet-h"><button type="button" class="x" data-close-chat aria-label="关闭对话"><svg width="12" height="12"><use href="#i-x"/></svg></button><div><b id="csheetTitle">问 AI</b><small id="csheetSub"></small></div><button type="button" class="tbtn" data-chat-act="hist">记录</button><button type="button" class="tbtn" data-chat-act="new">新对话</button></div>
   <div class="csheet-b" id="csheetBody"></div>
 </section>
 <div class="kscrim" id="chScrim" hidden></div>
@@ -1367,26 +1536,31 @@ body.pf-open [data-page]{visibility:hidden}
   </header>
   <div class="pf-b"><nav class="pf-toc" id="pfTocWrap" aria-label="段落目录"><ol id="pfToc"></ol></nav><div class="pf-c" id="pfBody" tabindex="0" role="region" aria-label="提示词全文"></div></div>
 </section>
+<div class="termscrim" id="termScrim" hidden></div>
+<section class="termpop" id="termPop" hidden role="dialog" aria-labelledby="termT"></section>
 <div class="toast" id="toast" role="status"></div>
 
 <div class="review" id="review">
   <button type="button" id="reviewBtn" aria-expanded="false">稿件：状态预览</button>
   <ul id="reviewMenu" hidden>
-    <li><button type="button" data-rv="r-palace">看盘：宫位（流年 2026 命宫）</button></li>
-    <li><button type="button" data-rv="r-open">看盘：展开释义全文与杂耀</button></li>
-    <li><button type="button" data-rv="r-natal">看盘：本命层，财帛宫</button></li>
-    <li><button type="button" data-rv="r-empty-palace">看盘：空宫（田宅）</button></li>
-    <li><button type="button" data-rv="r-patterns">看盘：格局</button></li>
-    <li><button type="button" data-rv="r-decades">看盘：大限一览</button></li>
-    <li><button type="button" data-rv="r-years">看盘：流年一览</button></li>
-    <li><button type="button" data-rv="r-nokn">释义：整包里没有的星</button></li>
-    <li><button type="button" data-rv="r-kpfail">释义：读库失败，暂用默认包</button></li>
-    <li><button type="button" data-rv="r-kernel">内核未装好</button></li>
-    <li><button type="button" data-rv="r-empty">空状态（未排盘）</button></li>
-    <li><button type="button" data-rv="r-prompt">提示词页签</button></li>
-    <li><button type="button" data-rv="r-full">提示词全文（渲染）</button></li>
-    <li><button type="button" data-rv="r-fullraw">提示词全文（原文，跳到运限）</button></li>
-    <li><button type="button" data-rv="r-chat">对话页签</button></li>
+    <li><button type="button" data-rv="v-first">第一次打开：总论，一生</button></li>
+    <li><button type="button" data-rv="v-step2">总论读到第 2 步（盘上高亮三方四正）</button></li>
+    <li><button type="button" data-rv="v-term">点术语：三方四正</button></li>
+    <li><button type="button" data-rv="v-open">展开释义全文与辅星</button></li>
+    <li><button type="button" data-rv="v-kong">本宫是空宫：田宅</button></li>
+    <li><button type="button" data-rv="v-personality">性格：只看本宫的主题</button></li>
+    <li><button type="button" data-rv="v-decade">这十年的事业</button></li>
+    <li><button type="button" data-rv="v-year">今年的财运</button></li>
+    <li><button type="button" data-rv="v-layer">选别的年份：2019 年的婚恋</button></li>
+    <li><button type="button" data-rv="v-ask">问 AI：就这一步问</button></li>
+    <li><button type="button" data-rv="v-full">问 AI：看全文</button></li>
+    <li><button type="button" data-rv="v-chat-nokey">在这页问：没有 Key</button></li>
+    <li><button type="button" data-rv="v-chat">在这页问：有 Key</button></li>
+    <li><button type="button" data-rv="v-topics">手机：选主题</button></li>
+    <li><button type="button" data-rv="v-nokn">释义：整包里没有的条目</button></li>
+    <li><button type="button" data-rv="v-kpfail">释义：读库失败，暂用默认包</button></li>
+    <li><button type="button" data-rv="v-kernel">正在排盘</button></li>
+    <li><button type="button" data-rv="v-empty">未排盘</button></li>
   </ul>
 </div>
 
@@ -4280,8 +4454,8 @@ const state = {
   input: null,            /* 用户提交的生辰（与示例盘不同时在页面上注明） */
   kernel: 'idle',         /* idle | loading | ready */
   progress: 0,
-  layer: 'yearly', dec: H.decadal.index, year: DATA_YEAR, month: DATA_LMONTH, leapMonth: false,
-  sel: H.yearly.index,
+  layer: 'natal', dec: H.decadal.index, year: DATA_YEAR, month: DATA_LMONTH, leapMonth: false,
+  sel: SOUL,
   checks: new Set(['natal','know','year']), ask: '',
   formOpen: false,
   form: { cal:'solar', y:null, m:null, d:null, leap:false, t:null, g:null, approx:false, period:'morning' },
@@ -4536,7 +4710,7 @@ function openPicker(trigger, cfg){
     if (b.dataset.v != null){
       const key = trigger.dataset.pick;
       closePop(false);
-      cfg.onPick(b.dataset.v);
+      if (cfg.onPick(b.dataset.v) === true) return;
       const again = document.querySelector(`[data-pick="${key}"]`); if (again) again.focus();
     }
   });
@@ -5557,7 +5731,7 @@ function placeChat(){
   const host = sheet ? $('csheetBody') : $('chatTab');
   if (chatRoot.parentElement !== host) host.appendChild(chatRoot);
   if (sheet){
-    $('chatTab').innerHTML = `<div class="chatcta"><p>${chat.cfg.key ? `用 ${prov().name} 的 ${chat.cfg.model} 聊这张盘。` : '填上自己的 API Key，就能在这里和模型聊这张盘；没有 Key 时用「提示词」复制。'}</p><button type="button" class="btn" data-open-chat>${curConv() && curConv().msgs.length ? '继续对话' : '打开对话'}</button></div>`;
+
   }
 }
 function renderSide(){
@@ -5605,8 +5779,8 @@ function toolsHTML(m){
 }
 const ERRS = {
   bad401: () => ({ t:`${prov().name} 拒绝了这个 Key（401）`, p:`Key 填错、已删除或已失效。到 ${prov().name} 的控制台核对后重新填写；这条问题会保留，改好后点「重试」。`, a:[['settings','去设置','btn'],['retry','重试','btn ghost']] }),
-  limit429: () => ({ t:`${prov().name} 暂时不接受请求（429）`, p:`可能是账户额度用完，也可能是短时间内请求太多。额度在 ${prov().name} 的控制台查看；稍等一会儿再试。`, a:[['retry','重试','btn'],['prompt','改用提示词','btn ghost']] }),
-  net: () => ({ t:`连不上 ${hostOf()}`, p:'网络断开，或这个服务不允许网页直接访问（跨域）。自建或兼容服务需要在服务端放行本站的跨域请求；也可以先用「提示词」复制。', a:[['retry','重试','btn'],['prompt','改用提示词','btn ghost']] }),
+  limit429: () => ({ t:`${prov().name} 暂时不接受请求（429）`, p:`可能是账户额度用完，也可能是短时间内请求太多。额度在 ${prov().name} 的控制台查看；稍等一会儿再试。`, a:[['retry','重试','btn'],['prompt','复制给别的 AI','btn ghost']] }),
+  net: () => ({ t:`连不上 ${hostOf()}`, p:'网络断开，或这个服务不允许网页直接访问（跨域）。自建或兼容服务需要在服务端放行本站的跨域请求；也可以先复制给别的 AI。', a:[['retry','重试','btn'],['prompt','复制给别的 AI','btn ghost']] }),
   notools: () => ({ t:`${chat.cfg.model} 不支持工具调用`, p:'它查不了这张盘。换一个支持工具调用的模型；或者不用工具，把盘面以文本附在提问里，模型只能用附上的内容回答。', a:[['tools-swap',`换成 ${toolModel()}`,'btn'],['tools-off','不用工具继续','btn ghost']] }),
 };
 function msgHTML(m, c){
@@ -5648,14 +5822,14 @@ function setupHTML(inline){
     : res === 'limit429' ? `<p class="kres2 bad"><b>额度或限流（429）</b>：Key 有效，但 ${p.name} 暂时不接受请求。可以先保存，稍后再试。</p>`
     : `<p class="kres2 bad"><b>连不上</b>：网络断开，或这个地址不允许网页直接访问（跨域）。</p>`;
   const saved = chat.cfg.key && chat.cfg.provider === d.provider;
-  return `<div class="setup">${inline ? `<h3>用自己的 API Key 对话</h3><p>填上 Key，模型就能在这里查这张盘、和你聊。没有 Key 时用「提示词」复制到任意聊天 AI。</p>` : ''}
+  return `<div class="setup">${inline ? `<h3>用自己的 API Key 对话</h3><p>填上 Key，模型就能在这里查这张盘、和你聊。没有 Key 也能问：在「问 AI」里复制，粘贴到任意聊天 AI。</p>` : ''}
     <form class="kform" id="keyForm" novalidate>
       <div class="fld"><span class="lb">服务</span><div class="provs" role="radiogroup" aria-label="服务">${Object.entries(PROVIDERS).map(([k, v]) => `<button type="button" role="radio" aria-checked="${d.provider === k}" data-prov="${k}"><i></i><b>${v.name}</b><small>${v.host || '填 Base URL'}</small></button>`).join('')}</div></div>
       ${d.provider === 'compat' ? `<label class="fld"><span class="lb">Base URL</span><input class="inp" id="kBase" type="url" inputmode="url" spellcheck="false" placeholder="https://example.com/v1" value="${esc(d.base)}"></label>` : ''}
       ${saved ? `<div class="saved"><span>已存的 Key <b>${chat.cfg.keyMask}</b></span><button type="button" class="tbtn" data-chat-act="forget">删除 Key</button></div>` : ''}
       <div class="fld"><span class="lb">${saved ? '换一个 Key' : 'API Key'}</span><div class="keyrow"><input class="inp" id="kKey" type="${d.show ? 'text' : 'password'}" autocomplete="off" spellcheck="false" placeholder="${d.provider === 'anthropic' ? 'sk-ant-…' : 'sk-…'}" value="${esc(d.key)}"><button type="button" class="tbtn" data-chat-act="show" aria-pressed="${d.show}">${d.show ? '隐藏' : '显示'}</button></div></div>
       ${resHTML}
-      <div class="acts" style="margin-top:0"><button type="submit" class="btn">检查并保存</button><button type="button" class="btn ghost" data-chat-act="prompt">用提示词</button></div>
+      <div class="acts" style="margin-top:0"><button type="submit" class="btn">检查并保存</button><button type="button" class="btn ghost" data-chat-act="prompt">复制给别的 AI</button></div>
       <p class="privacy"><svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true"><rect x="1.5" y="7" width="11" height="8" fill="none" stroke="currentColor"/><path d="M4 7V4.5a3 3 0 0 1 6 0V7" fill="none" stroke="currentColor"/></svg><span><b>Key 只存在这台设备的浏览器里。</b>请求从浏览器直接发到 ${d.provider === 'compat' ? '你填的地址' : p.name}，不经过 x-ziwei 的服务器；费用由${d.provider === 'compat' ? '服务商' : ` ${p.name} `}按你的账号计。</span></p>
     </form></div>`;
 }
@@ -5996,7 +6170,7 @@ function promptParts(){
 }
 /* 流年一览取所选大限的十年（与已实现的勾选项同名：「2022–2031 流年」） */
 const yearsRange = () => READ.decades.find(d => d.index === state.dec).yearRange.join('–');
-function buildPrompt(){
+function buildPromptChart(){
   const q = state.ask.trim() || '请先整体看看这张盘：我是个什么样的人，这几年要留意什么。';
   const parts = promptParts().map(x => x[1].trim());
   return [PR.method.trim(), '---', ...(parts.length ? [...parts, '---'] : []), `# 我的问题\n\n${q}`].join('\n\n');
@@ -6015,7 +6189,7 @@ function renderPrompt(){
 }
 
 /* 提示词全文：全屏阅读视图，左侧段落目录，渲染与原文切换 */
-const pf = { open: false, mode: 'md', toc: false };
+const pf = { open: false, mode: 'md', toc: false, src: 'full' };
 function tocOf(text){ const out = []; let inCode = false; text.split('\n').forEach(l => { if (/^```/.test(l)) inCode = !inCode; const m = !inCode && l.match(/^(#{1,3}) (.+)$/); if (m) out.push({ lv: m[1].length, t: m[2] }); }); return out; }
 function renderFull(){
   const text = buildPrompt(), toc = tocOf(text);
@@ -6100,6 +6274,359 @@ function rdState(name){
   }, 80);
 }
 
+/* ══════════ 看盘第二版：按问题读，读完顺手交给 AI ══════════
+   入口是主题（知识包的 13 个 topic）与时间（一生 / 这十年 / 今年）。每个主题读五步：本宫主星 → 三方四正 → 四化 → 格局 → 运限，
+   每步三样：盘上的事实（只陈述盘面的句子）、怎么看（解读方法）、释义（生效知识包的原文）。
+   事实取自内核的结构化结果：盘面（DATA）、运限与格局（READ）、主题选宫（READ2，内核按主题定义取的宫位）。 */
+const R2 = {"topics":[{"slug":"overall","title":"总论","intro":"总论一张盘：命宫定本质与个性偏向，其三方四正（迁移、财帛、官禄）看外在表现、资源与做事态度；身宫看后天的着力之处，福德宫看思想与情绪。","groups":[{"kind":"surround","key":"soulPalace","target":4,"opposite":10,"wealth":0,"career":8},{"kind":"only","key":"bodyPalace","target":8},{"kind":"only","key":"spiritPalace","target":6}],"text":"# 总论 · 命盘 2000-8-16 寅时 女\n\n总论一张盘：命宫定本质与个性偏向，其三方四正（迁移、财帛、官禄）看外在表现、资源与做事态度；身宫看后天的着力之处，福德宫看思想与情绪。\n\n## 命宫 三方四正\n\n### 本宫 · 命宫 (壬午) · 大限 3-12\n- 主星: 紫微(庙)\n- 辅星: 文曲(陷)\n- 杂耀: 凤阁, 天福, 截路, 蜚廉, 年解\n- 三方四正: 对宫 迁移 · 三合 财帛, 官禄\n- 宫干壬飞化: 天梁化禄→子女, 紫微化权→命宫, 左辅化科→官禄, 武曲化忌→财帛\n- 十二神: 长生·衰, 博士·青龙, 岁前·丧门, 将前·灾煞\n- 小限虚岁: 5, 17, 29, 41, 53, 65, 77, 89, 101, 113\n\n**紫微(庙)**: 帝王星，有王者特质：控制欲强、重体面、好为人师、大局观强；得资源能控场规划，否则眼高手低，忌被捧杀。\n\n**文曲(陷)**: 第一文艺之星，主艺术修养与浪漫，属异途功名；善变通、多愁善感，增表达力而引申口舌是非，宜厚文化底蕴。\n\n**凤阁**: 凤阁星会增加比较柔和的技能天赋，比如音乐、舞蹈。凤阁星比较浪漫，审美能力也比较强，因此在艺术设计领域颇有天赋。\n\n**天福**: 天福星可以看作是小 `天同`。这颗星比较乐天，会增加一种积极乐观的心态；不喜欢冒险，喜欢平顺的状态，所以缺乏些斗志。\n\n**截路**: 截路星按生年天干安放，与空亡星成对，合称截路空亡，属空亡类杂曜。\n\n**蜚廉**: 蜚廉星充满好奇心，表达欲望也比较强，可以看作是小巨门。这颗星不走寻常路，喜欢挑战权威和传统，也因此会增加一些创新思维。\n\n**年解**: 年解星按年支安放：本命盘按生年年支，流年层另按流年年支；与解神星同为解厄类星曜，主化解灾厄、缓和凶性。\n\n\n### 对宫 · 迁移 (戊子) · 大限 63-72\n- 主星: 贪狼(旺)\n- 辅星: 铃星(陷)\n- 杂耀: 八座\n- 三方四正: 对宫 命宫 · 三合 福德, 夫妻\n- 宫干戊飞化: 贪狼化禄→迁移, 太阴化权→仆役, 右弼化科→夫妻, 天机化忌→兄弟\n- 十二神: 长生·养, 博士·病符, 岁前·白虎, 将前·将星\n- 小限虚岁: 11, 23, 35, 47, 59, 71, 83, 95, 107, 119\n\n**贪狼(旺)**: 第一桃花星，本质是社交与受欢迎；欲望即兴趣，好奇、易上瘾，赌性强、不甘平凡，宜增广知识、勿孤注一掷。\n\n**铃星(陷)**: 情绪内敛积压，深沉冷静；精打细算、深思熟虑，稳健可靠而或因过于谨慎失机，宜适度表达与冒险。\n\n**八座**: 八座星须与三台星合并来看：二者是紫微斗数中典型的“对星”，两颗星组成一对、产生共振。八座与三台都比较喜欢讲排场，喜爱奢华的感觉，因此会增加一定的鉴赏能力；不太喜欢被管束，喜欢享受生活，重视名声、地位和荣耀。\n\n\n### 财帛位 · 财帛 (戊寅) · 大限 43-52\n- 主星: 武曲(得)化权, 天相(庙)\n- 辅星: 天马\n- 杂耀: 解神, 三台, 天寿, 天巫, 天厨, 阴煞, 天哭\n- 三方四正: 对宫 福德 · 三合 官禄, 命宫\n- 宫干戊飞化: 贪狼化禄→迁移, 太阴化权→仆役, 右弼化科→夫妻, 天机化忌→兄弟\n- 十二神: 长生·绝, 博士·飞廉, 岁前·吊客, 将前·岁驿\n- 小限虚岁: 9, 21, 33, 45, 57, 69, 81, 93, 105, 117\n\n**武曲 × 天相 (同宫)**: 天相使武曲温和，武曲给天相执行力；不喜束缚、亲力亲为而缺宏观，决策果断、奔波忙碌；事业心强易兼副业。\n\n**武曲(得)化权**: 独行侠，孤傲刚直、不善表达、怕麻烦别人，故执行力与行动力强；短板在策划，倔强不听劝，宜多听意见。\n\n**天相(庙)**: 左右逢源、八面玲珑、知人善用，外刚内细的和事佬；执行力随亮度，善找方法，宜作组织者，是均衡的全能型。\n\n**天马**: 最坐不住的星，增变数与不确定；精力旺盛、爱冒险求新、渴望自由，易发现机会，弱在坚持与沉淀。\n\n**解神**: 解神星顾名思义是一颗解决问题的星曜，给人一种比较乐天的感觉，也很会开导人。这颗星会增加一些共情能力。\n\n**三台**: 三台星须与八座星合并来看：二者是紫微斗数中典型的“对星”，两颗星组成一对、产生共振。三台与八座都比较喜欢讲排场，喜爱奢华的感觉，因此会增加一定的鉴赏能力；不太喜欢被管束，喜欢享受生活，重视名声、地位和荣耀。\n\n**天寿**: 天寿星会给人一种比较沉稳的感觉，处事不惊，情绪比较稳定。此星寓意：欲得长寿，心态须好，忌喜怒无常。\n\n**天巫**: 天巫星会增加第六感，这颗星也比较乐于助人，不过其对别人的帮助大多在思想层面。天巫星比较容易接触神秘学、哲学等，容易有信仰。\n\n**天厨**: 天厨星增加美食鉴赏能力，这颗星很难抵抗美食的诱惑，因此忌口对其而言是比较难的事情。天厨星不一定会做饭，但会做饭的天厨星，厨艺必能拴住人的胃口。\n\n**阴煞**: 阴煞星会附加一种忧郁、阴沉的感觉，显得有点沉默寡言，不太善于表达感情，胆子也比较小。\n\n**天哭**: 天哭星会增加一种悲情气质，如同影视剧中天生适合出演悲情戏的演员所带的那种神态。它会增加悲观情绪，比较容易消极。\n\n\n### 官禄位 · 官禄 (丙戌) · 大限 83-92 [身宫]\n- 主星: 廉贞(利), 天府(庙)\n- 辅星: 左辅\n- 杂耀: 天才, 天虚\n- 三方四正: 对宫 夫妻 · 三合 命宫, 财帛\n- 宫干丙飞化: 天同化禄→疾厄, 天机化权→兄弟, 文昌化科→福德, 廉贞化忌→官禄\n- 十二神: 长生·沐浴, 博士·伏兵, 岁前·大耗, 将前·月煞\n- 小限虚岁: 1, 13, 25, 37, 49, 61, 73, 85, 97, 109\n\n**廉贞 × 天府 (同宫)**: 内敛而显霸道，平时懒言、争执时不客气，说最狠的话做最暖的事；特别喜欢也善于管钱，不冲动消费。\n\n**廉贞(利)**: 化气为囚，理性认真、自尊心强、自我保护重，不善社交，距离感最强；得资源易成行业翘楚，社交圈窄。\n\n**天府(庙)**: 务实的帝星，低调，重面子与里子平衡；不管闲事，不争是不想争，迁移逢七杀而不怒而威；包容，人脉广。\n\n**左辅**: 助力之星，喜帮助提拔他人，带长辈视角，直接强势，被视作男性贵人；能提高身份地位，易有架子，善处人际。\n\n**天才**: 天才星会增加智慧，可以看作是小 `天机`：聪明且领悟力高，反应力快，所以天才星也有点恃才傲物。\n\n**天虚**: 天虚星是一种虚耗的感觉，即所谓的精神内耗。天虚星容易陷入一种纠结的情绪里面，导致精力无端虚耗，看起来忧郁、不太有精神的样子。\n\n\n## 相关宫位\n\n### 福德 (甲申) · 大限 103-112\n- 主星: 破军(得)\n- 辅星: 文昌(得), 禄存\n- 杂耀: 龙池, 台辅, 旬空\n- 三方四正: 对宫 财帛 · 三合 夫妻, 迁移\n- 宫干甲飞化: 廉贞化禄→官禄, 破军化权→福德, 武曲化科→财帛, 太阳化忌→子女\n- 十二神: 长生·临官, 博士·博士, 岁前·官符, 将前·指背\n- 小限虚岁: 3, 15, 27, 39, 51, 63, 75, 87, 99, 111\n\n**破军(得)**: 杀破狼中的士兵，化气为耗，先破后立、敢破旧规；企划执行兼具，反骨最甚，人生大起大落，决策宜留退路。\n\n**文昌(得)**: 第一科甲之星，主文书，属正途功名，如小天梁般清高倔强；记忆力好，单独时呆板，遇桃花星则转风流。\n\n**禄存**: 财星，其财如本钱，主谨慎与稳定；支出谨慎、风险厌恶，易错失机会，能稳定浮躁的主星，古籍视为解煞之星。\n\n**龙池**: 龙池星会增加偏硬朗的技能天赋，比如结构学、建造学等，也包括书法、制图等笔上功夫。\n\n**台辅**: 台辅星就像一颗小 `左辅`，也是一颗乐于助人的星曜，不过其助力主要是精神上的支持。比较看重名声。\n\n**旬空**: 旬空星有“潜在挑战”和“未完成”的特点，代表一种潜能。比较容易钻研哲学或者神秘学。\n\n\n## 格局\n- **府相朝垣** (命宫): 天府(庙), 天相(庙)\n\n**府相朝垣**: 府相稳定性高，个性四平八稳，成格未必富足；常作其他格局的附属增益，命坐武曲于辰戌时只列平常。\n\n\n## 四化释义\n\n**禄**: 五行属土，是增加之力，如增幅器，增加的是所在主星的本质；带来开心而人常不自觉；与禄存的本钱之财不同。\n\n**权**: 五行属木，是掌控之力，代表执行、权利与责任感，增自信，所在宫位是想做好的宫位；落六亲宫易生争执。\n\n**科**: 五行属水，负面能量最少；所在是最有面子的宫位，主名声与贵人，平顺如细水长流，但缺乏企图心。\n\n**忌**: 五行属水，代表执念与在乎，感受最强烈，不能单以吉凶论，是动力来源；落六亲宫重关系，落六事宫觉有缺憾。\n\n"},{"slug":"personality","title":"性格","intro":"看性格：命宫是本质，迁移宫是他人最先看到的外在包装，福德宫是经过思考的内心与情绪，身宫是后天的着力之处。","groups":[{"kind":"only","key":"soulPalace","target":4},{"kind":"only","key":"surfacePalace","target":10},{"kind":"only","key":"spiritPalace","target":6},{"kind":"only","key":"bodyPalace","target":8}],"text":"# 性格 · 命盘 2000-8-16 寅时 女\n\n看性格：命宫是本质，迁移宫是他人最先看到的外在包装，福德宫是经过思考的内心与情绪，身宫是后天的着力之处。\n\n## 相关宫位\n\n### 命宫 (壬午) · 大限 3-12\n- 主星: 紫微(庙)\n- 辅星: 文曲(陷)\n- 杂耀: 凤阁, 天福, 截路, 蜚廉, 年解\n- 三方四正: 对宫 迁移 · 三合 财帛, 官禄\n- 宫干壬飞化: 天梁化禄→子女, 紫微化权→命宫, 左辅化科→官禄, 武曲化忌→财帛\n- 十二神: 长生·衰, 博士·青龙, 岁前·丧门, 将前·灾煞\n- 小限虚岁: 5, 17, 29, 41, 53, 65, 77, 89, 101, 113\n\n**紫微(庙)**: 帝王星，有王者特质：控制欲强、重体面、好为人师、大局观强；得资源能控场规划，否则眼高手低，忌被捧杀。\n\n**文曲(陷)**: 第一文艺之星，主艺术修养与浪漫，属异途功名；善变通、多愁善感，增表达力而引申口舌是非，宜厚文化底蕴。\n\n**凤阁**: 凤阁星会增加比较柔和的技能天赋，比如音乐、舞蹈。凤阁星比较浪漫，审美能力也比较强，因此在艺术设计领域颇有天赋。\n\n**天福**: 天福星可以看作是小 `天同`。这颗星比较乐天，会增加一种积极乐观的心态；不喜欢冒险，喜欢平顺的状态，所以缺乏些斗志。\n\n**截路**: 截路星按生年天干安放，与空亡星成对，合称截路空亡，属空亡类杂曜。\n\n**蜚廉**: 蜚廉星充满好奇心，表达欲望也比较强，可以看作是小巨门。这颗星不走寻常路，喜欢挑战权威和传统，也因此会增加一些创新思维。\n\n**年解**: 年解星按年支安放：本命盘按生年年支，流年层另按流年年支；与解神星同为解厄类星曜，主化解灾厄、缓和凶性。\n\n\n### 迁移 (戊子) · 大限 63-72\n- 主星: 贪狼(旺)\n- 辅星: 铃星(陷)\n- 杂耀: 八座\n- 三方四正: 对宫 命宫 · 三合 福德, 夫妻\n- 宫干戊飞化: 贪狼化禄→迁移, 太阴化权→仆役, 右弼化科→夫妻, 天机化忌→兄弟\n- 十二神: 长生·养, 博士·病符, 岁前·白虎, 将前·将星\n- 小限虚岁: 11, 23, 35, 47, 59, 71, 83, 95, 107, 119\n\n**贪狼(旺)**: 第一桃花星，本质是社交与受欢迎；欲望即兴趣，好奇、易上瘾，赌性强、不甘平凡，宜增广知识、勿孤注一掷。\n\n**铃星(陷)**: 情绪内敛积压，深沉冷静；精打细算、深思熟虑，稳健可靠而或因过于谨慎失机，宜适度表达与冒险。\n\n**八座**: 八座星须与三台星合并来看：二者是紫微斗数中典型的“对星”，两颗星组成一对、产生共振。八座与三台都比较喜欢讲排场，喜爱奢华的感觉，因此会增加一定的鉴赏能力；不太喜欢被管束，喜欢享受生活，重视名声、地位和荣耀。\n\n\n### 福德 (甲申) · 大限 103-112\n- 主星: 破军(得)\n- 辅星: 文昌(得), 禄存\n- 杂耀: 龙池, 台辅, 旬空\n- 三方四正: 对宫 财帛 · 三合 夫妻, 迁移\n- 宫干甲飞化: 廉贞化禄→官禄, 破军化权→福德, 武曲化科→财帛, 太阳化忌→子女\n- 十二神: 长生·临官, 博士·博士, 岁前·官符, 将前·指背\n- 小限虚岁: 3, 15, 27, 39, 51, 63, 75, 87, 99, 111\n\n**破军(得)**: 杀破狼中的士兵，化气为耗，先破后立、敢破旧规；企划执行兼具，反骨最甚，人生大起大落，决策宜留退路。\n\n**文昌(得)**: 第一科甲之星，主文书，属正途功名，如小天梁般清高倔强；记忆力好，单独时呆板，遇桃花星则转风流。\n\n**禄存**: 财星，其财如本钱，主谨慎与稳定；支出谨慎、风险厌恶，易错失机会，能稳定浮躁的主星，古籍视为解煞之星。\n\n**龙池**: 龙池星会增加偏硬朗的技能天赋，比如结构学、建造学等，也包括书法、制图等笔上功夫。\n\n**台辅**: 台辅星就像一颗小 `左辅`，也是一颗乐于助人的星曜，不过其助力主要是精神上的支持。比较看重名声。\n\n**旬空**: 旬空星有“潜在挑战”和“未完成”的特点，代表一种潜能。比较容易钻研哲学或者神秘学。\n\n\n### 官禄 (丙戌) · 大限 83-92 [身宫]\n- 主星: 廉贞(利), 天府(庙)\n- 辅星: 左辅\n- 杂耀: 天才, 天虚\n- 三方四正: 对宫 夫妻 · 三合 命宫, 财帛\n- 宫干丙飞化: 天同化禄→疾厄, 天机化权→兄弟, 文昌化科→福德, 廉贞化忌→官禄\n- 十二神: 长生·沐浴, 博士·伏兵, 岁前·大耗, 将前·月煞\n- 小限虚岁: 1, 13, 25, 37, 49, 61, 73, 85, 97, 109\n\n**廉贞 × 天府 (同宫)**: 内敛而显霸道，平时懒言、争执时不客气，说最狠的话做最暖的事；特别喜欢也善于管钱，不冲动消费。\n\n**廉贞(利)**: 化气为囚，理性认真、自尊心强、自我保护重，不善社交，距离感最强；得资源易成行业翘楚，社交圈窄。\n\n**天府(庙)**: 务实的帝星，低调，重面子与里子平衡；不管闲事，不争是不想争，迁移逢七杀而不怒而威；包容，人脉广。\n\n**左辅**: 助力之星，喜帮助提拔他人，带长辈视角，直接强势，被视作男性贵人；能提高身份地位，易有架子，善处人际。\n\n**天才**: 天才星会增加智慧，可以看作是小 `天机`：聪明且领悟力高，反应力快，所以天才星也有点恃才傲物。\n\n**天虚**: 天虚星是一种虚耗的感觉，即所谓的精神内耗。天虚星容易陷入一种纠结的情绪里面，导致精力无端虚耗，看起来忧郁、不太有精神的样子。\n\n\n## 格局\n- **府相朝垣** (命宫): 天府(庙), 天相(庙)\n\n**府相朝垣**: 府相稳定性高，个性四平八稳，成格未必富足；常作其他格局的附属增益，命坐武曲于辰戌时只列平常。\n\n\n## 四化释义\n\n**禄**: 五行属土，是增加之力，如增幅器，增加的是所在主星的本质；带来开心而人常不自觉；与禄存的本钱之财不同。\n\n**权**: 五行属木，是掌控之力，代表执行、权利与责任感，增自信，所在宫位是想做好的宫位；落六亲宫易生争执。\n\n**科**: 五行属水，负面能量最少；所在是最有面子的宫位，主名声与贵人，平顺如细水长流，但缺乏企图心。\n\n**忌**: 五行属水，代表执念与在乎，感受最强烈，不能单以吉凶论，是动力来源；落六亲宫重关系，落六事宫觉有缺憾。\n\n"},{"slug":"career","title":"事业","intro":"看事业：官禄宫是做事与对工作的态度，可指出适合的工作类型；其三方四正（夫妻、财帛、命宫）一并会照。","groups":[{"kind":"surround","key":"careerPalace","target":8,"opposite":2,"wealth":4,"career":0}],"text":"# 事业 · 命盘 2000-8-16 寅时 女\n\n看事业：官禄宫是做事与对工作的态度，可指出适合的工作类型；其三方四正（夫妻、财帛、命宫）一并会照。\n\n## 官禄 三方四正\n\n### 本宫 · 官禄 (丙戌) · 大限 83-92 [身宫]\n- 主星: 廉贞(利), 天府(庙)\n- 辅星: 左辅\n- 杂耀: 天才, 天虚\n- 三方四正: 对宫 夫妻 · 三合 命宫, 财帛\n- 宫干丙飞化: 天同化禄→疾厄, 天机化权→兄弟, 文昌化科→福德, 廉贞化忌→官禄\n- 十二神: 长生·沐浴, 博士·伏兵, 岁前·大耗, 将前·月煞\n- 小限虚岁: 1, 13, 25, 37, 49, 61, 73, 85, 97, 109\n\n**廉贞 × 天府 (同宫)**: 内敛而显霸道，平时懒言、争执时不客气，说最狠的话做最暖的事；特别喜欢也善于管钱，不冲动消费。\n\n**廉贞(利)**: 化气为囚，理性认真、自尊心强、自我保护重，不善社交，距离感最强；得资源易成行业翘楚，社交圈窄。\n\n**天府(庙)**: 务实的帝星，低调，重面子与里子平衡；不管闲事，不争是不想争，迁移逢七杀而不怒而威；包容，人脉广。\n\n**左辅**: 助力之星，喜帮助提拔他人，带长辈视角，直接强势，被视作男性贵人；能提高身份地位，易有架子，善处人际。\n\n**天才**: 天才星会增加智慧，可以看作是小 `天机`：聪明且领悟力高，反应力快，所以天才星也有点恃才傲物。\n\n**天虚**: 天虚星是一种虚耗的感觉，即所谓的精神内耗。天虚星容易陷入一种纠结的情绪里面，导致精力无端虚耗，看起来忧郁、不太有精神的样子。\n\n\n### 对宫 · 夫妻 (庚辰) · 大限 23-32 [来因宫]\n- 主星: 七杀(庙)\n- 辅星: 右弼, 火星(陷)\n- 杂耀: 封诰, 华盖\n- 三方四正: 对宫 官禄 · 三合 迁移, 福德\n- 宫干庚飞化: 太阳化禄→子女, 武曲化权→财帛, 太阴化科→仆役, 天同化忌→疾厄\n- 十二神: 长生·死, 博士·将军, 岁前·岁建, 将前·华盖\n- 小限虚岁: 7, 19, 31, 43, 55, 67, 79, 91, 103, 115\n\n**七杀(庙)**: 杀破狼中的将领，代表坚持与执着，执行力强而少思量；亲和力弱，言辞犀利有压迫感，不浪漫，不记仇。\n\n**右弼**: 柔和的贵人，助力在背后默默付出，被视作女性贵人；善倾听、耳根子软，能柔化强势主星，偶有帮倒忙。\n\n**火星(陷)**: 思想上的冲动，决策随心欠考虑，追求即时满足，精力热情高；情绪起伏大，喜怒形于色，坦诚直接。\n\n**封诰**: 封诰星就像一颗小 `右弼`，和台辅星是对星。若说台辅主要提供精神上的帮助，封诰提供的便是物质上的帮助。比较看重地位。\n\n**华盖**: 华盖星会对神秘、新鲜的事物感兴趣，喜欢思考，有不错的哲学天赋，比较容易有精神信仰。作为将前十二神之一出现时，是临时的华盖，仅影响流月与流日。\n\n\n### 财帛位 · 命宫 (壬午) · 大限 3-12\n- 主星: 紫微(庙)\n- 辅星: 文曲(陷)\n- 杂耀: 凤阁, 天福, 截路, 蜚廉, 年解\n- 三方四正: 对宫 迁移 · 三合 财帛, 官禄\n- 宫干壬飞化: 天梁化禄→子女, 紫微化权→命宫, 左辅化科→官禄, 武曲化忌→财帛\n- 十二神: 长生·衰, 博士·青龙, 岁前·丧门, 将前·灾煞\n- 小限虚岁: 5, 17, 29, 41, 53, 65, 77, 89, 101, 113\n\n**紫微(庙)**: 帝王星，有王者特质：控制欲强、重体面、好为人师、大局观强；得资源能控场规划，否则眼高手低，忌被捧杀。\n\n**文曲(陷)**: 第一文艺之星，主艺术修养与浪漫，属异途功名；善变通、多愁善感，增表达力而引申口舌是非，宜厚文化底蕴。\n\n**凤阁**: 凤阁星会增加比较柔和的技能天赋，比如音乐、舞蹈。凤阁星比较浪漫，审美能力也比较强，因此在艺术设计领域颇有天赋。\n\n**天福**: 天福星可以看作是小 `天同`。这颗星比较乐天，会增加一种积极乐观的心态；不喜欢冒险，喜欢平顺的状态，所以缺乏些斗志。\n\n**截路**: 截路星按生年天干安放，与空亡星成对，合称截路空亡，属空亡类杂曜。\n\n**蜚廉**: 蜚廉星充满好奇心，表达欲望也比较强，可以看作是小巨门。这颗星不走寻常路，喜欢挑战权威和传统，也因此会增加一些创新思维。\n\n**年解**: 年解星按年支安放：本命盘按生年年支，流年层另按流年年支；与解神星同为解厄类星曜，主化解灾厄、缓和凶性。\n\n\n### 官禄位 · 财帛 (戊寅) · 大限 43-52\n- 主星: 武曲(得)化权, 天相(庙)\n- 辅星: 天马\n- 杂耀: 解神, 三台, 天寿, 天巫, 天厨, 阴煞, 天哭\n- 三方四正: 对宫 福德 · 三合 官禄, 命宫\n- 宫干戊飞化: 贪狼化禄→迁移, 太阴化权→仆役, 右弼化科→夫妻, 天机化忌→兄弟\n- 十二神: 长生·绝, 博士·飞廉, 岁前·吊客, 将前·岁驿\n- 小限虚岁: 9, 21, 33, 45, 57, 69, 81, 93, 105, 117\n\n**武曲 × 天相 (同宫)**: 天相使武曲温和，武曲给天相执行力；不喜束缚、亲力亲为而缺宏观，决策果断、奔波忙碌；事业心强易兼副业。\n\n**武曲(得)化权**: 独行侠，孤傲刚直、不善表达、怕麻烦别人，故执行力与行动力强；短板在策划，倔强不听劝，宜多听意见。\n\n**天相(庙)**: 左右逢源、八面玲珑、知人善用，外刚内细的和事佬；执行力随亮度，善找方法，宜作组织者，是均衡的全能型。\n\n**天马**: 最坐不住的星，增变数与不确定；精力旺盛、爱冒险求新、渴望自由，易发现机会，弱在坚持与沉淀。\n\n**解神**: 解神星顾名思义是一颗解决问题的星曜，给人一种比较乐天的感觉，也很会开导人。这颗星会增加一些共情能力。\n\n**三台**: 三台星须与八座星合并来看：二者是紫微斗数中典型的“对星”，两颗星组成一对、产生共振。三台与八座都比较喜欢讲排场，喜爱奢华的感觉，因此会增加一定的鉴赏能力；不太喜欢被管束，喜欢享受生活，重视名声、地位和荣耀。\n\n**天寿**: 天寿星会给人一种比较沉稳的感觉，处事不惊，情绪比较稳定。此星寓意：欲得长寿，心态须好，忌喜怒无常。\n\n**天巫**: 天巫星会增加第六感，这颗星也比较乐于助人，不过其对别人的帮助大多在思想层面。天巫星比较容易接触神秘学、哲学等，容易有信仰。\n\n**天厨**: 天厨星增加美食鉴赏能力，这颗星很难抵抗美食的诱惑，因此忌口对其而言是比较难的事情。天厨星不一定会做饭，但会做饭的天厨星，厨艺必能拴住人的胃口。\n\n**阴煞**: 阴煞星会附加一种忧郁、阴沉的感觉，显得有点沉默寡言，不太善于表达感情，胆子也比较小。\n\n**天哭**: 天哭星会增加一种悲情气质，如同影视剧中天生适合出演悲情戏的演员所带的那种神态。它会增加悲观情绪，比较容易消极。\n\n\n## 格局\n- **府相朝垣** (命宫): 天府(庙), 天相(庙)\n\n**府相朝垣**: 府相稳定性高，个性四平八稳，成格未必富足；常作其他格局的附属增益，命坐武曲于辰戌时只列平常。\n\n\n## 四化释义\n\n**禄**: 五行属土，是增加之力，如增幅器，增加的是所在主星的本质；带来开心而人常不自觉；与禄存的本钱之财不同。\n\n**权**: 五行属木，是掌控之力，代表执行、权利与责任感，增自信，所在宫位是想做好的宫位；落六亲宫易生争执。\n\n**科**: 五行属水，负面能量最少；所在是最有面子的宫位，主名声与贵人，平顺如细水长流，但缺乏企图心。\n\n**忌**: 五行属水，代表执念与在乎，感受最强烈，不能单以吉凶论，是动力来源；落六亲宫重关系，落六事宫觉有缺憾。\n\n"},{"slug":"wealth","title":"财运","intro":"看财运：财帛宫是对财务的态度、理财观与物质欲望，其三方四正（福德、官禄、命宫）一并会照；田宅宫是财库，看财富的积累。","groups":[{"kind":"surround","key":"wealthPalace","target":0,"opposite":6,"wealth":8,"career":4},{"kind":"only","key":"propertyPalace","target":7}],"text":"# 财运 · 命盘 2000-8-16 寅时 女\n\n看财运：财帛宫是对财务的态度、理财观与物质欲望，其三方四正（福德、官禄、命宫）一并会照；田宅宫是财库，看财富的积累。\n\n## 财帛 三方四正\n\n### 本宫 · 财帛 (戊寅) · 大限 43-52\n- 主星: 武曲(得)化权, 天相(庙)\n- 辅星: 天马\n- 杂耀: 解神, 三台, 天寿, 天巫, 天厨, 阴煞, 天哭\n- 三方四正: 对宫 福德 · 三合 官禄, 命宫\n- 宫干戊飞化: 贪狼化禄→迁移, 太阴化权→仆役, 右弼化科→夫妻, 天机化忌→兄弟\n- 十二神: 长生·绝, 博士·飞廉, 岁前·吊客, 将前·岁驿\n- 小限虚岁: 9, 21, 33, 45, 57, 69, 81, 93, 105, 117\n\n**武曲 × 天相 (同宫)**: 天相使武曲温和，武曲给天相执行力；不喜束缚、亲力亲为而缺宏观，决策果断、奔波忙碌；事业心强易兼副业。\n\n**武曲(得)化权**: 独行侠，孤傲刚直、不善表达、怕麻烦别人，故执行力与行动力强；短板在策划，倔强不听劝，宜多听意见。\n\n**天相(庙)**: 左右逢源、八面玲珑、知人善用，外刚内细的和事佬；执行力随亮度，善找方法，宜作组织者，是均衡的全能型。\n\n**天马**: 最坐不住的星，增变数与不确定；精力旺盛、爱冒险求新、渴望自由，易发现机会，弱在坚持与沉淀。\n\n**解神**: 解神星顾名思义是一颗解决问题的星曜，给人一种比较乐天的感觉，也很会开导人。这颗星会增加一些共情能力。\n\n**三台**: 三台星须与八座星合并来看：二者是紫微斗数中典型的“对星”，两颗星组成一对、产生共振。三台与八座都比较喜欢讲排场，喜爱奢华的感觉，因此会增加一定的鉴赏能力；不太喜欢被管束，喜欢享受生活，重视名声、地位和荣耀。\n\n**天寿**: 天寿星会给人一种比较沉稳的感觉，处事不惊，情绪比较稳定。此星寓意：欲得长寿，心态须好，忌喜怒无常。\n\n**天巫**: 天巫星会增加第六感，这颗星也比较乐于助人，不过其对别人的帮助大多在思想层面。天巫星比较容易接触神秘学、哲学等，容易有信仰。\n\n**天厨**: 天厨星增加美食鉴赏能力，这颗星很难抵抗美食的诱惑，因此忌口对其而言是比较难的事情。天厨星不一定会做饭，但会做饭的天厨星，厨艺必能拴住人的胃口。\n\n**阴煞**: 阴煞星会附加一种忧郁、阴沉的感觉，显得有点沉默寡言，不太善于表达感情，胆子也比较小。\n\n**天哭**: 天哭星会增加一种悲情气质，如同影视剧中天生适合出演悲情戏的演员所带的那种神态。它会增加悲观情绪，比较容易消极。\n\n\n### 对宫 · 福德 (甲申) · 大限 103-112\n- 主星: 破军(得)\n- 辅星: 文昌(得), 禄存\n- 杂耀: 龙池, 台辅, 旬空\n- 三方四正: 对宫 财帛 · 三合 夫妻, 迁移\n- 宫干甲飞化: 廉贞化禄→官禄, 破军化权→福德, 武曲化科→财帛, 太阳化忌→子女\n- 十二神: 长生·临官, 博士·博士, 岁前·官符, 将前·指背\n- 小限虚岁: 3, 15, 27, 39, 51, 63, 75, 87, 99, 111\n\n**破军(得)**: 杀破狼中的士兵，化气为耗，先破后立、敢破旧规；企划执行兼具，反骨最甚，人生大起大落，决策宜留退路。\n\n**文昌(得)**: 第一科甲之星，主文书，属正途功名，如小天梁般清高倔强；记忆力好，单独时呆板，遇桃花星则转风流。\n\n**禄存**: 财星，其财如本钱，主谨慎与稳定；支出谨慎、风险厌恶，易错失机会，能稳定浮躁的主星，古籍视为解煞之星。\n\n**龙池**: 龙池星会增加偏硬朗的技能天赋，比如结构学、建造学等，也包括书法、制图等笔上功夫。\n\n**台辅**: 台辅星就像一颗小 `左辅`，也是一颗乐于助人的星曜，不过其助力主要是精神上的支持。比较看重名声。\n\n**旬空**: 旬空星有“潜在挑战”和“未完成”的特点，代表一种潜能。比较容易钻研哲学或者神秘学。\n\n\n### 财帛位 · 官禄 (丙戌) · 大限 83-92 [身宫]\n- 主星: 廉贞(利), 天府(庙)\n- 辅星: 左辅\n- 杂耀: 天才, 天虚\n- 三方四正: 对宫 夫妻 · 三合 命宫, 财帛\n- 宫干丙飞化: 天同化禄→疾厄, 天机化权→兄弟, 文昌化科→福德, 廉贞化忌→官禄\n- 十二神: 长生·沐浴, 博士·伏兵, 岁前·大耗, 将前·月煞\n- 小限虚岁: 1, 13, 25, 37, 49, 61, 73, 85, 97, 109\n\n**廉贞 × 天府 (同宫)**: 内敛而显霸道，平时懒言、争执时不客气，说最狠的话做最暖的事；特别喜欢也善于管钱，不冲动消费。\n\n**廉贞(利)**: 化气为囚，理性认真、自尊心强、自我保护重，不善社交，距离感最强；得资源易成行业翘楚，社交圈窄。\n\n**天府(庙)**: 务实的帝星，低调，重面子与里子平衡；不管闲事，不争是不想争，迁移逢七杀而不怒而威；包容，人脉广。\n\n**左辅**: 助力之星，喜帮助提拔他人，带长辈视角，直接强势，被视作男性贵人；能提高身份地位，易有架子，善处人际。\n\n**天才**: 天才星会增加智慧，可以看作是小 `天机`：聪明且领悟力高，反应力快，所以天才星也有点恃才傲物。\n\n**天虚**: 天虚星是一种虚耗的感觉，即所谓的精神内耗。天虚星容易陷入一种纠结的情绪里面，导致精力无端虚耗，看起来忧郁、不太有精神的样子。\n\n\n### 官禄位 · 命宫 (壬午) · 大限 3-12\n- 主星: 紫微(庙)\n- 辅星: 文曲(陷)\n- 杂耀: 凤阁, 天福, 截路, 蜚廉, 年解\n- 三方四正: 对宫 迁移 · 三合 财帛, 官禄\n- 宫干壬飞化: 天梁化禄→子女, 紫微化权→命宫, 左辅化科→官禄, 武曲化忌→财帛\n- 十二神: 长生·衰, 博士·青龙, 岁前·丧门, 将前·灾煞\n- 小限虚岁: 5, 17, 29, 41, 53, 65, 77, 89, 101, 113\n\n**紫微(庙)**: 帝王星，有王者特质：控制欲强、重体面、好为人师、大局观强；得资源能控场规划，否则眼高手低，忌被捧杀。\n\n**文曲(陷)**: 第一文艺之星，主艺术修养与浪漫，属异途功名；善变通、多愁善感，增表达力而引申口舌是非，宜厚文化底蕴。\n\n**凤阁**: 凤阁星会增加比较柔和的技能天赋，比如音乐、舞蹈。凤阁星比较浪漫，审美能力也比较强，因此在艺术设计领域颇有天赋。\n\n**天福**: 天福星可以看作是小 `天同`。这颗星比较乐天，会增加一种积极乐观的心态；不喜欢冒险，喜欢平顺的状态，所以缺乏些斗志。\n\n**截路**: 截路星按生年天干安放，与空亡星成对，合称截路空亡，属空亡类杂曜。\n\n**蜚廉**: 蜚廉星充满好奇心，表达欲望也比较强，可以看作是小巨门。这颗星不走寻常路，喜欢挑战权威和传统，也因此会增加一些创新思维。\n\n**年解**: 年解星按年支安放：本命盘按生年年支，流年层另按流年年支；与解神星同为解厄类星曜，主化解灾厄、缓和凶性。\n\n\n## 相关宫位\n\n### 田宅 (乙酉) · 大限 93-102\n- 主星: 空宫\n- 辅星: 地空, 擎羊(陷)\n- 杂耀: 咸池, 天贵, 月德\n- 三方四正: 对宫 子女 · 三合 兄弟, 疾厄\n- 宫干乙飞化: 天机化禄→兄弟, 天梁化权→子女, 紫微化科→命宫, 太阴化忌→仆役\n- 十二神: 长生·冠带, 博士·官府, 岁前·小耗, 将前·咸池\n- 小限虚岁: 2, 14, 26, 38, 50, 62, 74, 86, 98, 110\n\n**地空**: 半空折翅，重想不重做，怕麻烦、遇难易退缩，号中断星；想法多而跳跃，长于艺术与文案，奇想常难落地。\n\n**擎羊(陷)**: 行为上的冲动，典型行动派，果断勇敢、不三思而后行；独立自主、不在意他人看法，亲和力弱而真诚坚定。\n\n**咸池**: 咸池星会增加异性吸引力，因为它会增加一种「媚」。另外咸池星通常比较爱干净，皮肤也会比较好，这一特质无论在男性还是女性身上，都有助于增加对异性的吸引力。作为将前十二神之一出现时，是临时的咸池。\n\n**天贵**: 天贵星是颗小贵人星，比较乐于助人，而且这种帮助也比较容易得到正面的回馈。不过天贵星容易给人增加一点傲气，所以助人时须注意方式方法，以免吃力不讨好或给对方造成心理上的压力。\n\n**月德**: 月德星心性善良温和，包容性和道德感比较强，不容易做损人利己的事情，给人一种比较有奉献精神的感觉。和天德星一样，也可以稳住比较浮躁的星曜。\n\n\n## 格局\n- **府相朝垣** (命宫): 天府(庙), 天相(庙)\n\n**府相朝垣**: 府相稳定性高，个性四平八稳，成格未必富足；常作其他格局的附属增益，命坐武曲于辰戌时只列平常。\n\n\n## 四化释义\n\n**禄**: 五行属土，是增加之力，如增幅器，增加的是所在主星的本质；带来开心而人常不自觉；与禄存的本钱之财不同。\n\n**权**: 五行属木，是掌控之力，代表执行、权利与责任感，增自信，所在宫位是想做好的宫位；落六亲宫易生争执。\n\n**科**: 五行属水，负面能量最少；所在是最有面子的宫位，主名声与贵人，平顺如细水长流，但缺乏企图心。\n\n**忌**: 五行属水，代表执念与在乎，感受最强烈，不能单以吉凶论，是动力来源；落六亲宫重关系，落六事宫觉有缺憾。\n\n"},{"slug":"romance","title":"婚恋","intro":"看婚恋：夫妻宫是择偶观与对感情的态度，其三方四正（官禄、迁移、福德）一并会照；命宫、身宫看本人，子女宫是桃花宫位。","groups":[{"kind":"surround","key":"spousePalace","target":2,"opposite":8,"wealth":10,"career":6},{"kind":"only","key":"soulPalace","target":4},{"kind":"only","key":"bodyPalace","target":8},{"kind":"only","key":"childrenPalace","target":1}],"text":"# 婚恋 · 命盘 2000-8-16 寅时 女\n\n看婚恋：夫妻宫是择偶观与对感情的态度，其三方四正（官禄、迁移、福德）一并会照；命宫、身宫看本人，子女宫是桃花宫位。\n\n## 夫妻 三方四正\n\n### 本宫 · 夫妻 (庚辰) · 大限 23-32 [来因宫]\n- 主星: 七杀(庙)\n- 辅星: 右弼, 火星(陷)\n- 杂耀: 封诰, 华盖\n- 三方四正: 对宫 官禄 · 三合 迁移, 福德\n- 宫干庚飞化: 太阳化禄→子女, 武曲化权→财帛, 太阴化科→仆役, 天同化忌→疾厄\n- 十二神: 长生·死, 博士·将军, 岁前·岁建, 将前·华盖\n- 小限虚岁: 7, 19, 31, 43, 55, 67, 79, 91, 103, 115\n\n**七杀(庙)**: 杀破狼中的将领，代表坚持与执着，执行力强而少思量；亲和力弱，言辞犀利有压迫感，不浪漫，不记仇。\n\n**右弼**: 柔和的贵人，助力在背后默默付出，被视作女性贵人；善倾听、耳根子软，能柔化强势主星，偶有帮倒忙。\n\n**火星(陷)**: 思想上的冲动，决策随心欠考虑，追求即时满足，精力热情高；情绪起伏大，喜怒形于色，坦诚直接。\n\n**封诰**: 封诰星就像一颗小 `右弼`，和台辅星是对星。若说台辅主要提供精神上的帮助，封诰提供的便是物质上的帮助。比较看重地位。\n\n**华盖**: 华盖星会对神秘、新鲜的事物感兴趣，喜欢思考，有不错的哲学天赋，比较容易有精神信仰。作为将前十二神之一出现时，是临时的华盖，仅影响流月与流日。\n\n\n### 对宫 · 官禄 (丙戌) · 大限 83-92 [身宫]\n- 主星: 廉贞(利), 天府(庙)\n- 辅星: 左辅\n- 杂耀: 天才, 天虚\n- 三方四正: 对宫 夫妻 · 三合 命宫, 财帛\n- 宫干丙飞化: 天同化禄→疾厄, 天机化权→兄弟, 文昌化科→福德, 廉贞化忌→官禄\n- 十二神: 长生·沐浴, 博士·伏兵, 岁前·大耗, 将前·月煞\n- 小限虚岁: 1, 13, 25, 37, 49, 61, 73, 85, 97, 109\n\n**廉贞 × 天府 (同宫)**: 内敛而显霸道，平时懒言、争执时不客气，说最狠的话做最暖的事；特别喜欢也善于管钱，不冲动消费。\n\n**廉贞(利)**: 化气为囚，理性认真、自尊心强、自我保护重，不善社交，距离感最强；得资源易成行业翘楚，社交圈窄。\n\n**天府(庙)**: 务实的帝星，低调，重面子与里子平衡；不管闲事，不争是不想争，迁移逢七杀而不怒而威；包容，人脉广。\n\n**左辅**: 助力之星，喜帮助提拔他人，带长辈视角，直接强势，被视作男性贵人；能提高身份地位，易有架子，善处人际。\n\n**天才**: 天才星会增加智慧，可以看作是小 `天机`：聪明且领悟力高，反应力快，所以天才星也有点恃才傲物。\n\n**天虚**: 天虚星是一种虚耗的感觉，即所谓的精神内耗。天虚星容易陷入一种纠结的情绪里面，导致精力无端虚耗，看起来忧郁、不太有精神的样子。\n\n\n### 财帛位 · 迁移 (戊子) · 大限 63-72\n- 主星: 贪狼(旺)\n- 辅星: 铃星(陷)\n- 杂耀: 八座\n- 三方四正: 对宫 命宫 · 三合 福德, 夫妻\n- 宫干戊飞化: 贪狼化禄→迁移, 太阴化权→仆役, 右弼化科→夫妻, 天机化忌→兄弟\n- 十二神: 长生·养, 博士·病符, 岁前·白虎, 将前·将星\n- 小限虚岁: 11, 23, 35, 47, 59, 71, 83, 95, 107, 119\n\n**贪狼(旺)**: 第一桃花星，本质是社交与受欢迎；欲望即兴趣，好奇、易上瘾，赌性强、不甘平凡，宜增广知识、勿孤注一掷。\n\n**铃星(陷)**: 情绪内敛积压，深沉冷静；精打细算、深思熟虑，稳健可靠而或因过于谨慎失机，宜适度表达与冒险。\n\n**八座**: 八座星须与三台星合并来看：二者是紫微斗数中典型的“对星”，两颗星组成一对、产生共振。八座与三台都比较喜欢讲排场，喜爱奢华的感觉，因此会增加一定的鉴赏能力；不太喜欢被管束，喜欢享受生活，重视名声、地位和荣耀。\n\n\n### 官禄位 · 福德 (甲申) · 大限 103-112\n- 主星: 破军(得)\n- 辅星: 文昌(得), 禄存\n- 杂耀: 龙池, 台辅, 旬空\n- 三方四正: 对宫 财帛 · 三合 夫妻, 迁移\n- 宫干甲飞化: 廉贞化禄→官禄, 破军化权→福德, 武曲化科→财帛, 太阳化忌→子女\n- 十二神: 长生·临官, 博士·博士, 岁前·官符, 将前·指背\n- 小限虚岁: 3, 15, 27, 39, 51, 63, 75, 87, 99, 111\n\n**破军(得)**: 杀破狼中的士兵，化气为耗，先破后立、敢破旧规；企划执行兼具，反骨最甚，人生大起大落，决策宜留退路。\n\n**文昌(得)**: 第一科甲之星，主文书，属正途功名，如小天梁般清高倔强；记忆力好，单独时呆板，遇桃花星则转风流。\n\n**禄存**: 财星，其财如本钱，主谨慎与稳定；支出谨慎、风险厌恶，易错失机会，能稳定浮躁的主星，古籍视为解煞之星。\n\n**龙池**: 龙池星会增加偏硬朗的技能天赋，比如结构学、建造学等，也包括书法、制图等笔上功夫。\n\n**台辅**: 台辅星就像一颗小 `左辅`，也是一颗乐于助人的星曜，不过其助力主要是精神上的支持。比较看重名声。\n\n**旬空**: 旬空星有“潜在挑战”和“未完成”的特点，代表一种潜能。比较容易钻研哲学或者神秘学。\n\n\n## 相关宫位\n\n### 命宫 (壬午) · 大限 3-12\n- 主星: 紫微(庙)\n- 辅星: 文曲(陷)\n- 杂耀: 凤阁, 天福, 截路, 蜚廉, 年解\n- 三方四正: 对宫 迁移 · 三合 财帛, 官禄\n- 宫干壬飞化: 天梁化禄→子女, 紫微化权→命宫, 左辅化科→官禄, 武曲化忌→财帛\n- 十二神: 长生·衰, 博士·青龙, 岁前·丧门, 将前·灾煞\n- 小限虚岁: 5, 17, 29, 41, 53, 65, 77, 89, 101, 113\n\n**紫微(庙)**: 帝王星，有王者特质：控制欲强、重体面、好为人师、大局观强；得资源能控场规划，否则眼高手低，忌被捧杀。\n\n**文曲(陷)**: 第一文艺之星，主艺术修养与浪漫，属异途功名；善变通、多愁善感，增表达力而引申口舌是非，宜厚文化底蕴。\n\n**凤阁**: 凤阁星会增加比较柔和的技能天赋，比如音乐、舞蹈。凤阁星比较浪漫，审美能力也比较强，因此在艺术设计领域颇有天赋。\n\n**天福**: 天福星可以看作是小 `天同`。这颗星比较乐天，会增加一种积极乐观的心态；不喜欢冒险，喜欢平顺的状态，所以缺乏些斗志。\n\n**截路**: 截路星按生年天干安放，与空亡星成对，合称截路空亡，属空亡类杂曜。\n\n**蜚廉**: 蜚廉星充满好奇心，表达欲望也比较强，可以看作是小巨门。这颗星不走寻常路，喜欢挑战权威和传统，也因此会增加一些创新思维。\n\n**年解**: 年解星按年支安放：本命盘按生年年支，流年层另按流年年支；与解神星同为解厄类星曜，主化解灾厄、缓和凶性。\n\n\n### 子女 (己卯) · 大限 33-42\n- 主星: 太阳(庙)化禄, 天梁(庙)\n- 杂耀: 天刑\n- 三方四正: 对宫 田宅 · 三合 仆役, 父母\n- 宫干己飞化: 武曲化禄→财帛, 贪狼化权→迁移, 天梁化科→子女, 文曲化忌→命宫\n- 十二神: 长生·墓, 博士·奏书, 岁前·病符, 将前·息神\n- 小限虚岁: 8, 20, 32, 44, 56, 68, 80, 92, 104, 116\n\n**太阳 × 天梁 (同宫)**: 只在卯酉，卯宫积极、酉宫被动；喜关照他人、顾家，有点爱显摆，能力强、想掌主动，直肠子不屑伪装。\n\n**太阳(庙)化禄**: 太子星，化气权贵，有亲和力、好为人师、渴望权利而好争；事业心强，善表现与组织，人际与感情中易显强势。\n\n**天梁(庙)**: 倔犟如牛而喜交际，有江湖豪气，稳重老成；化气为荫，庇荫弱小、不屑去争，显得清高；交友不慎影响巨大。\n\n**天刑**: 天刑星会降低亲和力，给人一种严肃、不苟言笑的感觉；比较冲动、冷酷，不太给面子，因此显得比较难相处。这些只是外在观感；若与主星性质冲突，容易产生比较大的反差感。\n\n\n## 格局\n- **府相朝垣** (命宫): 天府(庙), 天相(庙)\n\n**府相朝垣**: 府相稳定性高，个性四平八稳，成格未必富足；常作其他格局的附属增益，命坐武曲于辰戌时只列平常。\n\n\n## 四化释义\n\n**禄**: 五行属土，是增加之力，如增幅器，增加的是所在主星的本质；带来开心而人常不自觉；与禄存的本钱之财不同。\n\n**权**: 五行属木，是掌控之力，代表执行、权利与责任感，增自信，所在宫位是想做好的宫位；落六亲宫易生争执。\n\n**科**: 五行属水，负面能量最少；所在是最有面子的宫位，主名声与贵人，平顺如细水长流，但缺乏企图心。\n\n**忌**: 五行属水，代表执念与在乎，感受最强烈，不能单以吉凶论，是动力来源；落六亲宫重关系，落六事宫觉有缺憾。\n\n"},{"slug":"health","title":"健康","intro":"看身体：疾厄宫管身体与体质，也揭示对自己身体的态度，其三方四正（父母、田宅、兄弟）一并会照；命宫看本人。身体不适须及时就医。","groups":[{"kind":"surround","key":"healthPalace","target":11,"opposite":5,"wealth":7,"career":3},{"kind":"only","key":"soulPalace","target":4}],"text":"# 健康 · 命盘 2000-8-16 寅时 女\n\n看身体：疾厄宫管身体与体质，也揭示对自己身体的态度，其三方四正（父母、田宅、兄弟）一并会照；命宫看本人。身体不适须及时就医。\n\n## 疾厄 三方四正\n\n### 本宫 · 疾厄 (己丑) · 大限 53-62\n- 主星: 天同(不)化忌, 巨门(不)\n- 辅星: 天魁, 地劫\n- 杂耀: 天德, 寡宿, 破碎, 天使\n- 三方四正: 对宫 父母 · 三合 田宅, 兄弟\n- 宫干己飞化: 武曲化禄→财帛, 贪狼化权→迁移, 天梁化科→子女, 文曲化忌→命宫\n- 十二神: 长生·胎, 博士·喜神, 岁前·天德, 将前·攀鞍\n- 小限虚岁: 10, 22, 34, 46, 58, 70, 82, 94, 106, 118\n\n**天同 × 巨门 (同宫)**: 艺术氛围强，才艺以语言表达为主；空宫一组内心惶恐、决策依赖环境；自我保护强，不喜分享内心而知足常乐。\n\n**天同(不)化忌**: 亲和力第一，化气温和，逆来顺受、不争不抢、重自我享受，为福德宫主与福星；保守求稳，宜学会拒绝。\n\n**巨门(不)**: 八卦之魂，嘴快；受四化影响大，化权言语有权威，化忌有压迫感；兼四种五行，化气为暗，热心而缺乏安全感。\n\n**天魁**: 天乙贵人，被视作男性贵人，有领导气质、喜管人；助力须自己争取，只解燃眉之急，与自身能力挂钩，增文气。\n\n**地劫**: 浪里行舟，作用在物质：对机会挑剔而错失时机，劳碌求踏实之财；风险厌恶，擅短平快，长线事易博而不精。\n\n**天德**: 天德星个性比较稳重，处事得体，比较喜欢帮助他人，这颗星会给人增加一种悲天悯人的情怀。它的作用是可以稳住比较浮躁的星曜。作为岁前十二神之一出现时，增加名声，降低煞星的力量。\n\n**寡宿**: 寡宿星会降低表达欲望，令人显得沉默寡言。因不善表达，内心戏便会变多，给人一种比较多疑的感觉。这些只是外在观感；若与主星性质冲突，容易产生比较大的反差感。\n\n**破碎**: 破碎星顾名思义带有零零碎碎的感觉——不完整，但是多，因此引申为一种博而不精的状态：爱好广泛，但不太容易深入钻研。\n\n**天使**: 天使星固定出现在疾厄宫，因为生老病死是任何人都无法摆脱的循环。\n\n\n### 对宫 · 父母 (癸未) · 大限 113-122\n- 主星: 空宫\n- 辅星: 天钺, 陀罗(庙)\n- 杂耀: 天姚, 空亡\n- 三方四正: 对宫 疾厄 · 三合 子女, 仆役\n- 宫干癸飞化: 破军化禄→福德, 巨门化权→疾厄, 太阴化科→仆役, 贪狼化忌→迁移\n- 十二神: 长生·帝旺, 博士·力士, 岁前·贯索, 将前·天煞\n- 小限虚岁: 4, 16, 28, 40, 52, 64, 76, 88, 100, 112\n\n**天钺**: 玉堂贵人，被视作女性贵人，善策划、喜管事；助力间接而能化解问题源头，同样须主动争取，增聪慧洞察。\n\n**陀罗(庙)**: 如陀螺旋转，主纠结与拖延，决策犹豫易失时机；善研究、循序渐进，适合长线任务，喜探究事物本质。\n\n**天姚**: 天姚星会增加社交能力，并附加一种“痞”或者古灵精怪的气质。这种能力让天姚星在人际交往中比较喜欢受到关注的感觉，乐于成为人群中众人瞩目的焦点。\n\n**空亡**: 空亡星会让意志比较消沉，容易产生虚无感或感到迷茫，需要确立目标以消除这种消极的感觉。\n\n\n### 财帛位 · 田宅 (乙酉) · 大限 93-102\n- 主星: 空宫\n- 辅星: 地空, 擎羊(陷)\n- 杂耀: 咸池, 天贵, 月德\n- 三方四正: 对宫 子女 · 三合 兄弟, 疾厄\n- 宫干乙飞化: 天机化禄→兄弟, 天梁化权→子女, 紫微化科→命宫, 太阴化忌→仆役\n- 十二神: 长生·冠带, 博士·官府, 岁前·小耗, 将前·咸池\n- 小限虚岁: 2, 14, 26, 38, 50, 62, 74, 86, 98, 110\n\n**地空**: 半空折翅，重想不重做，怕麻烦、遇难易退缩，号中断星；想法多而跳跃，长于艺术与文案，奇想常难落地。\n\n**擎羊(陷)**: 行为上的冲动，典型行动派，果断勇敢、不三思而后行；独立自主、不在意他人看法，亲和力弱而真诚坚定。\n\n**咸池**: 咸池星会增加异性吸引力，因为它会增加一种「媚」。另外咸池星通常比较爱干净，皮肤也会比较好，这一特质无论在男性还是女性身上，都有助于增加对异性的吸引力。作为将前十二神之一出现时，是临时的咸池。\n\n**天贵**: 天贵星是颗小贵人星，比较乐于助人，而且这种帮助也比较容易得到正面的回馈。不过天贵星容易给人增加一点傲气，所以助人时须注意方式方法，以免吃力不讨好或给对方造成心理上的压力。\n\n**月德**: 月德星心性善良温和，包容性和道德感比较强，不容易做损人利己的事情，给人一种比较有奉献精神的感觉。和天德星一样，也可以稳住比较浮躁的星曜。\n\n\n### 官禄位 · 兄弟 (辛巳) · 大限 13-22\n- 主星: 天机(平)\n- 杂耀: 天喜, 天空, 孤辰\n- 三方四正: 对宫 仆役 · 三合 疾厄, 田宅\n- 宫干辛飞化: 巨门化禄→疾厄, 太阳化权→子女, 文曲化科→命宫, 文昌化忌→福德\n- 十二神: 长生·病, 博士·小耗, 岁前·晦气, 将前·劫煞\n- 小限虚岁: 6, 18, 30, 42, 54, 66, 78, 90, 102, 114\n\n**天机(平)**: 策划型星曜，思维活跃、第六感强，重动脑动嘴而懒于动手；兄弟主，善带气氛，知识广而不深，耐心不足。\n\n**天喜**: 天喜星会增加亲和力，笑脸迎人，看起来会比较活泼好动。红鸾星和天喜星是固定的对宫组合，互为表里，由此常带出一种反差感。\n\n**天空**: 天空星有“突发”的特点，代表一种转折和变化，比较追求“精神快感”。\n\n**孤辰**: 孤辰星会增加孤独感，这是因为孤辰星不太喜欢吵闹和喧嚣的环境，比较喜欢独处。个性上会比较高冷，不容易接近，也不太容易对人敞开心扉。这些只是外在观感；若与主星性质冲突，容易产生比较大的反差感。\n\n\n## 相关宫位\n\n### 命宫 (壬午) · 大限 3-12\n- 主星: 紫微(庙)\n- 辅星: 文曲(陷)\n- 杂耀: 凤阁, 天福, 截路, 蜚廉, 年解\n- 三方四正: 对宫 迁移 · 三合 财帛, 官禄\n- 宫干壬飞化: 天梁化禄→子女, 紫微化权→命宫, 左辅化科→官禄, 武曲化忌→财帛\n- 十二神: 长生·衰, 博士·青龙, 岁前·丧门, 将前·灾煞\n- 小限虚岁: 5, 17, 29, 41, 53, 65, 77, 89, 101, 113\n\n**紫微(庙)**: 帝王星，有王者特质：控制欲强、重体面、好为人师、大局观强；得资源能控场规划，否则眼高手低，忌被捧杀。\n\n**文曲(陷)**: 第一文艺之星，主艺术修养与浪漫，属异途功名；善变通、多愁善感，增表达力而引申口舌是非，宜厚文化底蕴。\n\n**凤阁**: 凤阁星会增加比较柔和的技能天赋，比如音乐、舞蹈。凤阁星比较浪漫，审美能力也比较强，因此在艺术设计领域颇有天赋。\n\n**天福**: 天福星可以看作是小 `天同`。这颗星比较乐天，会增加一种积极乐观的心态；不喜欢冒险，喜欢平顺的状态，所以缺乏些斗志。\n\n**截路**: 截路星按生年天干安放，与空亡星成对，合称截路空亡，属空亡类杂曜。\n\n**蜚廉**: 蜚廉星充满好奇心，表达欲望也比较强，可以看作是小巨门。这颗星不走寻常路，喜欢挑战权威和传统，也因此会增加一些创新思维。\n\n**年解**: 年解星按年支安放：本命盘按生年年支，流年层另按流年年支；与解神星同为解厄类星曜，主化解灾厄、缓和凶性。\n\n\n## 格局\n- **府相朝垣** (命宫): 天府(庙), 天相(庙)\n\n**府相朝垣**: 府相稳定性高，个性四平八稳，成格未必富足；常作其他格局的附属增益，命坐武曲于辰戌时只列平常。\n\n\n## 四化释义\n\n**禄**: 五行属土，是增加之力，如增幅器，增加的是所在主星的本质；带来开心而人常不自觉；与禄存的本钱之财不同。\n\n**权**: 五行属木，是掌控之力，代表执行、权利与责任感，增自信，所在宫位是想做好的宫位；落六亲宫易生争执。\n\n**科**: 五行属水，负面能量最少；所在是最有面子的宫位，主名声与贵人，平顺如细水长流，但缺乏企图心。\n\n**忌**: 五行属水，代表执念与在乎，感受最强烈，不能单以吉凶论，是动力来源；落六亲宫重关系，落六事宫觉有缺憾。\n\n"},{"slug":"parents","title":"父母","intro":"看父母：父母宫是先天养分，多看与父亲的关系，其三方四正（疾厄、仆役、子女）一并会照；与母亲的相处看兄弟宫。","groups":[{"kind":"surround","key":"parentsPalace","target":5,"opposite":11,"wealth":1,"career":9},{"kind":"only","key":"siblingsPalace","target":3},{"kind":"only","key":"soulPalace","target":4}],"text":"# 父母 · 命盘 2000-8-16 寅时 女\n\n看父母：父母宫是先天养分，多看与父亲的关系，其三方四正（疾厄、仆役、子女）一并会照；与母亲的相处看兄弟宫。\n\n## 父母 三方四正\n\n### 本宫 · 父母 (癸未) · 大限 113-122\n- 主星: 空宫\n- 辅星: 天钺, 陀罗(庙)\n- 杂耀: 天姚, 空亡\n- 三方四正: 对宫 疾厄 · 三合 子女, 仆役\n- 宫干癸飞化: 破军化禄→福德, 巨门化权→疾厄, 太阴化科→仆役, 贪狼化忌→迁移\n- 十二神: 长生·帝旺, 博士·力士, 岁前·贯索, 将前·天煞\n- 小限虚岁: 4, 16, 28, 40, 52, 64, 76, 88, 100, 112\n\n**天钺**: 玉堂贵人，被视作女性贵人，善策划、喜管事；助力间接而能化解问题源头，同样须主动争取，增聪慧洞察。\n\n**陀罗(庙)**: 如陀螺旋转，主纠结与拖延，决策犹豫易失时机；善研究、循序渐进，适合长线任务，喜探究事物本质。\n\n**天姚**: 天姚星会增加社交能力，并附加一种“痞”或者古灵精怪的气质。这种能力让天姚星在人际交往中比较喜欢受到关注的感觉，乐于成为人群中众人瞩目的焦点。\n\n**空亡**: 空亡星会让意志比较消沉，容易产生虚无感或感到迷茫，需要确立目标以消除这种消极的感觉。\n\n\n### 对宫 · 疾厄 (己丑) · 大限 53-62\n- 主星: 天同(不)化忌, 巨门(不)\n- 辅星: 天魁, 地劫\n- 杂耀: 天德, 寡宿, 破碎, 天使\n- 三方四正: 对宫 父母 · 三合 田宅, 兄弟\n- 宫干己飞化: 武曲化禄→财帛, 贪狼化权→迁移, 天梁化科→子女, 文曲化忌→命宫\n- 十二神: 长生·胎, 博士·喜神, 岁前·天德, 将前·攀鞍\n- 小限虚岁: 10, 22, 34, 46, 58, 70, 82, 94, 106, 118\n\n**天同 × 巨门 (同宫)**: 艺术氛围强，才艺以语言表达为主；空宫一组内心惶恐、决策依赖环境；自我保护强，不喜分享内心而知足常乐。\n\n**天同(不)化忌**: 亲和力第一，化气温和，逆来顺受、不争不抢、重自我享受，为福德宫主与福星；保守求稳，宜学会拒绝。\n\n**巨门(不)**: 八卦之魂，嘴快；受四化影响大，化权言语有权威，化忌有压迫感；兼四种五行，化气为暗，热心而缺乏安全感。\n\n**天魁**: 天乙贵人，被视作男性贵人，有领导气质、喜管人；助力须自己争取，只解燃眉之急，与自身能力挂钩，增文气。\n\n**地劫**: 浪里行舟，作用在物质：对机会挑剔而错失时机，劳碌求踏实之财；风险厌恶，擅短平快，长线事易博而不精。\n\n**天德**: 天德星个性比较稳重，处事得体，比较喜欢帮助他人，这颗星会给人增加一种悲天悯人的情怀。它的作用是可以稳住比较浮躁的星曜。作为岁前十二神之一出现时，增加名声，降低煞星的力量。\n\n**寡宿**: 寡宿星会降低表达欲望，令人显得沉默寡言。因不善表达，内心戏便会变多，给人一种比较多疑的感觉。这些只是外在观感；若与主星性质冲突，容易产生比较大的反差感。\n\n**破碎**: 破碎星顾名思义带有零零碎碎的感觉——不完整，但是多，因此引申为一种博而不精的状态：爱好广泛，但不太容易深入钻研。\n\n**天使**: 天使星固定出现在疾厄宫，因为生老病死是任何人都无法摆脱的循环。\n\n\n### 财帛位 · 子女 (己卯) · 大限 33-42\n- 主星: 太阳(庙)化禄, 天梁(庙)\n- 杂耀: 天刑\n- 三方四正: 对宫 田宅 · 三合 仆役, 父母\n- 宫干己飞化: 武曲化禄→财帛, 贪狼化权→迁移, 天梁化科→子女, 文曲化忌→命宫\n- 十二神: 长生·墓, 博士·奏书, 岁前·病符, 将前·息神\n- 小限虚岁: 8, 20, 32, 44, 56, 68, 80, 92, 104, 116\n\n**太阳 × 天梁 (同宫)**: 只在卯酉，卯宫积极、酉宫被动；喜关照他人、顾家，有点爱显摆，能力强、想掌主动，直肠子不屑伪装。\n\n**太阳(庙)化禄**: 太子星，化气权贵，有亲和力、好为人师、渴望权利而好争；事业心强，善表现与组织，人际与感情中易显强势。\n\n**天梁(庙)**: 倔犟如牛而喜交际，有江湖豪气，稳重老成；化气为荫，庇荫弱小、不屑去争，显得清高；交友不慎影响巨大。\n\n**天刑**: 天刑星会降低亲和力，给人一种严肃、不苟言笑的感觉；比较冲动、冷酷，不太给面子，因此显得比较难相处。这些只是外在观感；若与主星性质冲突，容易产生比较大的反差感。\n\n\n### 官禄位 · 仆役 (丁亥) · 大限 73-82\n- 主星: 太阴(庙)化科\n- 杂耀: 红鸾, 恩光, 天官, 天月, 天伤\n- 三方四正: 对宫 兄弟 · 三合 父母, 子女\n- 宫干丁飞化: 太阴化禄→仆役, 天同化权→疾厄, 天机化科→兄弟, 巨门化忌→疾厄\n- 十二神: 长生·长生, 博士·大耗, 岁前·龙德, 将前·亡神\n- 小限虚岁: 12, 24, 36, 48, 60, 72, 84, 96, 108, 120\n\n**太阴(庙)化科**: 女性气质代表，婉约文艺、审美独到、不喜争斗，照顾人令人舒服；艺术天赋高而承受力弱，情感是最大关卡。\n\n**红鸾**: 红鸾星会增加亲切感，同时会比较含蓄，看起来给人一种比较端庄、温柔贤淑的感觉。不过这只是一种观感，实际如何须结合主星和辅星一起判断。\n\n**恩光**: 恩光星之名可解作“感恩的光”，这颗星比较容易投桃报李，重义气。不过恩光星不太喜欢欠人情，会给人一种“过于客气”的感觉；这种礼尚往来的情谊固然很好，但若要交心，就会让人有点难以靠近。\n\n**天官**: 天官星顾名思义和“官”有关，这颗星对权力有一定的需求，喜欢追求权力，会给人一种有“架子”的感觉。\n\n**天月**: 天月星带有一种病恹恹的感觉——并非真的会有疾病，而是一种病态感、虚弱感，犹如出演林黛玉的演员，本身没有疾病，却能演出弱质纤纤的神态。\n\n**天伤**: 天伤星固定出现在仆役宫。天下没有不散的宴席，朋友总有聚散，而分离总是让人伤神。\n\n\n## 相关宫位\n\n### 兄弟 (辛巳) · 大限 13-22\n- 主星: 天机(平)\n- 杂耀: 天喜, 天空, 孤辰\n- 三方四正: 对宫 仆役 · 三合 疾厄, 田宅\n- 宫干辛飞化: 巨门化禄→疾厄, 太阳化权→子女, 文曲化科→命宫, 文昌化忌→福德\n- 十二神: 长生·病, 博士·小耗, 岁前·晦气, 将前·劫煞\n- 小限虚岁: 6, 18, 30, 42, 54, 66, 78, 90, 102, 114\n\n**天机(平)**: 策划型星曜，思维活跃、第六感强，重动脑动嘴而懒于动手；兄弟主，善带气氛，知识广而不深，耐心不足。\n\n**天喜**: 天喜星会增加亲和力，笑脸迎人，看起来会比较活泼好动。红鸾星和天喜星是固定的对宫组合，互为表里，由此常带出一种反差感。\n\n**天空**: 天空星有“突发”的特点，代表一种转折和变化，比较追求“精神快感”。\n\n**孤辰**: 孤辰星会增加孤独感，这是因为孤辰星不太喜欢吵闹和喧嚣的环境，比较喜欢独处。个性上会比较高冷，不容易接近，也不太容易对人敞开心扉。这些只是外在观感；若与主星性质冲突，容易产生比较大的反差感。\n\n\n### 命宫 (壬午) · 大限 3-12\n- 主星: 紫微(庙)\n- 辅星: 文曲(陷)\n- 杂耀: 凤阁, 天福, 截路, 蜚廉, 年解\n- 三方四正: 对宫 迁移 · 三合 财帛, 官禄\n- 宫干壬飞化: 天梁化禄→子女, 紫微化权→命宫, 左辅化科→官禄, 武曲化忌→财帛\n- 十二神: 长生·衰, 博士·青龙, 岁前·丧门, 将前·灾煞\n- 小限虚岁: 5, 17, 29, 41, 53, 65, 77, 89, 101, 113\n\n**紫微(庙)**: 帝王星，有王者特质：控制欲强、重体面、好为人师、大局观强；得资源能控场规划，否则眼高手低，忌被捧杀。\n\n**文曲(陷)**: 第一文艺之星，主艺术修养与浪漫，属异途功名；善变通、多愁善感，增表达力而引申口舌是非，宜厚文化底蕴。\n\n**凤阁**: 凤阁星会增加比较柔和的技能天赋，比如音乐、舞蹈。凤阁星比较浪漫，审美能力也比较强，因此在艺术设计领域颇有天赋。\n\n**天福**: 天福星可以看作是小 `天同`。这颗星比较乐天，会增加一种积极乐观的心态；不喜欢冒险，喜欢平顺的状态，所以缺乏些斗志。\n\n**截路**: 截路星按生年天干安放，与空亡星成对，合称截路空亡，属空亡类杂曜。\n\n**蜚廉**: 蜚廉星充满好奇心，表达欲望也比较强，可以看作是小巨门。这颗星不走寻常路，喜欢挑战权威和传统，也因此会增加一些创新思维。\n\n**年解**: 年解星按年支安放：本命盘按生年年支，流年层另按流年年支；与解神星同为解厄类星曜，主化解灾厄、缓和凶性。\n\n\n## 格局\n- **府相朝垣** (命宫): 天府(庙), 天相(庙)\n\n**府相朝垣**: 府相稳定性高，个性四平八稳，成格未必富足；常作其他格局的附属增益，命坐武曲于辰戌时只列平常。\n\n\n## 四化释义\n\n**禄**: 五行属土，是增加之力，如增幅器，增加的是所在主星的本质；带来开心而人常不自觉；与禄存的本钱之财不同。\n\n**权**: 五行属木，是掌控之力，代表执行、权利与责任感，增自信，所在宫位是想做好的宫位；落六亲宫易生争执。\n\n**科**: 五行属水，负面能量最少；所在是最有面子的宫位，主名声与贵人，平顺如细水长流，但缺乏企图心。\n\n**忌**: 五行属水，代表执念与在乎，感受最强烈，不能单以吉凶论，是动力来源；落六亲宫重关系，落六事宫觉有缺憾。\n\n"},{"slug":"children","title":"子女","intro":"看子女：子女宫看与子女的关系，也是桃花与合作伙伴的宫位，其三方四正（田宅、仆役、父母）一并会照；命宫看本人。","groups":[{"kind":"surround","key":"childrenPalace","target":1,"opposite":7,"wealth":9,"career":5},{"kind":"only","key":"soulPalace","target":4}],"text":"# 子女 · 命盘 2000-8-16 寅时 女\n\n看子女：子女宫看与子女的关系，也是桃花与合作伙伴的宫位，其三方四正（田宅、仆役、父母）一并会照；命宫看本人。\n\n## 子女 三方四正\n\n### 本宫 · 子女 (己卯) · 大限 33-42\n- 主星: 太阳(庙)化禄, 天梁(庙)\n- 杂耀: 天刑\n- 三方四正: 对宫 田宅 · 三合 仆役, 父母\n- 宫干己飞化: 武曲化禄→财帛, 贪狼化权→迁移, 天梁化科→子女, 文曲化忌→命宫\n- 十二神: 长生·墓, 博士·奏书, 岁前·病符, 将前·息神\n- 小限虚岁: 8, 20, 32, 44, 56, 68, 80, 92, 104, 116\n\n**太阳 × 天梁 (同宫)**: 只在卯酉，卯宫积极、酉宫被动；喜关照他人、顾家，有点爱显摆，能力强、想掌主动，直肠子不屑伪装。\n\n**太阳(庙)化禄**: 太子星，化气权贵，有亲和力、好为人师、渴望权利而好争；事业心强，善表现与组织，人际与感情中易显强势。\n\n**天梁(庙)**: 倔犟如牛而喜交际，有江湖豪气，稳重老成；化气为荫，庇荫弱小、不屑去争，显得清高；交友不慎影响巨大。\n\n**天刑**: 天刑星会降低亲和力，给人一种严肃、不苟言笑的感觉；比较冲动、冷酷，不太给面子，因此显得比较难相处。这些只是外在观感；若与主星性质冲突，容易产生比较大的反差感。\n\n\n### 对宫 · 田宅 (乙酉) · 大限 93-102\n- 主星: 空宫\n- 辅星: 地空, 擎羊(陷)\n- 杂耀: 咸池, 天贵, 月德\n- 三方四正: 对宫 子女 · 三合 兄弟, 疾厄\n- 宫干乙飞化: 天机化禄→兄弟, 天梁化权→子女, 紫微化科→命宫, 太阴化忌→仆役\n- 十二神: 长生·冠带, 博士·官府, 岁前·小耗, 将前·咸池\n- 小限虚岁: 2, 14, 26, 38, 50, 62, 74, 86, 98, 110\n\n**地空**: 半空折翅，重想不重做，怕麻烦、遇难易退缩，号中断星；想法多而跳跃，长于艺术与文案，奇想常难落地。\n\n**擎羊(陷)**: 行为上的冲动，典型行动派，果断勇敢、不三思而后行；独立自主、不在意他人看法，亲和力弱而真诚坚定。\n\n**咸池**: 咸池星会增加异性吸引力，因为它会增加一种「媚」。另外咸池星通常比较爱干净，皮肤也会比较好，这一特质无论在男性还是女性身上，都有助于增加对异性的吸引力。作为将前十二神之一出现时，是临时的咸池。\n\n**天贵**: 天贵星是颗小贵人星，比较乐于助人，而且这种帮助也比较容易得到正面的回馈。不过天贵星容易给人增加一点傲气，所以助人时须注意方式方法，以免吃力不讨好或给对方造成心理上的压力。\n\n**月德**: 月德星心性善良温和，包容性和道德感比较强，不容易做损人利己的事情，给人一种比较有奉献精神的感觉。和天德星一样，也可以稳住比较浮躁的星曜。\n\n\n### 财帛位 · 仆役 (丁亥) · 大限 73-82\n- 主星: 太阴(庙)化科\n- 杂耀: 红鸾, 恩光, 天官, 天月, 天伤\n- 三方四正: 对宫 兄弟 · 三合 父母, 子女\n- 宫干丁飞化: 太阴化禄→仆役, 天同化权→疾厄, 天机化科→兄弟, 巨门化忌→疾厄\n- 十二神: 长生·长生, 博士·大耗, 岁前·龙德, 将前·亡神\n- 小限虚岁: 12, 24, 36, 48, 60, 72, 84, 96, 108, 120\n\n**太阴(庙)化科**: 女性气质代表，婉约文艺、审美独到、不喜争斗，照顾人令人舒服；艺术天赋高而承受力弱，情感是最大关卡。\n\n**红鸾**: 红鸾星会增加亲切感，同时会比较含蓄，看起来给人一种比较端庄、温柔贤淑的感觉。不过这只是一种观感，实际如何须结合主星和辅星一起判断。\n\n**恩光**: 恩光星之名可解作“感恩的光”，这颗星比较容易投桃报李，重义气。不过恩光星不太喜欢欠人情，会给人一种“过于客气”的感觉；这种礼尚往来的情谊固然很好，但若要交心，就会让人有点难以靠近。\n\n**天官**: 天官星顾名思义和“官”有关，这颗星对权力有一定的需求，喜欢追求权力，会给人一种有“架子”的感觉。\n\n**天月**: 天月星带有一种病恹恹的感觉——并非真的会有疾病，而是一种病态感、虚弱感，犹如出演林黛玉的演员，本身没有疾病，却能演出弱质纤纤的神态。\n\n**天伤**: 天伤星固定出现在仆役宫。天下没有不散的宴席，朋友总有聚散，而分离总是让人伤神。\n\n\n### 官禄位 · 父母 (癸未) · 大限 113-122\n- 主星: 空宫\n- 辅星: 天钺, 陀罗(庙)\n- 杂耀: 天姚, 空亡\n- 三方四正: 对宫 疾厄 · 三合 子女, 仆役\n- 宫干癸飞化: 破军化禄→福德, 巨门化权→疾厄, 太阴化科→仆役, 贪狼化忌→迁移\n- 十二神: 长生·帝旺, 博士·力士, 岁前·贯索, 将前·天煞\n- 小限虚岁: 4, 16, 28, 40, 52, 64, 76, 88, 100, 112\n\n**天钺**: 玉堂贵人，被视作女性贵人，善策划、喜管事；助力间接而能化解问题源头，同样须主动争取，增聪慧洞察。\n\n**陀罗(庙)**: 如陀螺旋转，主纠结与拖延，决策犹豫易失时机；善研究、循序渐进，适合长线任务，喜探究事物本质。\n\n**天姚**: 天姚星会增加社交能力，并附加一种“痞”或者古灵精怪的气质。这种能力让天姚星在人际交往中比较喜欢受到关注的感觉，乐于成为人群中众人瞩目的焦点。\n\n**空亡**: 空亡星会让意志比较消沉，容易产生虚无感或感到迷茫，需要确立目标以消除这种消极的感觉。\n\n\n## 相关宫位\n\n### 命宫 (壬午) · 大限 3-12\n- 主星: 紫微(庙)\n- 辅星: 文曲(陷)\n- 杂耀: 凤阁, 天福, 截路, 蜚廉, 年解\n- 三方四正: 对宫 迁移 · 三合 财帛, 官禄\n- 宫干壬飞化: 天梁化禄→子女, 紫微化权→命宫, 左辅化科→官禄, 武曲化忌→财帛\n- 十二神: 长生·衰, 博士·青龙, 岁前·丧门, 将前·灾煞\n- 小限虚岁: 5, 17, 29, 41, 53, 65, 77, 89, 101, 113\n\n**紫微(庙)**: 帝王星，有王者特质：控制欲强、重体面、好为人师、大局观强；得资源能控场规划，否则眼高手低，忌被捧杀。\n\n**文曲(陷)**: 第一文艺之星，主艺术修养与浪漫，属异途功名；善变通、多愁善感，增表达力而引申口舌是非，宜厚文化底蕴。\n\n**凤阁**: 凤阁星会增加比较柔和的技能天赋，比如音乐、舞蹈。凤阁星比较浪漫，审美能力也比较强，因此在艺术设计领域颇有天赋。\n\n**天福**: 天福星可以看作是小 `天同`。这颗星比较乐天，会增加一种积极乐观的心态；不喜欢冒险，喜欢平顺的状态，所以缺乏些斗志。\n\n**截路**: 截路星按生年天干安放，与空亡星成对，合称截路空亡，属空亡类杂曜。\n\n**蜚廉**: 蜚廉星充满好奇心，表达欲望也比较强，可以看作是小巨门。这颗星不走寻常路，喜欢挑战权威和传统，也因此会增加一些创新思维。\n\n**年解**: 年解星按年支安放：本命盘按生年年支，流年层另按流年年支；与解神星同为解厄类星曜，主化解灾厄、缓和凶性。\n\n\n## 格局\n- **府相朝垣** (命宫): 天府(庙), 天相(庙)\n\n**府相朝垣**: 府相稳定性高，个性四平八稳，成格未必富足；常作其他格局的附属增益，命坐武曲于辰戌时只列平常。\n\n\n## 四化释义\n\n**禄**: 五行属土，是增加之力，如增幅器，增加的是所在主星的本质；带来开心而人常不自觉；与禄存的本钱之财不同。\n\n**权**: 五行属木，是掌控之力，代表执行、权利与责任感，增自信，所在宫位是想做好的宫位；落六亲宫易生争执。\n\n**科**: 五行属水，负面能量最少；所在是最有面子的宫位，主名声与贵人，平顺如细水长流，但缺乏企图心。\n\n**忌**: 五行属水，代表执念与在乎，感受最强烈，不能单以吉凶论，是动力来源；落六亲宫重关系，落六事宫觉有缺憾。\n\n"},{"slug":"siblings","title":"兄弟","intro":"看兄弟姊妹：兄弟宫看与兄弟姊妹的相处模式，其三方四正（仆役、疾厄、田宅）一并会照；命宫看本人。","groups":[{"kind":"surround","key":"siblingsPalace","target":3,"opposite":9,"wealth":11,"career":7},{"kind":"only","key":"soulPalace","target":4}],"text":"# 兄弟 · 命盘 2000-8-16 寅时 女\n\n看兄弟姊妹：兄弟宫看与兄弟姊妹的相处模式，其三方四正（仆役、疾厄、田宅）一并会照；命宫看本人。\n\n## 兄弟 三方四正\n\n### 本宫 · 兄弟 (辛巳) · 大限 13-22\n- 主星: 天机(平)\n- 杂耀: 天喜, 天空, 孤辰\n- 三方四正: 对宫 仆役 · 三合 疾厄, 田宅\n- 宫干辛飞化: 巨门化禄→疾厄, 太阳化权→子女, 文曲化科→命宫, 文昌化忌→福德\n- 十二神: 长生·病, 博士·小耗, 岁前·晦气, 将前·劫煞\n- 小限虚岁: 6, 18, 30, 42, 54, 66, 78, 90, 102, 114\n\n**天机(平)**: 策划型星曜，思维活跃、第六感强，重动脑动嘴而懒于动手；兄弟主，善带气氛，知识广而不深，耐心不足。\n\n**天喜**: 天喜星会增加亲和力，笑脸迎人，看起来会比较活泼好动。红鸾星和天喜星是固定的对宫组合，互为表里，由此常带出一种反差感。\n\n**天空**: 天空星有“突发”的特点，代表一种转折和变化，比较追求“精神快感”。\n\n**孤辰**: 孤辰星会增加孤独感，这是因为孤辰星不太喜欢吵闹和喧嚣的环境，比较喜欢独处。个性上会比较高冷，不容易接近，也不太容易对人敞开心扉。这些只是外在观感；若与主星性质冲突，容易产生比较大的反差感。\n\n\n### 对宫 · 仆役 (丁亥) · 大限 73-82\n- 主星: 太阴(庙)化科\n- 杂耀: 红鸾, 恩光, 天官, 天月, 天伤\n- 三方四正: 对宫 兄弟 · 三合 父母, 子女\n- 宫干丁飞化: 太阴化禄→仆役, 天同化权→疾厄, 天机化科→兄弟, 巨门化忌→疾厄\n- 十二神: 长生·长生, 博士·大耗, 岁前·龙德, 将前·亡神\n- 小限虚岁: 12, 24, 36, 48, 60, 72, 84, 96, 108, 120\n\n**太阴(庙)化科**: 女性气质代表，婉约文艺、审美独到、不喜争斗，照顾人令人舒服；艺术天赋高而承受力弱，情感是最大关卡。\n\n**红鸾**: 红鸾星会增加亲切感，同时会比较含蓄，看起来给人一种比较端庄、温柔贤淑的感觉。不过这只是一种观感，实际如何须结合主星和辅星一起判断。\n\n**恩光**: 恩光星之名可解作“感恩的光”，这颗星比较容易投桃报李，重义气。不过恩光星不太喜欢欠人情，会给人一种“过于客气”的感觉；这种礼尚往来的情谊固然很好，但若要交心，就会让人有点难以靠近。\n\n**天官**: 天官星顾名思义和“官”有关，这颗星对权力有一定的需求，喜欢追求权力，会给人一种有“架子”的感觉。\n\n**天月**: 天月星带有一种病恹恹的感觉——并非真的会有疾病，而是一种病态感、虚弱感，犹如出演林黛玉的演员，本身没有疾病，却能演出弱质纤纤的神态。\n\n**天伤**: 天伤星固定出现在仆役宫。天下没有不散的宴席，朋友总有聚散，而分离总是让人伤神。\n\n\n### 财帛位 · 疾厄 (己丑) · 大限 53-62\n- 主星: 天同(不)化忌, 巨门(不)\n- 辅星: 天魁, 地劫\n- 杂耀: 天德, 寡宿, 破碎, 天使\n- 三方四正: 对宫 父母 · 三合 田宅, 兄弟\n- 宫干己飞化: 武曲化禄→财帛, 贪狼化权→迁移, 天梁化科→子女, 文曲化忌→命宫\n- 十二神: 长生·胎, 博士·喜神, 岁前·天德, 将前·攀鞍\n- 小限虚岁: 10, 22, 34, 46, 58, 70, 82, 94, 106, 118\n\n**天同 × 巨门 (同宫)**: 艺术氛围强，才艺以语言表达为主；空宫一组内心惶恐、决策依赖环境；自我保护强，不喜分享内心而知足常乐。\n\n**天同(不)化忌**: 亲和力第一，化气温和，逆来顺受、不争不抢、重自我享受，为福德宫主与福星；保守求稳，宜学会拒绝。\n\n**巨门(不)**: 八卦之魂，嘴快；受四化影响大，化权言语有权威，化忌有压迫感；兼四种五行，化气为暗，热心而缺乏安全感。\n\n**天魁**: 天乙贵人，被视作男性贵人，有领导气质、喜管人；助力须自己争取，只解燃眉之急，与自身能力挂钩，增文气。\n\n**地劫**: 浪里行舟，作用在物质：对机会挑剔而错失时机，劳碌求踏实之财；风险厌恶，擅短平快，长线事易博而不精。\n\n**天德**: 天德星个性比较稳重，处事得体，比较喜欢帮助他人，这颗星会给人增加一种悲天悯人的情怀。它的作用是可以稳住比较浮躁的星曜。作为岁前十二神之一出现时，增加名声，降低煞星的力量。\n\n**寡宿**: 寡宿星会降低表达欲望，令人显得沉默寡言。因不善表达，内心戏便会变多，给人一种比较多疑的感觉。这些只是外在观感；若与主星性质冲突，容易产生比较大的反差感。\n\n**破碎**: 破碎星顾名思义带有零零碎碎的感觉——不完整，但是多，因此引申为一种博而不精的状态：爱好广泛，但不太容易深入钻研。\n\n**天使**: 天使星固定出现在疾厄宫，因为生老病死是任何人都无法摆脱的循环。\n\n\n### 官禄位 · 田宅 (乙酉) · 大限 93-102\n- 主星: 空宫\n- 辅星: 地空, 擎羊(陷)\n- 杂耀: 咸池, 天贵, 月德\n- 三方四正: 对宫 子女 · 三合 兄弟, 疾厄\n- 宫干乙飞化: 天机化禄→兄弟, 天梁化权→子女, 紫微化科→命宫, 太阴化忌→仆役\n- 十二神: 长生·冠带, 博士·官府, 岁前·小耗, 将前·咸池\n- 小限虚岁: 2, 14, 26, 38, 50, 62, 74, 86, 98, 110\n\n**地空**: 半空折翅，重想不重做，怕麻烦、遇难易退缩，号中断星；想法多而跳跃，长于艺术与文案，奇想常难落地。\n\n**擎羊(陷)**: 行为上的冲动，典型行动派，果断勇敢、不三思而后行；独立自主、不在意他人看法，亲和力弱而真诚坚定。\n\n**咸池**: 咸池星会增加异性吸引力，因为它会增加一种「媚」。另外咸池星通常比较爱干净，皮肤也会比较好，这一特质无论在男性还是女性身上，都有助于增加对异性的吸引力。作为将前十二神之一出现时，是临时的咸池。\n\n**天贵**: 天贵星是颗小贵人星，比较乐于助人，而且这种帮助也比较容易得到正面的回馈。不过天贵星容易给人增加一点傲气，所以助人时须注意方式方法，以免吃力不讨好或给对方造成心理上的压力。\n\n**月德**: 月德星心性善良温和，包容性和道德感比较强，不容易做损人利己的事情，给人一种比较有奉献精神的感觉。和天德星一样，也可以稳住比较浮躁的星曜。\n\n\n## 相关宫位\n\n### 命宫 (壬午) · 大限 3-12\n- 主星: 紫微(庙)\n- 辅星: 文曲(陷)\n- 杂耀: 凤阁, 天福, 截路, 蜚廉, 年解\n- 三方四正: 对宫 迁移 · 三合 财帛, 官禄\n- 宫干壬飞化: 天梁化禄→子女, 紫微化权→命宫, 左辅化科→官禄, 武曲化忌→财帛\n- 十二神: 长生·衰, 博士·青龙, 岁前·丧门, 将前·灾煞\n- 小限虚岁: 5, 17, 29, 41, 53, 65, 77, 89, 101, 113\n\n**紫微(庙)**: 帝王星，有王者特质：控制欲强、重体面、好为人师、大局观强；得资源能控场规划，否则眼高手低，忌被捧杀。\n\n**文曲(陷)**: 第一文艺之星，主艺术修养与浪漫，属异途功名；善变通、多愁善感，增表达力而引申口舌是非，宜厚文化底蕴。\n\n**凤阁**: 凤阁星会增加比较柔和的技能天赋，比如音乐、舞蹈。凤阁星比较浪漫，审美能力也比较强，因此在艺术设计领域颇有天赋。\n\n**天福**: 天福星可以看作是小 `天同`。这颗星比较乐天，会增加一种积极乐观的心态；不喜欢冒险，喜欢平顺的状态，所以缺乏些斗志。\n\n**截路**: 截路星按生年天干安放，与空亡星成对，合称截路空亡，属空亡类杂曜。\n\n**蜚廉**: 蜚廉星充满好奇心，表达欲望也比较强，可以看作是小巨门。这颗星不走寻常路，喜欢挑战权威和传统，也因此会增加一些创新思维。\n\n**年解**: 年解星按年支安放：本命盘按生年年支，流年层另按流年年支；与解神星同为解厄类星曜，主化解灾厄、缓和凶性。\n\n\n## 格局\n- **府相朝垣** (命宫): 天府(庙), 天相(庙)\n\n**府相朝垣**: 府相稳定性高，个性四平八稳，成格未必富足；常作其他格局的附属增益，命坐武曲于辰戌时只列平常。\n\n\n## 四化释义\n\n**禄**: 五行属土，是增加之力，如增幅器，增加的是所在主星的本质；带来开心而人常不自觉；与禄存的本钱之财不同。\n\n**权**: 五行属木，是掌控之力，代表执行、权利与责任感，增自信，所在宫位是想做好的宫位；落六亲宫易生争执。\n\n**科**: 五行属水，负面能量最少；所在是最有面子的宫位，主名声与贵人，平顺如细水长流，但缺乏企图心。\n\n**忌**: 五行属水，代表执念与在乎，感受最强烈，不能单以吉凶论，是动力来源；落六亲宫重关系，落六事宫觉有缺憾。\n\n"},{"slug":"friends","title":"交友","intro":"看人际交友：仆役宫是圈子与择友观，其三方四正（兄弟、父母、子女）一并会照；命宫看本人。","groups":[{"kind":"surround","key":"friendsPalace","target":9,"opposite":3,"wealth":5,"career":1},{"kind":"only","key":"soulPalace","target":4}],"text":"# 交友 · 命盘 2000-8-16 寅时 女\n\n看人际交友：仆役宫是圈子与择友观，其三方四正（兄弟、父母、子女）一并会照；命宫看本人。\n\n## 仆役 三方四正\n\n### 本宫 · 仆役 (丁亥) · 大限 73-82\n- 主星: 太阴(庙)化科\n- 杂耀: 红鸾, 恩光, 天官, 天月, 天伤\n- 三方四正: 对宫 兄弟 · 三合 父母, 子女\n- 宫干丁飞化: 太阴化禄→仆役, 天同化权→疾厄, 天机化科→兄弟, 巨门化忌→疾厄\n- 十二神: 长生·长生, 博士·大耗, 岁前·龙德, 将前·亡神\n- 小限虚岁: 12, 24, 36, 48, 60, 72, 84, 96, 108, 120\n\n**太阴(庙)化科**: 女性气质代表，婉约文艺、审美独到、不喜争斗，照顾人令人舒服；艺术天赋高而承受力弱，情感是最大关卡。\n\n**红鸾**: 红鸾星会增加亲切感，同时会比较含蓄，看起来给人一种比较端庄、温柔贤淑的感觉。不过这只是一种观感，实际如何须结合主星和辅星一起判断。\n\n**恩光**: 恩光星之名可解作“感恩的光”，这颗星比较容易投桃报李，重义气。不过恩光星不太喜欢欠人情，会给人一种“过于客气”的感觉；这种礼尚往来的情谊固然很好，但若要交心，就会让人有点难以靠近。\n\n**天官**: 天官星顾名思义和“官”有关，这颗星对权力有一定的需求，喜欢追求权力，会给人一种有“架子”的感觉。\n\n**天月**: 天月星带有一种病恹恹的感觉——并非真的会有疾病，而是一种病态感、虚弱感，犹如出演林黛玉的演员，本身没有疾病，却能演出弱质纤纤的神态。\n\n**天伤**: 天伤星固定出现在仆役宫。天下没有不散的宴席，朋友总有聚散，而分离总是让人伤神。\n\n\n### 对宫 · 兄弟 (辛巳) · 大限 13-22\n- 主星: 天机(平)\n- 杂耀: 天喜, 天空, 孤辰\n- 三方四正: 对宫 仆役 · 三合 疾厄, 田宅\n- 宫干辛飞化: 巨门化禄→疾厄, 太阳化权→子女, 文曲化科→命宫, 文昌化忌→福德\n- 十二神: 长生·病, 博士·小耗, 岁前·晦气, 将前·劫煞\n- 小限虚岁: 6, 18, 30, 42, 54, 66, 78, 90, 102, 114\n\n**天机(平)**: 策划型星曜，思维活跃、第六感强，重动脑动嘴而懒于动手；兄弟主，善带气氛，知识广而不深，耐心不足。\n\n**天喜**: 天喜星会增加亲和力，笑脸迎人，看起来会比较活泼好动。红鸾星和天喜星是固定的对宫组合，互为表里，由此常带出一种反差感。\n\n**天空**: 天空星有“突发”的特点，代表一种转折和变化，比较追求“精神快感”。\n\n**孤辰**: 孤辰星会增加孤独感，这是因为孤辰星不太喜欢吵闹和喧嚣的环境，比较喜欢独处。个性上会比较高冷，不容易接近，也不太容易对人敞开心扉。这些只是外在观感；若与主星性质冲突，容易产生比较大的反差感。\n\n\n### 财帛位 · 父母 (癸未) · 大限 113-122\n- 主星: 空宫\n- 辅星: 天钺, 陀罗(庙)\n- 杂耀: 天姚, 空亡\n- 三方四正: 对宫 疾厄 · 三合 子女, 仆役\n- 宫干癸飞化: 破军化禄→福德, 巨门化权→疾厄, 太阴化科→仆役, 贪狼化忌→迁移\n- 十二神: 长生·帝旺, 博士·力士, 岁前·贯索, 将前·天煞\n- 小限虚岁: 4, 16, 28, 40, 52, 64, 76, 88, 100, 112\n\n**天钺**: 玉堂贵人，被视作女性贵人，善策划、喜管事；助力间接而能化解问题源头，同样须主动争取，增聪慧洞察。\n\n**陀罗(庙)**: 如陀螺旋转，主纠结与拖延，决策犹豫易失时机；善研究、循序渐进，适合长线任务，喜探究事物本质。\n\n**天姚**: 天姚星会增加社交能力，并附加一种“痞”或者古灵精怪的气质。这种能力让天姚星在人际交往中比较喜欢受到关注的感觉，乐于成为人群中众人瞩目的焦点。\n\n**空亡**: 空亡星会让意志比较消沉，容易产生虚无感或感到迷茫，需要确立目标以消除这种消极的感觉。\n\n\n### 官禄位 · 子女 (己卯) · 大限 33-42\n- 主星: 太阳(庙)化禄, 天梁(庙)\n- 杂耀: 天刑\n- 三方四正: 对宫 田宅 · 三合 仆役, 父母\n- 宫干己飞化: 武曲化禄→财帛, 贪狼化权→迁移, 天梁化科→子女, 文曲化忌→命宫\n- 十二神: 长生·墓, 博士·奏书, 岁前·病符, 将前·息神\n- 小限虚岁: 8, 20, 32, 44, 56, 68, 80, 92, 104, 116\n\n**太阳 × 天梁 (同宫)**: 只在卯酉，卯宫积极、酉宫被动；喜关照他人、顾家，有点爱显摆，能力强、想掌主动，直肠子不屑伪装。\n\n**太阳(庙)化禄**: 太子星，化气权贵，有亲和力、好为人师、渴望权利而好争；事业心强，善表现与组织，人际与感情中易显强势。\n\n**天梁(庙)**: 倔犟如牛而喜交际，有江湖豪气，稳重老成；化气为荫，庇荫弱小、不屑去争，显得清高；交友不慎影响巨大。\n\n**天刑**: 天刑星会降低亲和力，给人一种严肃、不苟言笑的感觉；比较冲动、冷酷，不太给面子，因此显得比较难相处。这些只是外在观感；若与主星性质冲突，容易产生比较大的反差感。\n\n\n## 相关宫位\n\n### 命宫 (壬午) · 大限 3-12\n- 主星: 紫微(庙)\n- 辅星: 文曲(陷)\n- 杂耀: 凤阁, 天福, 截路, 蜚廉, 年解\n- 三方四正: 对宫 迁移 · 三合 财帛, 官禄\n- 宫干壬飞化: 天梁化禄→子女, 紫微化权→命宫, 左辅化科→官禄, 武曲化忌→财帛\n- 十二神: 长生·衰, 博士·青龙, 岁前·丧门, 将前·灾煞\n- 小限虚岁: 5, 17, 29, 41, 53, 65, 77, 89, 101, 113\n\n**紫微(庙)**: 帝王星，有王者特质：控制欲强、重体面、好为人师、大局观强；得资源能控场规划，否则眼高手低，忌被捧杀。\n\n**文曲(陷)**: 第一文艺之星，主艺术修养与浪漫，属异途功名；善变通、多愁善感，增表达力而引申口舌是非，宜厚文化底蕴。\n\n**凤阁**: 凤阁星会增加比较柔和的技能天赋，比如音乐、舞蹈。凤阁星比较浪漫，审美能力也比较强，因此在艺术设计领域颇有天赋。\n\n**天福**: 天福星可以看作是小 `天同`。这颗星比较乐天，会增加一种积极乐观的心态；不喜欢冒险，喜欢平顺的状态，所以缺乏些斗志。\n\n**截路**: 截路星按生年天干安放，与空亡星成对，合称截路空亡，属空亡类杂曜。\n\n**蜚廉**: 蜚廉星充满好奇心，表达欲望也比较强，可以看作是小巨门。这颗星不走寻常路，喜欢挑战权威和传统，也因此会增加一些创新思维。\n\n**年解**: 年解星按年支安放：本命盘按生年年支，流年层另按流年年支；与解神星同为解厄类星曜，主化解灾厄、缓和凶性。\n\n\n## 格局\n- **府相朝垣** (命宫): 天府(庙), 天相(庙)\n\n**府相朝垣**: 府相稳定性高，个性四平八稳，成格未必富足；常作其他格局的附属增益，命坐武曲于辰戌时只列平常。\n\n\n## 四化释义\n\n**禄**: 五行属土，是增加之力，如增幅器，增加的是所在主星的本质；带来开心而人常不自觉；与禄存的本钱之财不同。\n\n**权**: 五行属木，是掌控之力，代表执行、权利与责任感，增自信，所在宫位是想做好的宫位；落六亲宫易生争执。\n\n**科**: 五行属水，负面能量最少；所在是最有面子的宫位，主名声与贵人，平顺如细水长流，但缺乏企图心。\n\n**忌**: 五行属水，代表执念与在乎，感受最强烈，不能单以吉凶论，是动力来源；落六亲宫重关系，落六事宫觉有缺憾。\n\n"},{"slug":"property","title":"田宅","intro":"看田宅家庭：田宅宫是不动产、与家人的关系，也是财库，其三方四正（子女、兄弟、疾厄）一并会照；与财帛宫对看可见消费观。","groups":[{"kind":"surround","key":"propertyPalace","target":7,"opposite":1,"wealth":3,"career":11},{"kind":"only","key":"wealthPalace","target":0}],"text":"# 田宅 · 命盘 2000-8-16 寅时 女\n\n看田宅家庭：田宅宫是不动产、与家人的关系，也是财库，其三方四正（子女、兄弟、疾厄）一并会照；与财帛宫对看可见消费观。\n\n## 田宅 三方四正\n\n### 本宫 · 田宅 (乙酉) · 大限 93-102\n- 主星: 空宫\n- 辅星: 地空, 擎羊(陷)\n- 杂耀: 咸池, 天贵, 月德\n- 三方四正: 对宫 子女 · 三合 兄弟, 疾厄\n- 宫干乙飞化: 天机化禄→兄弟, 天梁化权→子女, 紫微化科→命宫, 太阴化忌→仆役\n- 十二神: 长生·冠带, 博士·官府, 岁前·小耗, 将前·咸池\n- 小限虚岁: 2, 14, 26, 38, 50, 62, 74, 86, 98, 110\n\n**地空**: 半空折翅，重想不重做，怕麻烦、遇难易退缩，号中断星；想法多而跳跃，长于艺术与文案，奇想常难落地。\n\n**擎羊(陷)**: 行为上的冲动，典型行动派，果断勇敢、不三思而后行；独立自主、不在意他人看法，亲和力弱而真诚坚定。\n\n**咸池**: 咸池星会增加异性吸引力，因为它会增加一种「媚」。另外咸池星通常比较爱干净，皮肤也会比较好，这一特质无论在男性还是女性身上，都有助于增加对异性的吸引力。作为将前十二神之一出现时，是临时的咸池。\n\n**天贵**: 天贵星是颗小贵人星，比较乐于助人，而且这种帮助也比较容易得到正面的回馈。不过天贵星容易给人增加一点傲气，所以助人时须注意方式方法，以免吃力不讨好或给对方造成心理上的压力。\n\n**月德**: 月德星心性善良温和，包容性和道德感比较强，不容易做损人利己的事情，给人一种比较有奉献精神的感觉。和天德星一样，也可以稳住比较浮躁的星曜。\n\n\n### 对宫 · 子女 (己卯) · 大限 33-42\n- 主星: 太阳(庙)化禄, 天梁(庙)\n- 杂耀: 天刑\n- 三方四正: 对宫 田宅 · 三合 仆役, 父母\n- 宫干己飞化: 武曲化禄→财帛, 贪狼化权→迁移, 天梁化科→子女, 文曲化忌→命宫\n- 十二神: 长生·墓, 博士·奏书, 岁前·病符, 将前·息神\n- 小限虚岁: 8, 20, 32, 44, 56, 68, 80, 92, 104, 116\n\n**太阳 × 天梁 (同宫)**: 只在卯酉，卯宫积极、酉宫被动；喜关照他人、顾家，有点爱显摆，能力强、想掌主动，直肠子不屑伪装。\n\n**太阳(庙)化禄**: 太子星，化气权贵，有亲和力、好为人师、渴望权利而好争；事业心强，善表现与组织，人际与感情中易显强势。\n\n**天梁(庙)**: 倔犟如牛而喜交际，有江湖豪气，稳重老成；化气为荫，庇荫弱小、不屑去争，显得清高；交友不慎影响巨大。\n\n**天刑**: 天刑星会降低亲和力，给人一种严肃、不苟言笑的感觉；比较冲动、冷酷，不太给面子，因此显得比较难相处。这些只是外在观感；若与主星性质冲突，容易产生比较大的反差感。\n\n\n### 财帛位 · 兄弟 (辛巳) · 大限 13-22\n- 主星: 天机(平)\n- 杂耀: 天喜, 天空, 孤辰\n- 三方四正: 对宫 仆役 · 三合 疾厄, 田宅\n- 宫干辛飞化: 巨门化禄→疾厄, 太阳化权→子女, 文曲化科→命宫, 文昌化忌→福德\n- 十二神: 长生·病, 博士·小耗, 岁前·晦气, 将前·劫煞\n- 小限虚岁: 6, 18, 30, 42, 54, 66, 78, 90, 102, 114\n\n**天机(平)**: 策划型星曜，思维活跃、第六感强，重动脑动嘴而懒于动手；兄弟主，善带气氛，知识广而不深，耐心不足。\n\n**天喜**: 天喜星会增加亲和力，笑脸迎人，看起来会比较活泼好动。红鸾星和天喜星是固定的对宫组合，互为表里，由此常带出一种反差感。\n\n**天空**: 天空星有“突发”的特点，代表一种转折和变化，比较追求“精神快感”。\n\n**孤辰**: 孤辰星会增加孤独感，这是因为孤辰星不太喜欢吵闹和喧嚣的环境，比较喜欢独处。个性上会比较高冷，不容易接近，也不太容易对人敞开心扉。这些只是外在观感；若与主星性质冲突，容易产生比较大的反差感。\n\n\n### 官禄位 · 疾厄 (己丑) · 大限 53-62\n- 主星: 天同(不)化忌, 巨门(不)\n- 辅星: 天魁, 地劫\n- 杂耀: 天德, 寡宿, 破碎, 天使\n- 三方四正: 对宫 父母 · 三合 田宅, 兄弟\n- 宫干己飞化: 武曲化禄→财帛, 贪狼化权→迁移, 天梁化科→子女, 文曲化忌→命宫\n- 十二神: 长生·胎, 博士·喜神, 岁前·天德, 将前·攀鞍\n- 小限虚岁: 10, 22, 34, 46, 58, 70, 82, 94, 106, 118\n\n**天同 × 巨门 (同宫)**: 艺术氛围强，才艺以语言表达为主；空宫一组内心惶恐、决策依赖环境；自我保护强，不喜分享内心而知足常乐。\n\n**天同(不)化忌**: 亲和力第一，化气温和，逆来顺受、不争不抢、重自我享受，为福德宫主与福星；保守求稳，宜学会拒绝。\n\n**巨门(不)**: 八卦之魂，嘴快；受四化影响大，化权言语有权威，化忌有压迫感；兼四种五行，化气为暗，热心而缺乏安全感。\n\n**天魁**: 天乙贵人，被视作男性贵人，有领导气质、喜管人；助力须自己争取，只解燃眉之急，与自身能力挂钩，增文气。\n\n**地劫**: 浪里行舟，作用在物质：对机会挑剔而错失时机，劳碌求踏实之财；风险厌恶，擅短平快，长线事易博而不精。\n\n**天德**: 天德星个性比较稳重，处事得体，比较喜欢帮助他人，这颗星会给人增加一种悲天悯人的情怀。它的作用是可以稳住比较浮躁的星曜。作为岁前十二神之一出现时，增加名声，降低煞星的力量。\n\n**寡宿**: 寡宿星会降低表达欲望，令人显得沉默寡言。因不善表达，内心戏便会变多，给人一种比较多疑的感觉。这些只是外在观感；若与主星性质冲突，容易产生比较大的反差感。\n\n**破碎**: 破碎星顾名思义带有零零碎碎的感觉——不完整，但是多，因此引申为一种博而不精的状态：爱好广泛，但不太容易深入钻研。\n\n**天使**: 天使星固定出现在疾厄宫，因为生老病死是任何人都无法摆脱的循环。\n\n\n## 相关宫位\n\n### 财帛 (戊寅) · 大限 43-52\n- 主星: 武曲(得)化权, 天相(庙)\n- 辅星: 天马\n- 杂耀: 解神, 三台, 天寿, 天巫, 天厨, 阴煞, 天哭\n- 三方四正: 对宫 福德 · 三合 官禄, 命宫\n- 宫干戊飞化: 贪狼化禄→迁移, 太阴化权→仆役, 右弼化科→夫妻, 天机化忌→兄弟\n- 十二神: 长生·绝, 博士·飞廉, 岁前·吊客, 将前·岁驿\n- 小限虚岁: 9, 21, 33, 45, 57, 69, 81, 93, 105, 117\n\n**武曲 × 天相 (同宫)**: 天相使武曲温和，武曲给天相执行力；不喜束缚、亲力亲为而缺宏观，决策果断、奔波忙碌；事业心强易兼副业。\n\n**武曲(得)化权**: 独行侠，孤傲刚直、不善表达、怕麻烦别人，故执行力与行动力强；短板在策划，倔强不听劝，宜多听意见。\n\n**天相(庙)**: 左右逢源、八面玲珑、知人善用，外刚内细的和事佬；执行力随亮度，善找方法，宜作组织者，是均衡的全能型。\n\n**天马**: 最坐不住的星，增变数与不确定；精力旺盛、爱冒险求新、渴望自由，易发现机会，弱在坚持与沉淀。\n\n**解神**: 解神星顾名思义是一颗解决问题的星曜，给人一种比较乐天的感觉，也很会开导人。这颗星会增加一些共情能力。\n\n**三台**: 三台星须与八座星合并来看：二者是紫微斗数中典型的“对星”，两颗星组成一对、产生共振。三台与八座都比较喜欢讲排场，喜爱奢华的感觉，因此会增加一定的鉴赏能力；不太喜欢被管束，喜欢享受生活，重视名声、地位和荣耀。\n\n**天寿**: 天寿星会给人一种比较沉稳的感觉，处事不惊，情绪比较稳定。此星寓意：欲得长寿，心态须好，忌喜怒无常。\n\n**天巫**: 天巫星会增加第六感，这颗星也比较乐于助人，不过其对别人的帮助大多在思想层面。天巫星比较容易接触神秘学、哲学等，容易有信仰。\n\n**天厨**: 天厨星增加美食鉴赏能力，这颗星很难抵抗美食的诱惑，因此忌口对其而言是比较难的事情。天厨星不一定会做饭，但会做饭的天厨星，厨艺必能拴住人的胃口。\n\n**阴煞**: 阴煞星会附加一种忧郁、阴沉的感觉，显得有点沉默寡言，不太善于表达感情，胆子也比较小。\n\n**天哭**: 天哭星会增加一种悲情气质，如同影视剧中天生适合出演悲情戏的演员所带的那种神态。它会增加悲观情绪，比较容易消极。\n\n\n## 四化释义\n\n**禄**: 五行属土，是增加之力，如增幅器，增加的是所在主星的本质；带来开心而人常不自觉；与禄存的本钱之财不同。\n\n**权**: 五行属木，是掌控之力，代表执行、权利与责任感，增自信，所在宫位是想做好的宫位；落六亲宫易生争执。\n\n**科**: 五行属水，负面能量最少；所在是最有面子的宫位，主名声与贵人，平顺如细水长流，但缺乏企图心。\n\n**忌**: 五行属水，代表执念与在乎，感受最强烈，不能单以吉凶论，是动力来源；落六亲宫重关系，落六事宫觉有缺憾。\n\n"},{"slug":"travel","title":"迁移","intro":"看外出与外在：迁移宫是对外的包装与路人缘，其三方四正（命宫、夫妻、福德）一并会照。","groups":[{"kind":"surround","key":"surfacePalace","target":10,"opposite":4,"wealth":6,"career":2}],"text":"# 迁移 · 命盘 2000-8-16 寅时 女\n\n看外出与外在：迁移宫是对外的包装与路人缘，其三方四正（命宫、夫妻、福德）一并会照。\n\n## 迁移 三方四正\n\n### 本宫 · 迁移 (戊子) · 大限 63-72\n- 主星: 贪狼(旺)\n- 辅星: 铃星(陷)\n- 杂耀: 八座\n- 三方四正: 对宫 命宫 · 三合 福德, 夫妻\n- 宫干戊飞化: 贪狼化禄→迁移, 太阴化权→仆役, 右弼化科→夫妻, 天机化忌→兄弟\n- 十二神: 长生·养, 博士·病符, 岁前·白虎, 将前·将星\n- 小限虚岁: 11, 23, 35, 47, 59, 71, 83, 95, 107, 119\n\n**贪狼(旺)**: 第一桃花星，本质是社交与受欢迎；欲望即兴趣，好奇、易上瘾，赌性强、不甘平凡，宜增广知识、勿孤注一掷。\n\n**铃星(陷)**: 情绪内敛积压，深沉冷静；精打细算、深思熟虑，稳健可靠而或因过于谨慎失机，宜适度表达与冒险。\n\n**八座**: 八座星须与三台星合并来看：二者是紫微斗数中典型的“对星”，两颗星组成一对、产生共振。八座与三台都比较喜欢讲排场，喜爱奢华的感觉，因此会增加一定的鉴赏能力；不太喜欢被管束，喜欢享受生活，重视名声、地位和荣耀。\n\n\n### 对宫 · 命宫 (壬午) · 大限 3-12\n- 主星: 紫微(庙)\n- 辅星: 文曲(陷)\n- 杂耀: 凤阁, 天福, 截路, 蜚廉, 年解\n- 三方四正: 对宫 迁移 · 三合 财帛, 官禄\n- 宫干壬飞化: 天梁化禄→子女, 紫微化权→命宫, 左辅化科→官禄, 武曲化忌→财帛\n- 十二神: 长生·衰, 博士·青龙, 岁前·丧门, 将前·灾煞\n- 小限虚岁: 5, 17, 29, 41, 53, 65, 77, 89, 101, 113\n\n**紫微(庙)**: 帝王星，有王者特质：控制欲强、重体面、好为人师、大局观强；得资源能控场规划，否则眼高手低，忌被捧杀。\n\n**文曲(陷)**: 第一文艺之星，主艺术修养与浪漫，属异途功名；善变通、多愁善感，增表达力而引申口舌是非，宜厚文化底蕴。\n\n**凤阁**: 凤阁星会增加比较柔和的技能天赋，比如音乐、舞蹈。凤阁星比较浪漫，审美能力也比较强，因此在艺术设计领域颇有天赋。\n\n**天福**: 天福星可以看作是小 `天同`。这颗星比较乐天，会增加一种积极乐观的心态；不喜欢冒险，喜欢平顺的状态，所以缺乏些斗志。\n\n**截路**: 截路星按生年天干安放，与空亡星成对，合称截路空亡，属空亡类杂曜。\n\n**蜚廉**: 蜚廉星充满好奇心，表达欲望也比较强，可以看作是小巨门。这颗星不走寻常路，喜欢挑战权威和传统，也因此会增加一些创新思维。\n\n**年解**: 年解星按年支安放：本命盘按生年年支，流年层另按流年年支；与解神星同为解厄类星曜，主化解灾厄、缓和凶性。\n\n\n### 财帛位 · 福德 (甲申) · 大限 103-112\n- 主星: 破军(得)\n- 辅星: 文昌(得), 禄存\n- 杂耀: 龙池, 台辅, 旬空\n- 三方四正: 对宫 财帛 · 三合 夫妻, 迁移\n- 宫干甲飞化: 廉贞化禄→官禄, 破军化权→福德, 武曲化科→财帛, 太阳化忌→子女\n- 十二神: 长生·临官, 博士·博士, 岁前·官符, 将前·指背\n- 小限虚岁: 3, 15, 27, 39, 51, 63, 75, 87, 99, 111\n\n**破军(得)**: 杀破狼中的士兵，化气为耗，先破后立、敢破旧规；企划执行兼具，反骨最甚，人生大起大落，决策宜留退路。\n\n**文昌(得)**: 第一科甲之星，主文书，属正途功名，如小天梁般清高倔强；记忆力好，单独时呆板，遇桃花星则转风流。\n\n**禄存**: 财星，其财如本钱，主谨慎与稳定；支出谨慎、风险厌恶，易错失机会，能稳定浮躁的主星，古籍视为解煞之星。\n\n**龙池**: 龙池星会增加偏硬朗的技能天赋，比如结构学、建造学等，也包括书法、制图等笔上功夫。\n\n**台辅**: 台辅星就像一颗小 `左辅`，也是一颗乐于助人的星曜，不过其助力主要是精神上的支持。比较看重名声。\n\n**旬空**: 旬空星有“潜在挑战”和“未完成”的特点，代表一种潜能。比较容易钻研哲学或者神秘学。\n\n\n### 官禄位 · 夫妻 (庚辰) · 大限 23-32 [来因宫]\n- 主星: 七杀(庙)\n- 辅星: 右弼, 火星(陷)\n- 杂耀: 封诰, 华盖\n- 三方四正: 对宫 官禄 · 三合 迁移, 福德\n- 宫干庚飞化: 太阳化禄→子女, 武曲化权→财帛, 太阴化科→仆役, 天同化忌→疾厄\n- 十二神: 长生·死, 博士·将军, 岁前·岁建, 将前·华盖\n- 小限虚岁: 7, 19, 31, 43, 55, 67, 79, 91, 103, 115\n\n**七杀(庙)**: 杀破狼中的将领，代表坚持与执着，执行力强而少思量；亲和力弱，言辞犀利有压迫感，不浪漫，不记仇。\n\n**右弼**: 柔和的贵人，助力在背后默默付出，被视作女性贵人；善倾听、耳根子软，能柔化强势主星，偶有帮倒忙。\n\n**火星(陷)**: 思想上的冲动，决策随心欠考虑，追求即时满足，精力热情高；情绪起伏大，喜怒形于色，坦诚直接。\n\n**封诰**: 封诰星就像一颗小 `右弼`，和台辅星是对星。若说台辅主要提供精神上的帮助，封诰提供的便是物质上的帮助。比较看重地位。\n\n**华盖**: 华盖星会对神秘、新鲜的事物感兴趣，喜欢思考，有不错的哲学天赋，比较容易有精神信仰。作为将前十二神之一出现时，是临时的华盖，仅影响流月与流日。\n\n\n## 格局\n- **府相朝垣** (命宫): 天府(庙), 天相(庙)\n\n**府相朝垣**: 府相稳定性高，个性四平八稳，成格未必富足；常作其他格局的附属增益，命坐武曲于辰戌时只列平常。\n\n\n## 四化释义\n\n**禄**: 五行属土，是增加之力，如增幅器，增加的是所在主星的本质；带来开心而人常不自觉；与禄存的本钱之财不同。\n\n**权**: 五行属木，是掌控之力，代表执行、权利与责任感，增自信，所在宫位是想做好的宫位；落六亲宫易生争执。\n\n**科**: 五行属水，负面能量最少；所在是最有面子的宫位，主名声与贵人，平顺如细水长流，但缺乏企图心。\n\n**忌**: 五行属水，代表执念与在乎，感受最强烈，不能单以吉凶论，是动力来源；落六亲宫重关系，落六事宫觉有缺憾。\n\n"},{"slug":"spirit","title":"精神","intro":"看精神与情绪：福德宫是思想，修福德即锻炼稳定的情绪，其三方四正（财帛、夫妻、迁移）一并会照；命宫、身宫看本人。","groups":[{"kind":"surround","key":"spiritPalace","target":6,"opposite":0,"wealth":2,"career":10},{"kind":"only","key":"soulPalace","target":4},{"kind":"only","key":"bodyPalace","target":8}],"text":"# 精神 · 命盘 2000-8-16 寅时 女\n\n看精神与情绪：福德宫是思想，修福德即锻炼稳定的情绪，其三方四正（财帛、夫妻、迁移）一并会照；命宫、身宫看本人。\n\n## 福德 三方四正\n\n### 本宫 · 福德 (甲申) · 大限 103-112\n- 主星: 破军(得)\n- 辅星: 文昌(得), 禄存\n- 杂耀: 龙池, 台辅, 旬空\n- 三方四正: 对宫 财帛 · 三合 夫妻, 迁移\n- 宫干甲飞化: 廉贞化禄→官禄, 破军化权→福德, 武曲化科→财帛, 太阳化忌→子女\n- 十二神: 长生·临官, 博士·博士, 岁前·官符, 将前·指背\n- 小限虚岁: 3, 15, 27, 39, 51, 63, 75, 87, 99, 111\n\n**破军(得)**: 杀破狼中的士兵，化气为耗，先破后立、敢破旧规；企划执行兼具，反骨最甚，人生大起大落，决策宜留退路。\n\n**文昌(得)**: 第一科甲之星，主文书，属正途功名，如小天梁般清高倔强；记忆力好，单独时呆板，遇桃花星则转风流。\n\n**禄存**: 财星，其财如本钱，主谨慎与稳定；支出谨慎、风险厌恶，易错失机会，能稳定浮躁的主星，古籍视为解煞之星。\n\n**龙池**: 龙池星会增加偏硬朗的技能天赋，比如结构学、建造学等，也包括书法、制图等笔上功夫。\n\n**台辅**: 台辅星就像一颗小 `左辅`，也是一颗乐于助人的星曜，不过其助力主要是精神上的支持。比较看重名声。\n\n**旬空**: 旬空星有“潜在挑战”和“未完成”的特点，代表一种潜能。比较容易钻研哲学或者神秘学。\n\n\n### 对宫 · 财帛 (戊寅) · 大限 43-52\n- 主星: 武曲(得)化权, 天相(庙)\n- 辅星: 天马\n- 杂耀: 解神, 三台, 天寿, 天巫, 天厨, 阴煞, 天哭\n- 三方四正: 对宫 福德 · 三合 官禄, 命宫\n- 宫干戊飞化: 贪狼化禄→迁移, 太阴化权→仆役, 右弼化科→夫妻, 天机化忌→兄弟\n- 十二神: 长生·绝, 博士·飞廉, 岁前·吊客, 将前·岁驿\n- 小限虚岁: 9, 21, 33, 45, 57, 69, 81, 93, 105, 117\n\n**武曲 × 天相 (同宫)**: 天相使武曲温和，武曲给天相执行力；不喜束缚、亲力亲为而缺宏观，决策果断、奔波忙碌；事业心强易兼副业。\n\n**武曲(得)化权**: 独行侠，孤傲刚直、不善表达、怕麻烦别人，故执行力与行动力强；短板在策划，倔强不听劝，宜多听意见。\n\n**天相(庙)**: 左右逢源、八面玲珑、知人善用，外刚内细的和事佬；执行力随亮度，善找方法，宜作组织者，是均衡的全能型。\n\n**天马**: 最坐不住的星，增变数与不确定；精力旺盛、爱冒险求新、渴望自由，易发现机会，弱在坚持与沉淀。\n\n**解神**: 解神星顾名思义是一颗解决问题的星曜，给人一种比较乐天的感觉，也很会开导人。这颗星会增加一些共情能力。\n\n**三台**: 三台星须与八座星合并来看：二者是紫微斗数中典型的“对星”，两颗星组成一对、产生共振。三台与八座都比较喜欢讲排场，喜爱奢华的感觉，因此会增加一定的鉴赏能力；不太喜欢被管束，喜欢享受生活，重视名声、地位和荣耀。\n\n**天寿**: 天寿星会给人一种比较沉稳的感觉，处事不惊，情绪比较稳定。此星寓意：欲得长寿，心态须好，忌喜怒无常。\n\n**天巫**: 天巫星会增加第六感，这颗星也比较乐于助人，不过其对别人的帮助大多在思想层面。天巫星比较容易接触神秘学、哲学等，容易有信仰。\n\n**天厨**: 天厨星增加美食鉴赏能力，这颗星很难抵抗美食的诱惑，因此忌口对其而言是比较难的事情。天厨星不一定会做饭，但会做饭的天厨星，厨艺必能拴住人的胃口。\n\n**阴煞**: 阴煞星会附加一种忧郁、阴沉的感觉，显得有点沉默寡言，不太善于表达感情，胆子也比较小。\n\n**天哭**: 天哭星会增加一种悲情气质，如同影视剧中天生适合出演悲情戏的演员所带的那种神态。它会增加悲观情绪，比较容易消极。\n\n\n### 财帛位 · 夫妻 (庚辰) · 大限 23-32 [来因宫]\n- 主星: 七杀(庙)\n- 辅星: 右弼, 火星(陷)\n- 杂耀: 封诰, 华盖\n- 三方四正: 对宫 官禄 · 三合 迁移, 福德\n- 宫干庚飞化: 太阳化禄→子女, 武曲化权→财帛, 太阴化科→仆役, 天同化忌→疾厄\n- 十二神: 长生·死, 博士·将军, 岁前·岁建, 将前·华盖\n- 小限虚岁: 7, 19, 31, 43, 55, 67, 79, 91, 103, 115\n\n**七杀(庙)**: 杀破狼中的将领，代表坚持与执着，执行力强而少思量；亲和力弱，言辞犀利有压迫感，不浪漫，不记仇。\n\n**右弼**: 柔和的贵人，助力在背后默默付出，被视作女性贵人；善倾听、耳根子软，能柔化强势主星，偶有帮倒忙。\n\n**火星(陷)**: 思想上的冲动，决策随心欠考虑，追求即时满足，精力热情高；情绪起伏大，喜怒形于色，坦诚直接。\n\n**封诰**: 封诰星就像一颗小 `右弼`，和台辅星是对星。若说台辅主要提供精神上的帮助，封诰提供的便是物质上的帮助。比较看重地位。\n\n**华盖**: 华盖星会对神秘、新鲜的事物感兴趣，喜欢思考，有不错的哲学天赋，比较容易有精神信仰。作为将前十二神之一出现时，是临时的华盖，仅影响流月与流日。\n\n\n### 官禄位 · 迁移 (戊子) · 大限 63-72\n- 主星: 贪狼(旺)\n- 辅星: 铃星(陷)\n- 杂耀: 八座\n- 三方四正: 对宫 命宫 · 三合 福德, 夫妻\n- 宫干戊飞化: 贪狼化禄→迁移, 太阴化权→仆役, 右弼化科→夫妻, 天机化忌→兄弟\n- 十二神: 长生·养, 博士·病符, 岁前·白虎, 将前·将星\n- 小限虚岁: 11, 23, 35, 47, 59, 71, 83, 95, 107, 119\n\n**贪狼(旺)**: 第一桃花星，本质是社交与受欢迎；欲望即兴趣，好奇、易上瘾，赌性强、不甘平凡，宜增广知识、勿孤注一掷。\n\n**铃星(陷)**: 情绪内敛积压，深沉冷静；精打细算、深思熟虑，稳健可靠而或因过于谨慎失机，宜适度表达与冒险。\n\n**八座**: 八座星须与三台星合并来看：二者是紫微斗数中典型的“对星”，两颗星组成一对、产生共振。八座与三台都比较喜欢讲排场，喜爱奢华的感觉，因此会增加一定的鉴赏能力；不太喜欢被管束，喜欢享受生活，重视名声、地位和荣耀。\n\n\n## 相关宫位\n\n### 命宫 (壬午) · 大限 3-12\n- 主星: 紫微(庙)\n- 辅星: 文曲(陷)\n- 杂耀: 凤阁, 天福, 截路, 蜚廉, 年解\n- 三方四正: 对宫 迁移 · 三合 财帛, 官禄\n- 宫干壬飞化: 天梁化禄→子女, 紫微化权→命宫, 左辅化科→官禄, 武曲化忌→财帛\n- 十二神: 长生·衰, 博士·青龙, 岁前·丧门, 将前·灾煞\n- 小限虚岁: 5, 17, 29, 41, 53, 65, 77, 89, 101, 113\n\n**紫微(庙)**: 帝王星，有王者特质：控制欲强、重体面、好为人师、大局观强；得资源能控场规划，否则眼高手低，忌被捧杀。\n\n**文曲(陷)**: 第一文艺之星，主艺术修养与浪漫，属异途功名；善变通、多愁善感，增表达力而引申口舌是非，宜厚文化底蕴。\n\n**凤阁**: 凤阁星会增加比较柔和的技能天赋，比如音乐、舞蹈。凤阁星比较浪漫，审美能力也比较强，因此在艺术设计领域颇有天赋。\n\n**天福**: 天福星可以看作是小 `天同`。这颗星比较乐天，会增加一种积极乐观的心态；不喜欢冒险，喜欢平顺的状态，所以缺乏些斗志。\n\n**截路**: 截路星按生年天干安放，与空亡星成对，合称截路空亡，属空亡类杂曜。\n\n**蜚廉**: 蜚廉星充满好奇心，表达欲望也比较强，可以看作是小巨门。这颗星不走寻常路，喜欢挑战权威和传统，也因此会增加一些创新思维。\n\n**年解**: 年解星按年支安放：本命盘按生年年支，流年层另按流年年支；与解神星同为解厄类星曜，主化解灾厄、缓和凶性。\n\n\n### 官禄 (丙戌) · 大限 83-92 [身宫]\n- 主星: 廉贞(利), 天府(庙)\n- 辅星: 左辅\n- 杂耀: 天才, 天虚\n- 三方四正: 对宫 夫妻 · 三合 命宫, 财帛\n- 宫干丙飞化: 天同化禄→疾厄, 天机化权→兄弟, 文昌化科→福德, 廉贞化忌→官禄\n- 十二神: 长生·沐浴, 博士·伏兵, 岁前·大耗, 将前·月煞\n- 小限虚岁: 1, 13, 25, 37, 49, 61, 73, 85, 97, 109\n\n**廉贞 × 天府 (同宫)**: 内敛而显霸道，平时懒言、争执时不客气，说最狠的话做最暖的事；特别喜欢也善于管钱，不冲动消费。\n\n**廉贞(利)**: 化气为囚，理性认真、自尊心强、自我保护重，不善社交，距离感最强；得资源易成行业翘楚，社交圈窄。\n\n**天府(庙)**: 务实的帝星，低调，重面子与里子平衡；不管闲事，不争是不想争，迁移逢七杀而不怒而威；包容，人脉广。\n\n**左辅**: 助力之星，喜帮助提拔他人，带长辈视角，直接强势，被视作男性贵人；能提高身份地位，易有架子，善处人际。\n\n**天才**: 天才星会增加智慧，可以看作是小 `天机`：聪明且领悟力高，反应力快，所以天才星也有点恃才傲物。\n\n**天虚**: 天虚星是一种虚耗的感觉，即所谓的精神内耗。天虚星容易陷入一种纠结的情绪里面，导致精力无端虚耗，看起来忧郁、不太有精神的样子。\n\n\n## 格局\n- **府相朝垣** (命宫): 天府(庙), 天相(庙)\n\n**府相朝垣**: 府相稳定性高，个性四平八稳，成格未必富足；常作其他格局的附属增益，命坐武曲于辰戌时只列平常。\n\n\n## 四化释义\n\n**禄**: 五行属土，是增加之力，如增幅器，增加的是所在主星的本质；带来开心而人常不自觉；与禄存的本钱之财不同。\n\n**权**: 五行属木，是掌控之力，代表执行、权利与责任感，增自信，所在宫位是想做好的宫位；落六亲宫易生争执。\n\n**科**: 五行属水，负面能量最少；所在是最有面子的宫位，主名声与贵人，平顺如细水长流，但缺乏企图心。\n\n**忌**: 五行属水，代表执念与在乎，感受最强烈，不能单以吉凶论，是动力来源；落六亲宫重关系，落六事宫觉有缺憾。\n\n"}],"charts":[{"label":"2000-8-16 寅时 女","palaces":[{"name":"财帛","branch":"寅","major":["wuquMaj","tianxiangMaj"],"stars":["wuquMaj","tianxiangMaj","tianmaMin","jieshen","santai","tianshou","tianwu","tianchu","yinsha","tianku"]},{"name":"子女","branch":"卯","major":["taiyangMaj","tianliangMaj"],"stars":["taiyangMaj","tianliangMaj","tianxing"]},{"name":"夫妻","branch":"辰","major":["qishaMaj"],"stars":["qishaMaj","youbiMin","huoxingMin","fenggao","huagai"]},{"name":"兄弟","branch":"巳","major":["tianjiMaj"],"stars":["tianjiMaj","tianxi","tiankong","guchen"]},{"name":"命宫","branch":"午","major":["ziweiMaj"],"stars":["ziweiMaj","wenquMin","fengge","tianfu","jielu","feilian","nianjie"]},{"name":"父母","branch":"未","major":[],"stars":["tianyueMin","tuoluoMin","tianyao","kongwang"]},{"name":"福德","branch":"申","major":["pojunMaj"],"stars":["pojunMaj","wenchangMin","lucunMin","longchi","taifu","xunkong"]},{"name":"田宅","branch":"酉","major":[],"stars":["dikongMin","qingyangMin","xianchi","tiangui","yuede"]},{"name":"官禄","branch":"戌","major":["lianzhenMaj","tianfuMaj"],"stars":["lianzhenMaj","tianfuMaj","zuofuMin","tiancai","tianxu"]},{"name":"仆役","branch":"亥","major":["taiyinMaj"],"stars":["taiyinMaj","hongluan","engguang","tianguan","tianyue","tianshang"]},{"name":"迁移","branch":"子","major":["tanlangMaj"],"stars":["tanlangMaj","lingxingMin","bazuo"]},{"name":"疾厄","branch":"丑","major":["tiantongMaj","jumenMaj"],"stars":["tiantongMaj","jumenMaj","tiankuiMin","dijieMin","tiande","guasu","posui","tianshi"]}],"patterns":[{"key":"fu_xiang_chao_yuan","palace":4,"stars":[8,0]}],"topics":{"career":[8,2,4,0],"children":[1,7,9,5,4],"friends":[9,3,5,1,4],"health":[11,5,7,3,4],"overall":[4,10,0,8,6],"parents":[5,11,1,9,3,4],"personality":[4,10,6,8],"property":[7,1,3,11,0],"romance":[2,8,10,6,4,1],"siblings":[3,9,11,7,4],"spirit":[6,0,2,10,4,8],"travel":[10,4,6,2],"wealth":[0,6,8,4,7]}},{"label":"1990-3-12 午时 男","palaces":[{"name":"仆役","branch":"寅","major":[],"stars":["tianyao","tianchu","feilian","tianshang"]},{"name":"迁移","branch":"卯","major":[],"stars":["tianxi","xianchi","tiancai","tianshou","tiande"]},{"name":"疾厄","branch":"辰","major":["tiantongMaj"],"stars":["tiantongMaj","wenchangMin","fengge","guasu","tianshi","nianjie"]},{"name":"财帛","branch":"巳","major":["wuquMaj","pojunMaj"],"stars":["wuquMaj","pojunMaj","zuofuMin","dikongMin","dijieMin","tianyue","posui"]},{"name":"子女","branch":"午","major":["taiyangMaj"],"stars":["taiyangMaj","bazuo","engguang","tianfu","jielu"]},{"name":"夫妻","branch":"未","major":["tianfuMaj"],"stars":["tianfuMaj","tianyueMin","huoxingMin","tuoluoMin","tiankong","kongwang"]},{"name":"兄弟","branch":"申","major":["tianjiMaj","taiyinMaj"],"stars":["tianjiMaj","taiyinMaj","lucunMin","tianmaMin","jieshen","santai","fenggao","tianwu","guchen"]},{"name":"命宫","branch":"酉","major":["ziweiMaj","tanlangMaj"],"stars":["ziweiMaj","tanlangMaj","youbiMin","lingxingMin","qingyangMin","hongluan"]},{"name":"父母","branch":"戌","major":["jumenMaj"],"stars":["jumenMaj","wenquMin","longchi","huagai","xunkong","tianxing"]},{"name":"福德","branch":"亥","major":["tianxiangMaj"],"stars":["tianxiangMaj","tianguan","yuede"]},{"name":"田宅","branch":"子","major":["tianliangMaj"],"stars":["tianliangMaj","tiangui","taifu","yinsha","tianku","tianxu"]},{"name":"官禄","branch":"丑","major":["lianzhenMaj","qishaMaj"],"stars":["lianzhenMaj","qishaMaj","tiankuiMin"]}],"patterns":[{"key":"ji_ju_mao_you","palace":7,"stars":[7,7]},{"key":"ling_tan","palace":7,"stars":[7,7]},{"key":"sha_po_lang","palace":7,"stars":[11,3,7]},{"key":"lu_ma_jiao_chi","palace":6,"stars":[6,6]},{"key":"fu_bi_gong_zhu","palace":7,"stars":[7,3,7]}],"topics":{"career":[11,5,7,3],"children":[4,10,0,8,7],"friends":[0,6,8,4,7],"health":[2,8,10,6,7],"overall":[7,1,3,11,9],"parents":[8,2,4,0,6,7],"personality":[7,1,9],"property":[10,4,6,2,3],"romance":[5,11,1,9,7,4],"siblings":[6,0,2,10,7],"spirit":[9,3,5,1,7],"travel":[1,7,9,5],"wealth":[3,9,11,7,10]}},{"label":"1985-11-2 子时 女","palaces":[{"name":"官禄","branch":"寅","major":["taiyangMaj","jumenMaj"],"stars":["taiyangMaj","jumenMaj","youbiMin","tuoluoMin","hongluan","fenggao","tianyue","tiankong","guchen"]},{"name":"仆役","branch":"卯","major":["tianxiangMaj"],"stars":["tianxiangMaj","lucunMin","huoxingMin","tianshang"]},{"name":"迁移","branch":"辰","major":["tianjiMaj","tianliangMaj"],"stars":["tianjiMaj","tianliangMaj","wenquMin","qingyangMin","jieshen","engguang","tianguan"]},{"name":"疾厄","branch":"巳","major":["ziweiMaj","qishaMaj"],"stars":["ziweiMaj","qishaMaj","longchi","tianwu","tianxing","tianku","tianshi"]},{"name":"财帛","branch":"午","major":[],"stars":["xianchi","taifu","tianchu","yuede","jielu"]},{"name":"子女","branch":"未","major":[],"stars":["santai","bazuo","kongwang","tianxu"]},{"name":"夫妻","branch":"申","major":[],"stars":["tianyueMin","tianxi","tianfu"]},{"name":"兄弟","branch":"酉","major":["lianzhenMaj","pojunMaj"],"stars":["lianzhenMaj","pojunMaj","tianyao","fengge","feilian","nianjie"]},{"name":"命宫","branch":"戌","major":[],"stars":["wenchangMin","lingxingMin","tiangui","tiande","guasu","yinsha"]},{"name":"父母","branch":"亥","major":["tianfuMaj"],"stars":["tianfuMaj","tianmaMin","dikongMin","dijieMin","tiancai","tianshou","xunkong"]},{"name":"福德","branch":"子","major":["tiantongMaj","taiyinMaj"],"stars":["tiantongMaj","taiyinMaj","zuofuMin","tiankuiMin"]},{"name":"田宅","branch":"丑","major":["wuquMaj","tanlangMaj"],"stars":["wuquMaj","tanlangMaj","huagai","posui"]}],"patterns":[{"key":"ji_yue_tong_liang","palace":8,"stars":[2,10,10,2]},{"key":"wen_xing_chao_ming","palace":8,"stars":[8,2]},{"key":"wen_xing_an_gong","palace":8,"stars":[8,2]}],"topics":{"career":[0,6,8,4],"children":[5,11,1,9,8],"friends":[1,7,9,5,8],"health":[3,9,11,7,8],"overall":[8,2,4,0,10],"parents":[9,3,5,1,7,8],"personality":[8,2,10],"property":[11,5,7,3,4],"romance":[6,0,2,10,8,5],"siblings":[7,1,3,11,8],"spirit":[10,4,6,2,8],"travel":[2,8,10,6],"wealth":[4,10,0,8,11]}}]};
+const TOPICS = R2.topics;
+const v2 = { topic: 'overall', step: 0, open: new Set(), q: '', hl: null, steps: null, termBtn: null };
+const tp = () => TOPICS.find(t => t.slug === v2.topic);
+const pl = i => { const n = P[i].name; return n.endsWith('宫') ? n : `${n}宫`; };
+const mainOf = i => P[i].majorStars;
+const starTxt = s => `${s.name}${s.brightness ? `（${s.brightness}）` : ''}`;
+const listTxt = a => a.length <= 1 ? a.join('') : `${a.slice(0, -1).join('、')}和${a[a.length - 1]}`;
+const smooth = () => matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+const wide = () => matchMedia('(min-width:1024px)').matches;
+/* 解读方法里「看一个主题」的五步；同一段文字也在提示词的解读方法里，人和 AI 按同样的步骤读 */
+const METHOD = [
+  ['本宫主星', '先看这个主题的本宫坐什么主星、亮度如何；本宫没有主星时，借对宫的主星来看。'],
+  ['三方四正', '再看本宫的对宫和两个三合宫。这几宫的星曜会照本宫，和本宫合起来看。'],
+  ['四化', '看生年四化落在这几宫的哪颗星上；看这十年、今年时，再加上大限、流年的四化。'],
+  ['格局', '看这几宫的星曜有没有组成格局，格局按成立的那一层（本命、大限、流年）来看。'],
+  ['运限', '看某段时间：先找大限、流年的命宫落在本命哪一宫，再找这个主题的宫在那一层落在哪里。'],
+];
+/* 术语：点开看生效知识包 concepts 里的解释 */
+const TERMS = { '本宫':'ben-gong', '对宫':'dui-gong', '三合':'san-he-wei', '三方四正':'san-fang-si-zheng', '空宫':'kong-gong', '格局':'ge-ju',
+  '大限':'da-xian-pan', '流年':'liu-nian-pan', '四化':'yun-xian-si-hua', '身宫':'shen-gong', '来因宫':'lai-yin-gong', '同宫':'tong-gong', '会照':'hui-zhao' };
+const term = (w, label) => TERMS[w] ? `<button type="button" class="term" data-term="${w}" aria-haspopup="dialog">${label || w}</button>` : (label || w);
+const HUA_KEY = ['sihuaLu', 'sihuaQuan', 'sihuaKe', 'sihuaJi'];
+/* 每一宫都是某个主题的本宫（性格只取本宫、没有 surround，从总论或主题列表进） */
+const PAL_TOPIC = Object.fromEntries(TOPICS.flatMap(t => t.groups.filter(g => g.kind === 'surround').map(g => [g.target, t.slug])));
+const whenLayer = () => state.layer === 'natal' ? null : layerInfo(state.layer);
+function whenLabel(){
+  const L = whenLayer(); if (!L) return '一生（本命盘）';
+  if (L.kind === 'decadal'){ const D = READ.decades.find(d => d.index === state.dec); return `${D.ageRange.join('–')} 岁这十年${state.dec === NOW_DEC ? '（现在）' : ''}`; }
+  if (L.kind === 'yearly') return `${state.year} 年（虚岁 ${ageOf(state.year)}）`;
+  return `${state.year} 年${lunarMonthName(state.month, state.leapMonth)}`;
+}
+const whenKey = () => state.layer === 'natal' ? 'life' : state.layer === 'decadal' && state.dec === NOW_DEC ? 'decade' : state.layer === 'yearly' && state.year === DATA_YEAR ? 'year' : '';
+function topicPalaces(t){ const s = new Set(); t.groups.forEach(g => { if (g.target != null) s.add(g.target); if (g.kind === 'surround') [g.opposite, g.wealth, g.career].forEach(x => s.add(x)); }); return [...s]; }
+function mainIdx(t){ const g = t.groups.find(g => g.kind === 'surround') || t.groups.find(g => g.target != null); return g.target; }
+const brief = i => `${P[i].earthlyBranch}，${mainOf(i).length ? mainOf(i).map(s => s.name).join('、') : '无主星'}`;
+function onlyLabel(g){
+  if (g.key === 'bodyPalace') return `${term('身宫')}（在${pl(g.target)}）`;
+  if (g.key === 'originalPalace') return `${term('来因宫')}（在${pl(g.target)}）`;
+  return `${pl(g.target)}（${brief(g.target)}）`;
+}
+function selDesc(t){
+  const a = t.groups.filter(g => g.kind === 'surround').map(g => `${pl(g.target)}连同它的${term('三方四正')}`);
+  const b = t.groups.filter(g => g.kind === 'only' && g.target != null).map(g => g.key === 'bodyPalace' ? term('身宫') : g.key === 'originalPalace' ? term('来因宫') : pl(g.target));
+  return a.length ? `看${a.join('、')}${b.length ? `，另看${b.join('、')}` : ''}。` : `只看${b.join('、')}这几宫本身。`;
+}
+const rewrite = (path, label, combo) => `<a class="rewrite" href="editor-mockup.html#write/${path}?chart=0&use=${encodeURIComponent(activePacks().slice(-1)[0].id)}${combo ? `&combo=${combo}` : ''}">改写这一条<span class="vh">：${esc(label)}</span></a>`;
+const moreBtn = (id, open, label = '全文') => `<button type="button" class="rmore" data-v2more="${id}" aria-expanded="${open}">${open ? '收起' : label}${CARET}</button>`;
+/* 一条释义：摘要层（有摘要用摘要，正文不超过 240 宽度用正文），可展开全文；旁边是「改写这一条」 */
+function knBlock(sec, key, label, id){
+  const e = entry(sec, key);
+  if (!e || (!e.intro && !e.summary)) return `<div class="kn2 none"><b>${esc(label)}</b><p>你在用的释义里没有这一条。</p><div class="knact">${rewrite(`${sec}/${encodeURIComponent(key)}`, label)}</div></div>`;
+  const s = layerText(e), open = v2.open.has(id);
+  const full = (e.intro && (e.summary || dwidth(e.intro) > 240)) || e.conditions || (e.quotes && e.quotes.length);
+  return `<div class="kn2"><b>${esc(label)}</b>${s ? `<p>${mdInline(s)}</p>` : ''}<div class="knact">${full ? moreBtn(id, open) : ''}${rewrite(`${sec}/${encodeURIComponent(key)}`, label)}</div>
+    ${open ? `<div class="knfull">${e.quotes && e.quotes.length ? `<p class="qt">${e.quotes.map(esc).join('<br>')}</p>` : ''}${e.conditions ? `<p class="lab">成立条件</p><div class="md">${mdBlocks(e.conditions)}</div>` : ''}${e.intro ? `<div class="md">${mdBlocks(e.intro)}</div>` : ''}</div>` : ''}</div>`;
+}
+/* 两颗主星同宫时的组合释义 */
+function comboBlock(i){
+  const m = mainOf(i); if (m.length !== 2) return '';
+  const [a, b] = m, ea = entry('stars', a.key), eb = entry('stars', b.key);
+  const hit = ea && ea.combinations && ea.combinations[b.key] ? [ea, a.key, b.key] : eb && eb.combinations && eb.combinations[a.key] ? [eb, b.key, a.key] : null;
+  if (!hit) return '';
+  const body = hit[0].combinations[hit[2]], sum = (hit[0].combinationSummaries || {})[hit[2]] || (dwidth(body) <= 240 ? body : ''), id = `c${i}`, open = v2.open.has(id);
+  return `<div class="kn2"><b>${a.name}、${b.name}同宫</b>${sum ? `<p>${mdInline(sum)}</p>` : ''}<div class="knact">${dwidth(body) > 240 ? moreBtn(id, open) : ''}${rewrite(`stars/${hit[1]}`, `${a.name}、${b.name}同宫`, hit[2])}</div>${open ? `<div class="knfull"><div class="md">${mdBlocks(body)}</div></div>` : ''}</div>`;
+}
+/* 收起的一组释义（次要的星），点开才列 */
+function groupBlock(id, title, items){
+  if (!items.length) return '';
+  const open = v2.open.has(id);
+  return `<div class="kgrp"><button type="button" class="rmore" data-v2more="${id}" aria-expanded="${open}">${title}${CARET}</button>${open ? items.join('') : ''}</div>`;
+}
+const LN = { decadal:'大限', yearly:'流年', monthly:'流月' };
+/* 五步：每步 { hl 这一步看的宫, focus 选中的宫, facts 事实句, kn 释义, acts 步内按钮 } */
+function steps(t){
+  const L = whenLayer(), main = mainIdx(t), sur = t.groups.filter(g => g.kind === 'surround'), only = t.groups.filter(g => g.kind === 'only' && g.target != null), set = topicPalaces(t);
+  const out = [];
+  /* 1 本宫主星 */
+  const bases = sur.length ? sur.map(g => g.target) : only.map(g => g.target);
+  const baseKey = sur.length ? sur.map(g => g.key) : only.map(g => g.key);
+  const f1 = bases.map((i, n) => {
+    const m = mainOf(i), mi = P[i].minorStars;
+    const head = baseKey[n] === 'bodyPalace' ? `你的${term('身宫')}在${pl(i)}（${P[i].earthlyBranch}）` : baseKey[n] === 'originalPalace' ? `你的${term('来因宫')}在${pl(i)}（${P[i].earthlyBranch}）` : `你的${pl(i)}在${P[i].earthlyBranch}`;
+    const tail = mi.length ? `；${term('同宫')}的辅星有${listTxt(mi.map(starTxt))}` : '';
+    if (!m.length){ const o = (i + 6) % 12; return `${head}，没有主星（${term('空宫')}）${tail}。${term('对宫')}${pl(o)}的主星是${listTxt(mainOf(o).map(starTxt))}。`; }
+    return `${head}，主星是${listTxt(m.map(starTxt))}${tail}。`;
+  });
+  const seen = new Set();
+  const kn1 = bases.flatMap(i => { const src = mainOf(i).length ? i : (i + 6) % 12; return [...mainOf(src).filter(s => !seen.has(s.key) && seen.add(s.key)).map(s => knBlock('stars', s.key, mainOf(i).length ? s.name : `${s.name}（${pl(src)}）`, `s${s.key}`)), comboBlock(src)]; }).filter(Boolean);
+  const minors = bases.flatMap(i => P[i].minorStars).filter(s => !seen.has(s.key) && seen.add(s.key));
+  if (minors.length) kn1.push(groupBlock('g1', `同宫辅星的释义：${minors.map(s => s.name).join('、')}`, minors.map(s => knBlock('stars', s.key, s.name, `s${s.key}`))));
+  out.push({ hl: [...new Set(bases.flatMap(i => mainOf(i).length ? [i] : [i, (i + 6) % 12]))], focus: bases[0], facts: f1, kn: kn1 });
+  /* 2 三方四正 */
+  let f2;
+  if (sur.length){
+    f2 = sur.map(g => `${pl(g.target)}的${term('对宫')}是${pl(g.opposite)}（${brief(g.opposite)}），${term('三合')}是${pl(g.wealth)}（${brief(g.wealth)}）和${pl(g.career)}（${brief(g.career)}）。`);
+    if (only.length) f2.push(`这个主题另看${only.map(onlyLabel).join('、')}。`);
+  } else f2 = [`「${t.title}」只看${listTxt(bases.map((i, n) => baseKey[n] === 'bodyPalace' ? `身宫（${pl(i)}）` : pl(i)))}这几宫本身，不看各自的${term('三方四正')}。`];
+  const others = set.filter(i => !bases.includes(i)).flatMap(i => mainOf(i).map(s => [i, s])).filter(([, s]) => !seen.has(s.key) && seen.add(s.key));
+  const kn2 = others.length ? [groupBlock('g2', `这几宫主星的释义：${others.map(([, s]) => s.name).join('、')}`, [...new Set(others.map(([i]) => i))].flatMap(i => [...others.filter(([j]) => j === i).map(([, s]) => knBlock('stars', s.key, `${s.name}（${pl(i)}）`, `s${s.key}`)), comboBlock(i)]).filter(Boolean))] : [];
+  out.push({ hl: set, focus: main, facts: f2, kn: kn2 });
+  /* 3 四化 */
+  const natal = []; P.forEach((p, i) => [...p.majorStars, ...p.minorStars].forEach(s => { if (s.mutagen) natal.push([HUA.indexOf(s.mutagen), s.name, i]); }));
+  natal.sort((a, b) => a[0] - b[0]);
+  const huaTxt = ([h, n, i]) => `${n}化${HUA[h]}在${pl(i)}`;
+  const inN = natal.filter(x => set.includes(x[2])), outN = natal.filter(x => !set.includes(x[2]));
+  const f3 = [inN.length ? `生年${term('四化')}落在这几宫的有：${inN.map(huaTxt).join('，')}。` : `生年${term('四化')}没有落在这几宫。`];
+  if (outN.length) f3.push(`落在别处的：${outN.map(huaTxt).join('，')}。`);
+  let inL = [];
+  if (L){
+    const lh = L.mut.map((k, h) => [h, starName(k), P.findIndex(p => [...p.majorStars, ...p.minorStars].some(s => s.key === k))]);
+    inL = lh.filter(x => set.includes(x[2]));
+    f3.push(`${LN[L.kind]}（${L.stem}${L.branch}）的四化：${lh.map(huaTxt).join('，')}。${inL.length ? `落在这几宫的是${listTxt(inL.map(x => `${x[1]}化${HUA[x[0]]}`))}。` : '都不在这几宫。'}`);
+  }
+  const huaShown = [...new Set([...inN, ...inL].map(x => x[0]))].sort();
+  out.push({ hl: [...new Set([...inN, ...inL].map(x => x[2]))], focus: main, facts: f3, kn: huaShown.map(h => knBlock('mutagens', HUA_KEY[h], `化${HUA[h]}`, `m${h}`)) });
+  /* 4 格局：同名同宫只列一次，标出在哪几层成立 */
+  const pats = [];
+  const addP = (list, sc) => (list || []).forEach(p => {
+    if (!(set.includes(p.palace) || p.stars.some(s => set.includes(s.palace)))) return;
+    const same = pats.find(x => x.key === p.key && x.palace === p.palace);
+    if (same){ if (!same.sc.includes(sc)) same.sc.push(sc); } else pats.push({ ...p, sc: [sc] });
+  });
+  addP(READ.natalPatterns, '本命'); if (L) addP(L.patterns, LN[L.kind]);
+  const f4 = pats.length ? pats.map(p => {
+    const ss = p.stars.filter((s, k, a) => a.findIndex(y => y.name === s.name && y.palace === s.palace) === k);
+    return `${p.name}${p.broken ? '（破格）' : ''}：以${pl(p.palace)}为本宫，由${ss.map(s => `${pl(s.palace)}的${s.name}`).join('、')}组成，${p.sc.join('、')}成立。`;
+  }) : [`这几宫的星曜没有组成${term('格局')}${L ? `（本命与${LN[L.kind]}都没有）` : ''}。`];
+  out.push({ hl: [...new Set(pats.flatMap(p => [p.palace, ...p.stars.map(s => s.palace)]))], focus: pats.length ? pats[0].palace : main, facts: f4, kn: pats.map(p => knBlock('patterns', p.key, p.name, `p${p.key}`)) });
+  /* 5 运限 */
+  const D = READ.decades.find(d => d.index === NOW_DEC), Y = READ.years[DATA_YEAR], mainName = P[main].name;
+  let f5, hl5, focus5, acts = '';
+  if (!L){
+    f5 = [`你 ${DATA_YEAR} 年虚岁 ${Y.age}，在 ${D.ageRange.join('–')} 岁这个${term('大限')}里；这个大限的命宫在${D.branch}，就是本命的${pl(D.index)}。`, `${DATA_YEAR} 年的${term('流年')}命宫在${Y.branch}，就是本命的${pl(Y.index)}。`];
+    hl5 = [D.index, Y.index]; focus5 = D.index;
+    acts = `<div class="stacts"><button type="button" class="btn ghost" data-when="decade">看这十年的${esc(t.title)}</button><button type="button" class="btn ghost" data-when="year">看今年的${esc(t.title)}</button></div>`;
+  } else {
+    const k = L.names.indexOf(mainName);
+    const Dx = READ.decades.find(d => d.index === state.dec);
+    const head = L.kind === 'decadal' ? `${Dx.ageRange.join('–')} 岁这个${term('大限')}（${Dx.yearRange.join('–')} 年）的命宫在${Dx.branch}，就是本命的${pl(Dx.index)}。`
+      : L.kind === 'yearly' ? `${state.year} 年（${L.stem}${L.branch}）你虚岁 ${ageOf(state.year)}，${term('流年')}命宫在${L.branch}，就是本命的${pl(L.idx)}。`
+      : `${state.year} 年${lunarMonthName(state.month, state.leapMonth)}（${L.stem}${L.branch}）的流月命宫在${L.branch}，就是本命的${pl(L.idx)}。`;
+    f5 = [head];
+    if (mainName !== '命宫' && k >= 0) f5.push(`这一层的${pl(main)}在${P[k].earthlyBranch}，就是本命的${pl(k)}（${mainOf(k).length ? mainOf(k).map(starTxt).join('、') : '无主星'}）。读这段时间的${t.title}，以它为本宫再看前四步。`);
+    hl5 = k >= 0 ? [...new Set([L.idx, k])] : [L.idx]; focus5 = k >= 0 ? k : L.idx;
+  }
+  out.push({ hl: hl5, focus: focus5, facts: f5, kn: [], acts });
+  return out;
+}
+/* 手机上每步旁边的小盘：4×4 宫格，标出这一步看的宫，点了到大盘上看 */
+function miniHTML(s, k){
+  const cells = P.map((p, i) => { const [r, c] = POS[p.earthlyBranch]; return `<span class="${s.hl.includes(i) ? 'on' : ''}${i === s.focus ? ' f' : ''}" style="grid-area:${r + 1}/${c + 1}">${p.name}</span>`; }).join('');
+  return `<button type="button" class="mini" data-st-see="${k}" aria-label="到盘上看这一步的宫：${s.hl.map(pl).join('、') || '无'}">${cells}</button>`;
+}
+
+/* ── 渲染 ── */
+const v2root = document.createElement('div'); v2root.className = 'rv2';
+function renderRead(){
+  if (v2root.parentElement !== $('rv2Host')) $('rv2Host').appendChild(v2root);
+  renderTopicNav();
+  const mode = boardMode();
+  if (mode === 'empty'){ v2root.innerHTML = `<div class="rempty"><h3>排盘后在这里读</h3><p>从命宫开始，一步一步读这张盘：每步写盘上有什么、为什么看、释义怎么说。读到哪里都可以接着问 AI。</p></div>`; return; }
+  if (mode === 'loading'){ v2root.innerHTML = `<div class="rempty"><h3>正在排盘</h3><p>星曜、四化与格局算好后显示（${Math.round(state.progress * 512)} / 512 KB）。</p></div>`; return; }
+  const t = tp(), S = steps(t), intro = entry('topics', t.slug);
+  v2.steps = S;
+  const title = k => ['三方四正', '四化', '格局'].includes(METHOD[k][0]) ? term(METHOD[k][0]) : METHOD[k][0];
+  v2root.innerHTML = `<header class="rv2h"><div class="rv2top"><p class="eyebrow">${esc(whenLabel())}</p><button type="button" class="tbtn jumpask" data-m-ask>问 AI</button></div><h2 tabindex="-1" id="rv2Title">${esc(t.title)}</h2><p class="sel">${selDesc(t)}</p>
+      ${intro && intro.intro ? `<div class="kn2 tintro"><p>${mdInline(intro.intro)}</p><div class="knact">${rewrite(`topics/${t.slug}`, `${t.title}看哪几宫`)}</div></div>` : ''}</header>
+    <ol class="steps" aria-label="${esc(t.title)}，分五步读">${S.map((s, k) => `<li class="st2${v2.step === k ? ' on' : ''}" id="st2-${k}" data-st="${k}">
+      <div class="sthd">${miniHTML(s, k)}<h3 id="st2h-${k}" tabindex="-1">${title(k)}</h3><button type="button" class="tbtn seeb" data-st-see="${k}" aria-pressed="${v2.step === k}">盘上看</button></div>
+      <div class="sfacts">${s.facts.map(f => `<p>${f}</p>`).join('')}</div>
+      ${s.acts || ''}
+      <p class="how"><span>怎么看</span>${METHOD[k][1]}</p>
+      ${s.kn.length ? `<div class="kns"><p class="knh">释义</p>${s.kn.join('')}</div>` : ''}
+      <button type="button" class="tbtn askstep" data-ask-step="${k}">就这一步问 AI</button>
+    </li>`).join('')}</ol>
+    ${askHTML(t)}
+    <footer class="rv2f">${kp.fail ? `<p class="kpnote">${esc(kp.fail)}</p>` : ''}<p>盘面由排盘程序算出；释义摘自知识包「${esc(activeLabel())}」。</p><p class="fbtns"><button type="button" class="tbtn" data-pick="kpuse2" aria-haspopup="dialog" aria-expanded="false">换一套释义</button><button type="button" class="tbtn" data-pf-full>整张盘的完整提示词</button><button type="button" class="tbtn" id="copyLink2">复制这张盘的链接</button></p></footer>`;
+  paintSteps();
+}
+function renderTopicNav(){
+  const on = boardMode() === 'chart', wk = whenKey(), D = READ.decades.find(d => d.index === NOW_DEC);
+  $('topicNav').innerHTML = `<h2 class="navh">看什么</h2><div class="tlist" role="group" aria-label="主题">${TOPICS.map(t => `<button type="button" aria-pressed="${v2.topic === t.slug}" data-topic="${t.slug}"${on ? '' : ' disabled'}>${esc(t.title)}</button>`).join('')}</div>`;
+  $('whenNav').innerHTML = `<h2 class="navh">看哪段时间</h2><div class="seg wseg" role="group" aria-label="时间">${[['life', '一生', '本命盘'], ['decade', '这十年', `${D.ageRange.join('–')} 岁`], ['year', '今年', `${DATA_YEAR}`]].map(([k, t, s]) => `<button type="button" aria-pressed="${wk === k}" data-when="${k}"${on ? '' : ' disabled'}>${t}<small>${s}</small></button>`).join('')}</div>
+    ${wk || !on ? '' : `<p class="wnow">盘上是${esc(whenLabel())}</p>`}
+    <button type="button" class="tbtn morel" data-morelayer aria-expanded="${document.querySelector('.chartpage').classList.contains('showlayer')}" aria-controls="layerSec"${on ? '' : ' disabled'}>选别的大限、年份或流月${CARET}</button>`;
+  $('mTopic').innerHTML = `<span>看</span><b>${esc(tp().title)}</b>${CARET}`;
+}
+function askHTML(t){
+  const L = whenLayer(), has = chat.cfg && chat.cfg.key, n = topicPrompt().length;
+  const ph = { career:'比如：我适合什么样的工作', romance:'比如：我在感情里要留意什么', wealth:'比如：我适合怎么理财', health:'比如：哪些方面要多注意' }[t.slug] || `比如：从${t.title}看，我是怎样的人`;
+  return `<section class="ask2" id="askAI" aria-labelledby="askH"><h3 id="askH" tabindex="-1">问 AI</h3>
+    <label class="fld"><span class="lb">你想问什么</span><textarea id="q2" rows="3" placeholder="${esc(ph)}">${esc(v2.q)}</textarea></label>
+    <p class="pfsum">会复制：解读方法、「${esc(t.title)}」这几宫的盘面与释义${L ? `、${esc(whenLabel())}的运限` : ''}和你的问题，共 <span id="q2n">${n.toLocaleString('zh-CN')}</span> 字。<button type="button" class="tbtn inl" data-pf-topic>看全文</button></p>
+    <p class="lab2">复制，然后打开</p>
+    <div class="aigrid">${[['DeepSeek', 'https://chat.deepseek.com/'], ['豆包', 'https://www.doubao.com/chat/'], ['Kimi', 'https://www.kimi.com/'], ['ChatGPT', 'https://chatgpt.com/'], ['Claude', 'https://claude.ai/new']].map(([nm, u]) => `<a class="btn ghost" href="${u}" target="_blank" rel="noopener" data-copyai="${nm}">${nm}</a>`).join('')}</div>
+    <div class="inpage"><p>${has ? `你填过 ${esc(prov().name)} 的 Key，可以直接在这页问。` : '有自己的 API Key，也可以在这页问；Key 只存在这台设备。'}</p><button type="button" class="btn ghost" data-ask-here>${has ? `在这页问 ${esc(chat.cfg.model)}` : '在这页问'}</button></div>
+  </section>`;
+}
+/* 盘面高亮跟着阅读走：当前步的焦点宫为选中宫（画三方四正连线），这一步看的宫铺底色 */
+function paintSel(el, first){
+  const opt = el._opt, set = el === mainBoard && v2.hl ? v2.hl : sf(opt.sel);
+  el.querySelectorAll('.cell').forEach(n => {
+    const i = +n.dataset.i;
+    n.classList.toggle('sel', i === opt.sel);
+    n.classList.toggle('rel', set.includes(i) && i !== opt.sel);
+    if (n.tagName === 'BUTTON') n.setAttribute('aria-pressed', i === opt.sel);
+  });
+  drawSky(el, geom(el), opt, !first || opt.animate);
+}
+function paintSteps(){
+  const s = v2.steps && v2.steps[v2.step]; if (!s || boardMode() !== 'chart') return;
+  v2.hl = s.hl; state.sel = s.focus;
+  if (mainBoard._opt){ mainBoard._opt.sel = s.focus; paintSel(mainBoard, false); }
+  v2root.querySelectorAll('.st2').forEach(x => { const on = +x.dataset.st === v2.step; x.classList.toggle('on', on); x.querySelector('.seeb').setAttribute('aria-pressed', on); });
+}
+/* 只含这个主题的提示词：解读方法 + 内核的主题文本（释义摘要层）+ 选了时间时的运限 + 问题 */
+function topicPrompt(){
+  const t = tp(), L = whenLayer();
+  const q = (v2.q || '').trim() || `请按解读方法，从「${t.title}」看看这张盘。`;
+  const extra = !L ? [] : L.kind === 'decadal' ? [relabel(PR.decades.know).trim()] : PR.years[state.year] ? [relabel(PR.years[state.year].know).trim()] : [];
+  return [PR.method.trim(), '---', relabel(t.text).trim(), ...extra, '---', `# 我的问题\n\n${q}`].join('\n\n');
+}
+function buildPrompt(){ return pf.src === 'topic' ? topicPrompt() : buildPromptChart(); }
+function setTopic(slug, focus){
+  v2.topic = slug; v2.step = 0; v2.open = new Set();
+  renderRead();
+  if (wide()) $('rv2Host').scrollTop = 0;
+  else window.scrollTo({ top: $('rv2Host').getBoundingClientRect().top + scrollY - 8, behavior: smooth() });
+  if (focus) $('rv2Title').focus({ preventScroll: true });
+}
+function setWhen(k){
+  if (k === 'life') state.layer = 'natal';
+  else if (k === 'decade'){ state.dec = NOW_DEC; state.layer = 'decadal'; }
+  else { state.year = DATA_YEAR; state.dec = NOW_DEC; state.layer = 'yearly'; }
+  v2.step = k === 'life' ? 0 : 4;
+  renderLayers(); renderBoard(false); renderRead();
+  if (k !== 'life'){ const el = $(`st2-${v2.step}`); if (wide()) $('rv2Host').scrollTop = el.offsetTop - 8; else window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 8, behavior: smooth() }); }
+}
+/* 盘上只显示所选那一层（本命，或本命加大限 / 流年 / 流月中的一层），不同时叠三层 */
+function activeLayers(){ const L = layerInfo(state.layer); return L ? [L] : []; }
+function renderSide(){
+  const chatOn = chat.side === 'chat' && wide();
+  $('rv2Host').hidden = chatOn; $('chatWrap').hidden = !chatOn;
+  if (chatOn) $('chatBack').innerHTML = `<button type="button" class="tbtn" data-rv2-back>‹ 回到「${esc(tp().title)}」</button>`;
+}
+/* 聊天里「改用提示词」一类的动作：回到问 AI */
+function gotoTab(k){
+  chat.side = 'read'; renderSide();
+  if (k === 'prompt'){ renderRead(); const a = $('askAI'); if (wide()) $('rv2Host').scrollTop = a.offsetTop - 8; else window.scrollTo({ top: a.getBoundingClientRect().top + scrollY - 8 }); $('askH').focus({ preventScroll: true }); }
+}
+function openChatHere(){
+  const t = tp(); chat.draftText = (v2.q || '').trim() || `从「${t.title}」看，这张盘怎么样？`;
+  if (!wide()){ openSheet(); return; }
+  chat.side = 'chat'; renderSide(); renderChat(true);
+  const i = $('kKey') || $('chInput'); if (i) i.focus();
+}
+/* 点盘上的宫：读以它为本宫的主题 */
+function openPalace(i){
+  if (chat.side === 'chat'){ chat.side = 'read'; renderSide(); }
+  const slug = PAL_TOPIC[i]; if (slug) setTopic(slug, true);
+}
+/* 术语浮层：≥700 贴着术语，<700 从底部升起 */
+function openTerm(btn){
+  const key = TERMS[btn.dataset.term], e = entry('concepts', key), pop2 = $('termPop');
+  pop2.innerHTML = `<div class="tp-h"><b id="termT">${esc(e && e.title ? e.title : btn.dataset.term)}</b><button type="button" data-term-x aria-label="关闭"><svg width="12" height="12"><use href="#i-x"/></svg></button></div>
+    ${e && e.intro ? `<div class="md">${mdBlocks(e.summary || e.intro)}</div>` : '<p class="md">你在用的释义里没有这个术语。</p>'}<div class="tp-f">${rewrite(`concepts/${key}`, btn.dataset.term)}</div>`;
+  pop2.hidden = false; v2.termBtn = btn;
+  if (!isS()){
+    const r = btn.getBoundingClientRect(), w = 340; pop2.classList.remove('sheet'); pop2.style.width = `${w}px`;
+    pop2.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left))}px`;
+    const h = pop2.offsetHeight; pop2.style.top = `${r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - 6 - h) : r.bottom + 6}px`;
+  } else { pop2.classList.add('sheet'); pop2.style.cssText = ''; }
+  $('termScrim').hidden = !isS();
+  pop2.querySelector('[data-term-x]').focus();
+}
+function closeTerm(back = true){ $('termPop').hidden = true; $('termScrim').hidden = true; if (back && v2.termBtn && v2.termBtn.isConnected) v2.termBtn.focus(); v2.termBtn = null; }
+
+/* ── 事件 ── */
+document.addEventListener('click', e => {
+  if (!$('termPop').hidden && !e.target.closest('#termPop') && !e.target.closest('[data-term]')) closeTerm(false);
+  const b = e.target.closest('button, a'); if (!b) return;
+  const D = b.dataset;
+  if (D.term){ e.preventDefault(); if (!$('termPop').hidden && v2.termBtn === b) closeTerm(); else openTerm(b); return; }
+  if (D.termX != null){ closeTerm(); return; }
+  if (D.topic){ setTopic(D.topic); $('topicNav').querySelector(`[data-topic="${D.topic}"]`).focus({ preventScroll: true }); return; }
+  if (D.when){ const inRead = v2root.contains(b); setWhen(D.when); if (inRead || !wide()) $(`st2h-${v2.step}`).focus({ preventScroll: true }); else $('whenNav').querySelector(`[data-when="${D.when}"]`).focus(); return; }
+  if (D.morelayer != null){ const pg = document.querySelector('.chartpage'); pg.classList.toggle('showlayer'); b.setAttribute('aria-expanded', pg.classList.contains('showlayer')); return; }
+  if (D.v2more){ v2.open.has(D.v2more) ? v2.open.delete(D.v2more) : v2.open.add(D.v2more); renderRead(); const n = v2root.querySelector(`[data-v2more="${D.v2more}"]`); if (n) n.focus({ preventScroll: true }); return; }
+  if (D.stSee){ v2.step = +D.stSee; paintSteps(); if (!wide()) mainBoard.scrollIntoView({ block: 'center', behavior: smooth() }); return; }
+  if (D.askStep){ const k = +D.askStep; v2.q = `从「${METHOD[k][0]}」这一步看我的${tp().title}，该怎么理解？`; renderRead(); const a = $('askAI'); if (wide()) $('rv2Host').scrollTop = a.offsetTop - 8; else window.scrollTo({ top: a.getBoundingClientRect().top + scrollY - 8 }); $('q2').focus({ preventScroll: true }); return; }
+  if (D.copyai){ const text = topicPrompt(); copyText(text).then(() => toast(`已复制 ${text.length.toLocaleString('zh-CN')} 字，在 ${D.copyai} 里粘贴后发送`), () => toast('浏览器拒绝了复制：点「看全文」，在全文里复制')); return; }
+  if (D.askHere != null){ openChatHere(); return; }
+  if (D.rv2Back != null){ chat.side = 'read'; renderSide(); renderRead(); $('rv2Title').focus(); return; }
+  if (D.pfTopic != null){ pf.src = 'topic'; $('pfTitle').textContent = `「${tp().title}」的提示词`; openFull(); return; }
+  if (D.pfFull != null){ pf.src = 'full'; $('pfTitle').textContent = '整张盘的完整提示词'; openFull(); return; }
+  if (D.mAsk != null){ const a = $('askAI'); if (!a) return; if (wide()) $('rv2Host').scrollTo({ top: a.offsetTop - 8, behavior: smooth() }); else window.scrollTo({ top: a.getBoundingClientRect().top + scrollY - 8, behavior: smooth() }); $('q2').focus({ preventScroll: true }); return; }
+  if (b.id === 'copyLink2'){ copyText(location.href).then(() => toast('链接已复制：打开就是这张盘，生辰在链接里'), () => toast('浏览器拒绝了复制')); return; }
+}, true);
+$('termScrim').addEventListener('click', () => closeTerm());
+document.addEventListener('click', e => { const t = e.target.closest('[data-pick="mtopic"]'); if (!t) return;
+  openPicker(t, { title: '看什么', width: 300, body(){ return `<div class="opts" role="listbox" aria-label="主题" style="--cols:3">${TOPICS.map(x => optB(x.slug, `<b>${esc(x.title)}</b>`, { sel: x.slug === v2.topic })).join('')}</div>`; }, onPick(v){ setTopic(v, true); return true; } }); });
+document.addEventListener('input', e => { if (e.target.id === 'q2'){ v2.q = e.target.value; $('q2n').textContent = topicPrompt().length.toLocaleString('zh-CN'); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('termPop').hidden){ e.preventDefault(); e.stopPropagation(); closeTerm(); } }, true);
+/* 宽屏右栏滚到哪一步，盘就高亮哪一步：取越过右栏上部 35% 处的最后一步 */
+function syncStep(){
+  if (!wide() || !v2.steps) return;
+  const host = $('rv2Host'), top = host.getBoundingClientRect().top + host.clientHeight * 0.35;
+  let k = 0; v2root.querySelectorAll('.st2').forEach(x => { if (x.getBoundingClientRect().top <= top) k = +x.dataset.st; });
+  if (k !== v2.step){ v2.step = k; paintSteps(); }
+}
+$('rv2Host').addEventListener('scroll', () => requestAnimationFrame(syncStep));
+
+function v2State(name){
+  closePop(false); if (!$('termPop').hidden) closeTerm(false);
+  if (pf.open) closeFull(); if (chat.sheet) closeSheet(); if (chat.drawer) closeDrawer();
+  kp.fail = null; kp.packs = []; kp.mode = 'stack'; kp.stack = []; kp.whole = DEF_ID;
+  v2.topic = 'overall'; v2.step = 0; v2.open = new Set(); v2.q = ''; chat.side = 'read'; chat.draftText = '';
+  document.querySelector('.chartpage').classList.toggle('showlayer', name === 'v-layer');
+  state.layer = 'natal'; state.year = DATA_YEAR; state.dec = NOW_DEC; state.month = DATA_LMONTH; state.leapMonth = false;
+  chat.cfg = name === 'v-chat' ? { ...chat.cfg, key:'sk-demo0000000000a3f9', keyMask:'sk-…a3f9', status:'ok' } : { ...chat.cfg, key:'', keyMask:'', status:'none' };
+  if (name === 'v-nokn'){ kp.packs = KP_SAMPLES.map(p => ({ pack: p, importedAt: Date.UTC(2026, 10, 21, 9, 12) })); kp.mode = 'whole'; kp.whole = 'mou-menpai'; }
+  if (name === 'v-kpfail') kp.fail = '释义暂用默认包：本机知识包库没打开（本站在别的标签页里开着旧版本）。关掉那些标签页后自动换回你的组合。';
+  if (name === 'v-kernel'){ kernelPromise = null; state.kernel = 'idle'; state.progress = 0; }
+  else if (state.kernel !== 'ready'){ state.kernel = 'ready'; state.progress = 1; }
+  const T = { 'v-kong':'property', 'v-personality':'personality', 'v-decade':'career', 'v-year':'wealth', 'v-layer':'romance', 'v-ask':'career', 'v-full':'career', 'v-chat':'career', 'v-chat-nokey':'career', 'v-nokn':'romance' };
+  if (T[name]) v2.topic = T[name];
+  if (name === 'v-decade'){ state.layer = 'decadal'; v2.step = 4; }
+  if (name === 'v-year'){ state.layer = 'yearly'; v2.step = 4; }
+  if (name === 'v-layer'){ state.layer = 'yearly'; state.year = 2019; state.dec = decOfAge(ageOf(2019)); v2.step = 4; }
+  if (name === 'v-open'){ ['sziweiMaj', 'g1'].forEach(x => v2.open.add(x)); }
+  const go = name === 'v-empty' ? '#chart' : `#chart?cal=solar&d=2000-8-16&g=f&t=${SAMPLE.t}`;
+  if (location.hash !== go) location.hash = go; else route();
+  setTimeout(() => {
+    if (name === 'v-kernel'){ renderChartPage(false); loadKernel().then(() => renderChartPage(false)); return; }
+    if (name === 'v-empty') return;
+    renderChartPage(false);
+    const host = $('rv2Host'), toStep = k => { const el = $(`st2-${k}`); if (wide()) host.scrollTop = el.offsetTop - 8; else window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - 8 }); };
+    if (name === 'v-step2'){ v2.step = 1; paintSteps(); toStep(1); }
+    if (['v-decade', 'v-year', 'v-layer'].includes(name)) toStep(4);
+    if (name === 'v-kong' || name === 'v-personality' || name === 'v-nokn') toStep(0);
+    if (name === 'v-open'){ toStep(0); }
+    if (name === 'v-term'){ v2.step = 1; paintSteps(); toStep(1); setTimeout(() => { const t = $('st2-1').querySelector('[data-term="三方四正"]'); if (t) openTerm(t); }, 60); }
+    if (name === 'v-ask' || name === 'v-full'){ v2.q = '从「三方四正」这一步看我的事业，该怎么理解？'; renderRead(); const a = $('askAI'); if (wide()) host.scrollTop = a.offsetTop - 8; else window.scrollTo({ top: a.getBoundingClientRect().top + scrollY - 8 }); if (name === 'v-full'){ pf.src = 'topic'; $('pfTitle').textContent = `「${tp().title}」的提示词`; openFull(); } }
+    if (name === 'v-chat-nokey' || name === 'v-chat'){ v2.q = '我适合什么样的工作？'; renderRead(); openChatHere(); }
+    if (name === 'v-topics' && !wide()){ const t = $('mTopic'); openPicker(t, { title: '看什么', width: 300, body(){ return `<div class="opts" role="listbox" aria-label="主题" style="--cols:3">${TOPICS.map(x => optB(x.slug, `<b>${esc(x.title)}</b>`, { sel: x.slug === v2.topic })).join('')}</div>`; }, onPick(v){ setTopic(v, true); return true; } }); }
+  }, 80);
+}
+
 /* ══════════ 首页 ══════════ */
 const homeBoard = $('homeBoard');
 function renderHome(){
@@ -6151,7 +6678,7 @@ function route(){
     if (state.kernel !== 'ready') loadKernel().then(() => { if (!$('kp').hidden) renderKPImport(); });
     return;
   }
-  document.title = '排盘：x-ziwei';
+  document.title = '看盘第二版：x-ziwei';
   if (r.inp){
     if (!state.chart || birthKey(state.chart) !== birthKey(r.inp)){
       state.form = { ...state.form, ...r.inp, t: r.inp.approx ? state.form.t : r.inp.t };
@@ -6169,11 +6696,11 @@ function route(){
 window.addEventListener('hashchange', route);
 
 /* ══════════ 交互 ══════════ */
-function select(i){ state.sel = i; rd.view = 'palace'; if (chat.side !== 'read' && matchMedia('(max-width:1023px)').matches){ chat.side = 'read'; renderSide(); } mainBoard._opt.sel = i; paintSel(mainBoard, false); renderRead(); renderPrompt(); const cx = chatRoot.querySelector('.ctx'); if (cx) cx.innerHTML = ctxText(); }
+function select(i){ state.sel = i; v2.hl = null; mainBoard._opt.sel = i; paintSel(mainBoard, false); }
 mainBoard.addEventListener('click', e => {
   if (boardMode() !== 'chart') return;
   const h = e.target.closest('[data-hitdec]'); if (h) return pickDecade(+h.dataset.hitdec);
-  const c = e.target.closest('button.cell'); if (c) select(+c.dataset.i);
+  const c = e.target.closest('button.cell'); if (c) openPalace(+c.dataset.i);
 });
 function pickYear(y){ state.year = y; state.dec = decOfAge(ageOf(y)); setLayer('yearly'); }
 function pickDecade(i){
@@ -6184,8 +6711,6 @@ function pickDecade(i){
 }
 function setLayer(k){
   state.layer = k;
-  const L = layerInfo(k);
-  state.sel = L ? L.idx : SOUL;
   renderLayers(); renderBoard(); renderRead(); renderPrompt();
   const cx = chatRoot.querySelector('.ctx'); if (cx) cx.innerHTML = ctxText();
 }
@@ -6299,6 +6824,7 @@ $('reviewMenu').addEventListener('click', e => {
   if (b.dataset.rv.startsWith('kp')){ kpState(b.dataset.rv); return; }
   if (b.dataset.rv.startsWith('c-')){ chatState(b.dataset.rv); return; }
   if (b.dataset.rv.startsWith('r-')){ rdState(b.dataset.rv); return; }
+  if (b.dataset.rv.startsWith('v-')){ v2State(b.dataset.rv); return; }
   switch (b.dataset.rv){
     case 'chart': state.layer='yearly'; state.year=DATA_YEAR; state.dec=H.decadal.index; state.sel=H.yearly.index; state.chart=null; go(sampleHash); break;
     case 'loading': kernelPromise = null; state.kernel = 'idle'; state.chart = null; go(sampleHash); break;
@@ -6311,13 +6837,14 @@ $('reviewMenu').addEventListener('click', e => {
 });
 
 let rz, lastW = innerWidth;
-window.addEventListener('resize', () => { if (!$('chart').hidden){ if (chat.sheet && !matchMedia('(max-width:1023px)').matches) closeSheet(); renderSide(); placeChat(); renderRead(); } });
+window.addEventListener('resize', () => { if (!$('chart').hidden){ if (chat.sheet && !matchMedia('(max-width:1023px)').matches) closeSheet(); if (!$('termPop').hidden) closeTerm(false); renderSide(); placeChat(); renderRead(); } });
 window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (Math.abs(innerWidth - lastW) < 2 && !document.getElementById('home').hidden) return drawLeader(); lastW = innerWidth; if (!$('home').hidden) renderHome(); else if (!$('chart').hidden) renderBoard(false); }, 120); });
 applyTheme(document.documentElement.dataset.pref);
 kpLoad();
 chat.cfg = { provider:'deepseek', key:'sk-demo0000000000a3f9', keyMask:'sk-…a3f9', savedAt:Date.now(), base:'', model:'deepseek-flash', status:'ok' };
 { const c = newConv(); cDone(c, '今年适合换工作吗'); }
-chat.side = ['read','chat','prompt'].includes(store.get('xzw-side', 'read')) ? store.get('xzw-side', 'read') : 'read';
+chat.side = 'read';
+chat.cfg = { ...chat.cfg, key:'', keyMask:'', status:'none' };
 if (new URLSearchParams(location.search).has('clean')) document.body.classList.add('clean');
 route();
 document.fonts.ready.then(() => { if (!$('home').hidden) renderHome(); else if (!$('chart').hidden) renderBoard(false); });

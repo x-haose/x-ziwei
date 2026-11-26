@@ -10,43 +10,12 @@ const hair = (c: string) => `${stroke.hair} solid ${c}`;
 const pulse = keyframes({ from: { opacity: 0.35 }, to: { opacity: 1 } });
 const blink = keyframes({ to: { visibility: 'hidden' } });
 
-/* ── 右栏：页签与两个面板 ── */
-
-export const side = style({
-  gridArea: 'prompt',
-  display: 'flex',
-  flexDirection: 'column',
-  minWidth: 0,
-  minHeight: 0,
-  '@media': {
-    [media.lDown]: { marginTop: 40 },
-    [media.mDown]: { marginTop: 20 },
-    [media.s]: { marginTop: 0, paddingTop: 28 },
-  },
-});
-
-export const tabs = style({ display: 'flex', flex: 'none', marginBottom: 14, boxShadow: ring(color.line2) });
-
-export const tab = style({
-  flex: 1,
-  display: 'grid',
-  placeItems: 'center',
-  minHeight: space.hit,
-  fontFamily: font.serif,
-  fontWeight: 600,
-  fontSize: size.body,
-  color: color.fg2,
-  cursor: 'pointer',
-  outline: 'none',
-  selectors: {
-    '& + &': { boxShadow: `inset ${stroke.hair} 0 0 ${color.line2}` },
-    '&[data-hovered]': { color: color.fg },
-    '&[data-selected]': { background: color.btn, color: color.btnFg },
-    '&[data-focus-visible]': { outline: `${stroke.hair} solid ${color.fg}`, outlineOffset: 2 },
-  },
-});
+/* ── 右栏里的对话 ── */
 
 export const panel = style({ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, outline: 'none' });
+
+/** 右栏里对话顶部的「‹ 回到…」。 */
+export const backButton = style({ alignSelf: 'flex-start', minHeight: 32, marginBottom: 4, fontSize: size.label, color: color.fg2, selectors: { '&:hover': { color: color.fg } } });
 
 /* ── 对话栏 ── */
 
@@ -270,9 +239,6 @@ export const note = style({
 export const noteLead = style({ color: color.fg, fontWeight: 500 });
 
 /** 内核加载的细进度条：1px 底线上 3px 赭红填充（与盘区的进度条同一用法）。 */
-export const noteBar = style({ position: 'relative', width: '100%', height: 1, marginTop: 10, marginBottom: 2, background: color.line2 });
-
-export const noteBarFill = style({ position: 'absolute', left: 0, top: -1, height: 3, background: color.accent });
 
 /* 输入框与费用说明 */
 
@@ -600,34 +566,6 @@ export const sheetBody = style({
   flexDirection: 'column',
   padding: `8px ${space.pad} max(10px, env(safe-area-inset-bottom))`,
 });
-
-export const cta = style({ padding: '16px 0', borderBottom: hair(color.line) });
-
-export const ctaText = style({ marginBottom: 12, fontSize: size.small, lineHeight: 1.7, color: color.fg2 });
-
-export const ctaButton = style({ width: '100%' });
-
-export const mobileBar = style({
-  display: 'none',
-  '@media': {
-    [media.mDown]: {
-      display: 'grid',
-      gridAutoFlow: 'column',
-      gridAutoColumns: '1fr',
-      gap: 8,
-      position: 'fixed',
-      left: 0,
-      right: 0,
-      bottom: 0,
-      zIndex: 40,
-      padding: `8px ${space.pad} max(8px, env(safe-area-inset-bottom))`,
-      background: color.bg,
-      boxShadow: `0 calc(-1 * ${stroke.hair}) 0 ${color.line2}`,
-    },
-  },
-});
-
-export const mobileBarButton = style({ height: space.hit });
 
 /* 存储不可用等整栏的说明 */
 

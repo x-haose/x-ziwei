@@ -30,7 +30,6 @@ async function seed(page: Page, s: Seed) {
         req.onsuccess = () => {
           const tx = req.result.transaction(['state', 'conversations'], 'readwrite');
           tx.objectStore('state').put(settings, 'settings');
-          tx.objectStore('state').put('chat', 'tab');
           for (const c of conversations) tx.objectStore('conversations').put(c);
           tx.oncomplete = () => {
             req.result.close();
@@ -56,9 +55,18 @@ async function seed(page: Page, s: Seed) {
   );
 }
 
+/** 打开排盘页，在阅读末尾「在这页问」打开对话（≥1024 在右栏），清掉预填的问题。 */
 async function openChat(page: Page) {
   await page.goto(CHART);
+  await page.getByRole('button', { name: /^在这页问/ }).click();
   await expect(page.getByRole('textbox', { name: '问这张盘' })).toBeEnabled({ timeout: 20000 });
+  await page.getByRole('textbox', { name: '问这张盘' }).fill('');
+}
+
+/** 没有 Key 时打开对话：右栏是设置表单。 */
+async function openSetup(page: Page) {
+  await page.goto(CHART);
+  await page.getByRole('button', { name: /^在这页问/ }).click();
 }
 
 async function ask(page: Page, text: string) {
@@ -79,8 +87,7 @@ async function vendorRequests(request: APIRequestContext, marker: string) {
 const answer = (page: Page) => page.getByRole('log');
 
 test('没有 Key 时对话页签是设置表单；检查通过即保存，模型取列表里第一个能查盘的', async ({ page }) => {
-  await page.goto(CHART);
-  await page.getByRole('tab', { name: '对话' }).click();
+  await openSetup(page);
   await expect(page.getByRole('heading', { name: '用自己的 API Key 对话' })).toBeVisible();
   await page.getByLabel('API Key').fill('sk-bad');
   await page.getByRole('button', { name: '检查并保存' }).click();
@@ -92,9 +99,9 @@ test('没有 Key 时对话页签是设置表单；检查通过即保存，模型
   await expect(page.getByRole('button', { name: /选择模型/ })).toContainText('deepseek-flash');
   await expect(page.getByText('直连 api.deepseek.com，费用按你的 DeepSeek 账号计')).toBeVisible();
 
-  // 刷新后仍是对话页签，Key 只露首尾。
+  // 刷新后 Key 还在，只露首尾。
   await page.reload();
-  await expect(page.getByRole('tab', { name: '对话', selected: true })).toBeVisible();
+  await page.getByRole('button', { name: '在这页问 deepseek-flash' }).click();
   await page.getByRole('button', { name: '设置' }).click();
   const drawer = page.getByRole('dialog', { name: '模型与 Key' });
   await expect(drawer).toContainText('sk-…od-1');
@@ -105,8 +112,7 @@ test('没有 Key 时对话页签是设置表单；检查通过即保存，模型
 });
 
 test('限流时先保存 Key，取到模型列表之前不能发问', async ({ page }) => {
-  await page.goto(CHART);
-  await page.getByRole('tab', { name: '对话' }).click();
+  await openSetup(page);
   await page.getByLabel('API Key').fill('sk-rate');
   await page.getByRole('button', { name: '检查并保存' }).click();
   await expect(page.getByText('还没有可用的模型：取到 DeepSeek 的模型列表之后才能对话。')).toBeVisible();
@@ -118,8 +124,7 @@ test('限流时先保存 Key，取到模型列表之前不能发问', async ({ p
 });
 
 test('兼容服务：Base URL 必须是 https；能否调用工具以第一次对话为准', async ({ page, request }) => {
-  await page.goto(CHART);
-  await page.getByRole('tab', { name: '对话' }).click();
+  await openSetup(page);
   // React Aria 的单选框输入是隐藏的，点它的标签。
   await page.getByText('兼容 OpenAI 的服务').click();
   await page.getByRole('textbox', { name: 'Base URL' }).fill('http://llm.example.test/v1');
@@ -161,7 +166,7 @@ test('发问：先查盘（查了什么可展开、可在盘上看），再流�
   const [first, second] = await vendorRequests(request, '今年适合换工作吗 [table]');
   expect(first!.body.tools).toHaveLength(7);
   const user = first!.body.messages!.find((m) => m.role === 'user')!;
-  expect(user.content).toMatch(/^<page>2000-8-16 寅时 女，看的是 2026 流年、.+。<\/page>\n\n今年适合换工作吗 \[table\]$/);
+  expect(user.content).toMatch(/^<page>2000-8-16 寅时 女，看的是一生（本命盘）、.+。<\/page>\n\n今年适合换工作吗 \[table\]$/);
   // 第二次请求带着浏览器里算出的工具结果。
   expect(JSON.stringify(second!.body.messages)).toContain('流月一览 2026');
 });
@@ -212,9 +217,9 @@ test('出错：401、429、连不上各有标题、原因与动作，问题保�
   await page.getByRole('button', { name: '新对话' }).click();
   await ask(page, '试试 [429]');
   await expect(alert).toContainText('DeepSeek 暂时不接受请求（429）');
-  await alert.getByRole('button', { name: '改用提示词' }).click();
-  await expect(page.getByRole('tab', { name: '提示词', selected: true })).toBeVisible();
-  await page.getByRole('tab', { name: '对话' }).click();
+  await alert.getByRole('button', { name: '复制给别的 AI' }).click();
+  await expect(page.getByRole('textbox', { name: '你想问什么' })).toBeFocused();
+  await page.getByRole('button', { name: /^在这页问/ }).click();
 
   await page.getByRole('button', { name: '新对话' }).click();
   await ask(page, '试试 [cors]');
@@ -316,37 +321,30 @@ test('Anthropic：请求带允许网页直连的请求头，走 Messages 协议�
   expect(first!.headers['x-api-key']).toBe('sk-ant-good');
 });
 
-test('手机：底部条打开全屏面板，Esc 收起回到盘，没发出的草稿还在', async ({ page }) => {
+test('手机：「在这页问」打开全屏面板并预填问题，Esc 收起，没发出的草稿还在', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await seed(page, { provider: 'deepseek', key: 'sk-good' });
   await page.goto(CHART);
-  const bar = page.getByRole('button', { name: '对话', exact: true }).last();
-  await bar.click();
+  await page.getByRole('button', { name: /^在这页问/ }).click();
   const sheet = page.getByRole('dialog', { name: '对话' });
   await expect(sheet).toContainText('2000-8-16 寅时 女');
   const input = sheet.getByRole('textbox', { name: '问这张盘' });
   await expect(input).toBeFocused();
   await expect(sheet.getByRole('button', { name: '在盘上看' })).toHaveCount(0);
+  await expect(input).toHaveValue('从「总论」看，这张盘怎么样？');
   await input.fill('手机上问 [plain]');
   await sheet.getByRole('button', { name: '发送' }).click();
   await expect(sheet.getByRole('log')).toContainText('自己拿主意的力量很足。');
   await input.fill('还没发的草稿');
   await page.keyboard.press('Escape');
   await expect(sheet).toHaveCount(0);
-  await page.getByRole('button', { name: '继续对话' }).click();
+  await page.getByRole('button', { name: /^在这页问/ }).click();
   await expect(page.getByRole('dialog', { name: '对话' }).getByRole('textbox', { name: '问这张盘' })).toHaveValue('还没发的草稿');
   await expect(page.locator('body')).toHaveJSProperty('scrollWidth', 390);
 });
 
-test('内核没装好：输入不可用并写明在加载', async ({ page }) => {
-  await seed(page, { provider: 'deepseek', key: 'sk-good' });
-  await page.route('**/*.wasm', () => undefined);
-  await page.goto(CHART);
-  await expect(page.getByRole('tabpanel', { name: '对话' }).getByText('排盘内核加载中')).toBeVisible();
-  await expect(page.getByRole('textbox', { name: '问这张盘' })).toBeDisabled();
-});
 
-test('存储不可用：对话页签写明原因，提示词照常可用', async ({ page }) => {
+test('存储不可用：对话写明原因，复制给别的 AI 照常可用', async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(window, 'indexedDB', {
       get() {
@@ -354,11 +352,10 @@ test('存储不可用：对话页签写明原因，提示词照常可用', async
       },
     });
   });
-  await page.goto(CHART);
-  await page.getByRole('tab', { name: '对话' }).click();
+  await openSetup(page);
   await expect(page.getByText('这个浏览器不让本页存数据')).toBeVisible();
-  await page.getByRole('tab', { name: '提示词' }).click();
-  await expect(page.getByRole('button', { name: '复制提示词' })).toBeEnabled({ timeout: 20000 });
+  await page.getByRole('button', { name: '‹ 回到「总论」' }).click();
+  await expect(page.getByRole('link', { name: 'DeepSeek' })).toBeVisible();
 });
 
 test('模型输出里的图片不加载（显示为链接）、原始 HTML 不渲染；站外链接点了才新开页且不带来源', async ({ page }) => {
@@ -387,6 +384,7 @@ test('从首页站内跳转进排盘页（沿用首页的 CSP）后，对话照�
   await page.evaluate(() => {
     location.hash = 'cal=solar&d=2000-8-16&t=2&g=f';
   });
+  await page.getByRole('button', { name: /^在这页问/ }).click();
   await expect(page.getByRole('textbox', { name: '问这张盘' })).toBeEnabled({ timeout: 20000 });
   await ask(page, '站内跳转后 [plain]');
   await expect(answer(page)).toContainText('自己拿主意的力量很足。');

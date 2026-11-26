@@ -151,7 +151,7 @@ const plainComponents: Components = { ...proseComponents, h1: plainHeading(1), h
 
 /**
  * Markdown 渲染：提示词预览、对话的回答与内容页共用同一套元素映射，样式按 `variant` 区分
- * （`preview` 见设计规范第 13 节，`chat` 见 19.4，`full` 见 21.5，`prose` 见第 14 节）。
+ * （`preview` 见设计规范第 13 节，`chat` 见 19.4，`full` 见 21.6，`prose` 见第 14 节）。
  * 只有 `prose` 的标题带锚点 id，其余的不带。
  * 输入先经 remend 补全未闭合的标记，流式输出途中的半截文本也能正常显示。
  */

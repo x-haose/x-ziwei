@@ -99,15 +99,19 @@ function YearPicker({
 
 /**
  * 运限选择（设计规范第 12 节）：本命、大限、流年、流月四层，选中层下方是该层的选择格。
- * 底下是四化块的图例：选到哪一层，就列出从生年到这一层的四化样式。
+ * 底下是四化块的图例：生年加所选的那一层（盘上只叠这一层）。收在「选别的大限、年份或流月」后面（21.2）。
  */
 export function LayerPanel({
+  id,
+  hidden,
   chart,
   view,
   lunar,
   today,
   t,
 }: {
+  id: string;
+  hidden: boolean;
   chart: Astrolabe;
   view: ChartView;
   lunar: LunarCalendar;
@@ -122,13 +126,12 @@ export function LayerPanel({
   const tile = (now: boolean, extra = '') => [css.tile, extra, now ? css.tileNow : ''].filter(Boolean).join(' ');
   const hua = view.hua[0]!;
   const legend: { cls: string; label: string }[] = [{ cls: boardCss.huaNatal, label: t.layer.legendNatal }];
-  const rank = LAYER_KINDS.indexOf(sel.layer);
-  if (rank >= 1) legend.push({ cls: boardCss.huaDecadal, label: t.layer.decadal });
-  if (rank >= 2) legend.push({ cls: boardCss.huaYearly, label: t.layer.yearly });
-  if (rank >= 3) legend.push({ cls: boardCss.huaMonthly, label: t.layer.monthly });
+  if (sel.layer === 'decadal') legend.push({ cls: boardCss.huaDecadal, label: t.layer.decadal });
+  if (sel.layer === 'yearly') legend.push({ cls: boardCss.huaYearly, label: t.layer.yearly });
+  if (sel.layer === 'monthly') legend.push({ cls: boardCss.huaMonthly, label: t.layer.monthly });
 
   return (
-    <section className={css.section} aria-label={t.chart.layer}>
+    <section id={id} hidden={hidden} className={css.section} aria-label={t.chart.layer}>
       <div className={css.head}>
         <h2 className={css.headTitle}>{t.chart.layer}</h2>
       </div>

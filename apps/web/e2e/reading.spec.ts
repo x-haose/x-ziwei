@@ -1,84 +1,134 @@
-import { closePrompt, expect, layerTab, openPromptRaw, test } from './test';
+import * as kernel from 'x-iztro';
+import { closePrompt, expect, openPromptRaw, side, test, type Page } from './test';
 
-/** 排盘页的「看盘 | 对话 | 提示词」三个页签（设计规范第 21 节）：看盘的内容取自内核，提示词全文视图，窄屏布局。 */
+/** 排盘页的阅读（设计规范第 21 节）：按主题的五步、时间、盘上的高亮、术语、问 AI、手机底栏。 */
 
 const SAMPLE = '/zh/chart#cal=solar&d=2000-8-16&t=2&g=f';
 
-test('首次打开是看盘；页签切换后记住上次选的', async ({ page }) => {
+const step = (page: Page, n: number) => side(page).getByRole('list', { name: /分五步读$/ }).getByRole('listitem').nth(n - 1);
+const cell = (page: Page, i: number) => page.locator(`[data-index="${i}"]`);
+
+test('第一次打开：总论、一生，盘只有本命层，选中命宫，停在第 1 步', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(SAMPLE);
-  await expect(page.getByRole('tab', { name: '看盘', selected: true })).toBeVisible();
-  const read = page.getByRole('tabpanel', { name: '看盘' });
-  await expect(read.getByRole('heading', { level: 3 })).toHaveText('命宫');
-  await page.getByRole('tab', { name: '提示词' }).click();
-  await expect(page.getByRole('button', { name: /^查看全文/ })).toBeVisible();
-  await page.reload();
-  await expect(page.getByRole('tab', { name: '提示词', selected: true })).toBeVisible({ timeout: 20000 });
-  // 左栏只放输入：没有旧的读数区，释义标记在运限下面。
-  await expect(page.getByLabel('选中宫的读数')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /^释义：iztro-docs/ })).toBeVisible();
+  const read = side(page);
+  await expect(read.getByRole('heading', { level: 2 })).toHaveText('总论');
+  await expect(page.getByRole('group', { name: '主题' }).getByRole('button', { pressed: true })).toHaveText('总论');
+  await expect(page.getByRole('group', { name: '时间' }).getByRole('button', { pressed: true })).toHaveText(/^一生/);
+  await expect(read).toContainText('一生（本命盘）');
+  await expect(read).toContainText('看命宫连同它的三方四正，另看身宫、福德宫。');
+  await expect(step(page, 1)).toHaveAttribute('data-on', '');
+  await expect(step(page, 1)).toContainText('你的命宫在午，主星是紫微（庙）；同宫的辅星有文曲（陷）。');
+  // 「怎么看」取自解读方法。
+  await expect(step(page, 1)).toContainText('先看这个主题的本宫坐什么主星、亮度如何；本宫没有主星时，借对宫的主星来看。');
+  await expect(page.getByRole('button', { name: /^命宫，/ })).toHaveAttribute('aria-pressed', 'true');
+  // 盘上不叠运限层：宫里没有「大X」「年X」。
+  await expect(cell(page, 4)).not.toContainText(/[大年]命/);
+  await expect(read).toContainText('盘面由排盘程序算出；释义摘自知识包「iztro-docs」。');
+  // 运限选择收着。
+  await expect(page.getByRole('radiogroup', { name: '运限层' })).toBeHidden();
 });
 
-test('看盘：宫位的四化、主星释义、三方四正都随所选的宫与层变化；宫干飞出与三方四正可点', async ({ page }) => {
+test('切主题：右栏换成这个主题、从第 1 步开始；空宫借对宫，盘上高亮本宫与对宫', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(SAMPLE);
-  const read = page.getByRole('tabpanel', { name: '看盘' });
-  const title = read.getByRole('heading', { level: 3 });
-  await expect(title).toHaveText('命宫');
-  await expect(read).toContainText('壬午');
-  await expect(read).toContainText('流年 2026流年命宫');
-  await expect(read).toContainText('紫微化权→本宫（自化）');
-  await expect(read).toContainText('帝王星');
-  await read.getByRole('button', { name: '全文' }).first().click();
-  await expect(read.getByRole('button', { name: '收起' })).toHaveAttribute('aria-expanded', 'true');
-
-  // 宫干飞出的宫名可点：盘上选中那一宫，看盘停在宫位。
-  await read.getByRole('button', { name: '子女' }).first().click();
-  await expect(title).toHaveText('子女');
-  await expect(page.getByRole('button', { name: /^子女，/ })).toHaveAttribute('aria-pressed', 'true');
-  await expect(read).toContainText('太阳');
-  // 点盘上的宫只改看盘的内容，不切走页签（≥1024）。
-  await page.getByRole('tab', { name: '提示词' }).click();
-  await page.getByRole('button', { name: /^财帛，/ }).click();
-  await expect(page.getByRole('tab', { name: '提示词', selected: true })).toBeVisible();
-  await page.getByRole('tab', { name: '看盘' }).click();
-  await expect(title).toHaveText('财帛');
-  await expect(read).toContainText('武曲 × 天相');
-
-  // 本命层时不列各层宫名。
-  await layerTab(page, '本命').click();
-  await page.getByRole('button', { name: /^命宫，/ }).click();
-  await expect(read).not.toContainText('流年 2026');
-  await expect(read).toContainText('生年四化没有落在这一宫');
+  const read = side(page);
+  await page.getByRole('group', { name: '主题' }).getByRole('button', { name: '田宅' }).click();
+  await expect(read.getByRole('heading', { level: 2 })).toHaveText('田宅');
+  await expect(step(page, 1)).toContainText('你的田宅宫在酉，没有主星（空宫）；同宫的辅星有地空和擎羊（陷）。对宫子女宫的主星是太阳（庙）和天梁（庙）。');
+  await expect(step(page, 1)).toContainText('太阳（子女宫）');
+  await expect(page.getByRole('button', { name: /^田宅，/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(cell(page, 1)).toHaveAttribute('data-rel', '');
+  // 只取本宫的主题。
+  await page.getByRole('group', { name: '主题' }).getByRole('button', { name: '性格' }).click();
+  await expect(step(page, 2)).toContainText('「性格」只看命宫、迁移宫、福德宫和身宫（在官禄宫）这几宫本身，不看各自的三方四正。');
 });
 
-test('看盘：格局按层分组；大限、流年一览点一行即切换盘上的运限', async ({ page }) => {
+test('切时间：这十年、今年只叠那一层并停在第 5 步；一生的第 5 步可直接切过去', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(SAMPLE);
-  const read = page.getByRole('tabpanel', { name: '看盘' });
-  const views = read.getByRole('radiogroup', { name: '看盘的内容' });
-  await views.getByRole('radio', { name: '格局' }).click();
-  await expect(read).toContainText('府相朝垣');
-  await expect(read.getByRole('heading', { name: /^大限 23–32 岁/ })).toBeVisible();
+  const read = side(page);
+  const when = page.getByRole('group', { name: '时间' });
+  await when.getByRole('button', { name: /^今年/ }).click();
+  await expect(read).toContainText('2026 年（虚岁 27）');
+  await expect(step(page, 5)).toHaveAttribute('data-on', '');
+  await expect(step(page, 5)).toContainText('2026 年（丙午）你虚岁 27，流年命宫在午，就是本命的命宫。');
+  await expect(step(page, 3)).toContainText('流年（丙午）的四化：');
+  await expect(cell(page, 4)).toContainText('年命');
+  await expect(cell(page, 4)).not.toContainText('大');
 
-  await views.getByRole('radio', { name: '大限' }).click();
-  await expect(read.getByRole('row', { name: /23–32.*现在/ })).toBeVisible();
-  await read.getByRole('button', { name: '43–52' }).click();
-  await expect(layerTab(page, '大限')).toBeChecked();
-  await expect(page.getByRole('button', { name: /^财帛，/ })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByRole('status').filter({ hasText: '盘上：43–52 岁大限' })).toBeVisible();
-  await expect(read.getByRole('button', { name: '43–52' })).toBeFocused();
-
-  await views.getByRole('radio', { name: '流年' }).click();
-  await expect(read).toContainText('43–52 岁大限 戊寅，2042–2051');
-  await read.getByRole('button', { name: '上一个大限' }).click();
-  await expect(read).toContainText('33–42 岁');
-  await read.getByRole('button', { name: '2035' }).click();
-  await expect(layerTab(page, '流年')).toBeChecked();
-  await expect(page.getByText(/^流年 ..　2035　虚岁 36$/)).toBeVisible();
+  await when.getByRole('button', { name: /^一生/ }).click();
+  await expect(step(page, 1)).toHaveAttribute('data-on', '');
+  await step(page, 5).getByRole('button', { name: '看这十年的总论' }).click();
+  await expect(read).toContainText('23–32 岁这十年（现在）');
+  await expect(when.getByRole('button', { name: /^这十年/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(step(page, 5).getByRole('heading')).toBeFocused();
+  await expect(cell(page, 2)).toContainText('大命');
 });
 
-test('看盘底部「在对话里问」：切到对话页签并预填问题，不自动发送', async ({ page }) => {
+test('步骤高亮：「盘上看」切换焦点宫与高亮宫；右栏滚到哪一步，盘就跟到哪一步', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(SAMPLE);
+  await step(page, 2).getByRole('button', { name: '盘上看', exact: true }).click();
+  await expect(step(page, 2).getByRole('button', { name: '盘上看', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(step(page, 2)).toHaveAttribute('data-on', '');
+  // 第 2 步：命宫为焦点，三方四正与身宫、福德宫铺底色。
+  await expect(page.getByRole('button', { name: /^命宫，/ })).toHaveAttribute('aria-pressed', 'true');
+  for (const i of [10, 0, 8, 6]) await expect(cell(page, i)).toHaveAttribute('data-rel', '');
+  await expect(cell(page, 2)).not.toHaveAttribute('data-rel', '');
+  // 第 5 步（一生）：焦点是大限命宫（本命夫妻宫）。
+  await page.mouse.move(1150, 600);
+  await page.mouse.wheel(0, 4000);
+  await expect(step(page, 5)).toHaveAttribute('data-on', '');
+  await expect(page.getByRole('button', { name: /^夫妻，/ })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('术语：点开看生效组合里的解释，Esc 关闭后焦点回到术语；没有条目的亮度照常显示文字', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(SAMPLE);
+  const read = side(page);
+  const term = read.getByRole('button', { name: '三方四正' }).first();
+  await term.click();
+  const pop = page.getByRole('dialog', { name: '三方四正' });
+  await expect(pop).toContainText('三合位');
+  await page.keyboard.press('Escape');
+  await expect(pop).toHaveCount(0);
+  await expect(term).toBeFocused();
+  await expect(read.getByRole('button', { name: '庙', exact: true })).toHaveCount(0);
+});
+
+test('问 AI：复制的材料含内核按主题取材的原文，五个网站的链接；就这一步问 AI 填好问题', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await context.route('https://chat.deepseek.com/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>stub</title>' }));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(SAMPLE);
+  const read = side(page);
+  await page.getByRole('group', { name: '主题' }).getByRole('button', { name: '事业' }).click();
+  const sites = read.getByRole('link');
+  await expect(sites).toHaveText(['DeepSeek', '豆包', 'Kimi', 'ChatGPT', 'Claude']);
+  expect(await sites.evaluateAll((a) => a.map((x) => [x.getAttribute('href'), x.getAttribute('target'), x.getAttribute('rel')]))).toEqual(
+    ['https://chat.deepseek.com/', 'https://www.doubao.com/chat/', 'https://www.kimi.com/', 'https://chatgpt.com/', 'https://claude.ai/new'].map((h) => [h, '_blank', 'noopener noreferrer']),
+  );
+  const popup = page.waitForEvent('popup');
+  await sites.first().click();
+  expect((await popup).url()).toBe('https://chat.deepseek.com/');
+  await expect(page.getByRole('status').filter({ hasText: /^已复制 [\d,]+ 字，在 DeepSeek 里粘贴后发送$/ })).toBeVisible();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+
+  await kernel.init();
+  const chart = kernel.astro.bySolar('2000-8-16', 2, 'female');
+  const topicText = chart.topicToText('career', { knowledge: kernel.KnowledgePack.builtin('zh-CN'), knowledgeDepth: 'summary' });
+  expect(copied.startsWith('你在陪用户聊紫微斗数')).toBe(true);
+  expect(copied).toContain(topicText);
+  expect(copied).toMatch(/# 我的问题\n\n请按解读方法，从「事业」看看这张盘。$/);
+
+  await step(page, 2).getByRole('button', { name: '就这一步问 AI' }).click();
+  const q = read.getByRole('textbox', { name: '你想问什么' });
+  await expect(q).toHaveValue('从「三方四正」这一步看我的事业，该怎么理解？');
+  await expect(q).toBeFocused();
+});
+
+test('在这页问：有 Key 时右栏换成对话、预填问题，「回到…」回到阅读', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/zh/install');
   await page.evaluate(
@@ -97,127 +147,73 @@ test('看盘底部「在对话里问」：切到对话页签并预填问题，�
       }),
   );
   await page.goto(SAMPLE);
-  await page.getByRole('tabpanel', { name: '看盘' }).getByRole('button', { name: '在对话里问命宫' }).click();
-  await expect(page.getByRole('tab', { name: '对话', selected: true })).toBeVisible();
-  const input = page.getByRole('textbox', { name: '问这张盘' });
-  await expect(input).toHaveValue('这张盘的命宫怎么看');
-  await expect(page.getByRole('log')).toContainText('问这张盘');
-  // 输入框里已有没发出的字：问题接在后面另起一行。
-  await input.fill('我先写的半句');
-  await page.getByRole('tab', { name: '看盘' }).click();
-  await page.getByRole('tabpanel', { name: '看盘' }).getByRole('button', { name: '在对话里问命宫' }).click();
-  await expect(input).toHaveValue('我先写的半句\n这张盘的命宫怎么看');
+  const read = side(page);
+  await expect(read).toContainText('你填过 DeepSeek 的 Key，可以直接在这页问。');
+  await read.getByRole('button', { name: '在这页问 deepseek-flash' }).click();
+  await expect(read.getByRole('textbox', { name: '问这张盘' })).toHaveValue('从「总论」看，这张盘怎么样？');
+  await read.getByRole('button', { name: '‹ 回到「总论」' }).click();
+  await expect(read.getByRole('heading', { level: 2 })).toHaveText('总论');
+  // 点盘上的宫：对话开着时先回到阅读。
+  await read.getByRole('button', { name: /^在这页问/ }).click();
+  await page.getByRole('button', { name: /^官禄，/ }).click();
+  await expect(read.getByRole('heading', { level: 2 })).toHaveText('事业');
 });
 
-test('同一格局在同一本宫的几条命中（所用的星不同）各自成条，各自展开', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('console', (m) => {
-    if (m.type() === 'error') errors.push(m.text());
-  });
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/zh/chart#cal=solar&d=1960-5-10&t=0&g=m');
-  const read = page.getByRole('tabpanel', { name: '看盘' });
-  await read.getByRole('radiogroup', { name: '看盘的内容' }).getByRole('radio', { name: '格局' }).click();
-  const decadal = read.locator('section').filter({ has: page.getByRole('heading', { name: /^大限 / }) });
-  // 一条格局：名称所在的标题行的上一层。
-  const itemsIn = (scope: typeof read) => scope.getByText('风云际会', { exact: true }).locator('xpath=../..');
-  await expect(itemsIn(decadal)).toHaveCount(2);
-  await expect(itemsIn(decadal).nth(0)).toContainText('禄存');
-  await expect(itemsIn(decadal).nth(1)).toContainText('运禄');
-  await itemsIn(decadal).nth(0).getByRole('button', { name: '成立条件与全文' }).click();
-  await expect(read.getByRole('button', { name: '收起' })).toHaveCount(1);
-
-  // 宫位里同样分两条，所用的星各列各的（标题行里的按钮是本宫，点了转到宫位）。
-  await itemsIn(decadal).nth(1).locator('button').first().click();
-  await expect(read.getByRole('radiogroup', { name: '看盘的内容' }).getByRole('radio', { name: '宫位' })).toBeChecked();
-  await expect(itemsIn(read)).toHaveCount(2);
-  await expect(itemsIn(read).nth(0)).toContainText('禄存');
-  await expect(itemsIn(read).nth(1)).toContainText('运禄');
-  expect(errors.filter((e) => /same key/.test(e))).toEqual([]);
-});
-
-test('换盘后流年一览落在新盘所选的大限，不沿用上一张盘翻到的', async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto(SAMPLE);
-  const read = page.getByRole('tabpanel', { name: '看盘' });
-  await read.getByRole('radiogroup', { name: '看盘的内容' }).getByRole('radio', { name: '流年' }).click();
-  await read.getByRole('button', { name: '上一个大限' }).click();
-  await expect(read.getByRole('button', { name: '2012' })).toBeVisible();
-  await page.evaluate(() => {
-    location.hash = 'cal=solar&d=1960-5-10&t=0&g=m';
-  });
-  await expect(page.getByRole('button', { name: /1960/ }).first()).toBeVisible();
-  await expect(read.getByRole('radiogroup', { name: '看盘的内容' }).getByRole('radio', { name: '流年' })).toBeChecked();
-  await expect(read.getByRole('button', { name: '2026' })).toBeVisible();
-});
-
-test('提示词全文：目录、渲染与原文、复制；Esc 关闭后焦点回到「查看全文」', async ({ page, context }) => {
+test('全文视图：目录、渲染与原文、复制；Esc 关闭后焦点回到「看全文」', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(SAMPLE);
-  await page.getByRole('tab', { name: '提示词' }).click();
-  await expect(page.getByText(/^会发送：解读方法、本命盘、2026 年运限、我的问题；释义按 iztro-docs。$/)).toBeVisible();
-  const open = page.getByRole('button', { name: /^查看全文/ });
-  await expect(open).toContainText(/\d[\d,]* 字/);
+  const open = side(page).getByRole('button', { name: '看全文' });
   await open.click();
-  const dialog = page.getByRole('dialog', { name: '提示词全文' });
+  const dialog = page.getByRole('dialog', { name: '「总论」的提示词' });
   const toc = dialog.getByRole('navigation', { name: '提示词的段落' });
   await expect(toc.getByRole('button', { name: '怎么聊' })).toHaveAttribute('aria-current', 'location');
-  // 背后的页面不渲染。
   await expect(page.locator('main')).toHaveCSS('visibility', 'hidden');
-  await toc.getByRole('button', { name: /^命盘 2000-8-16 寅时 女$/ }).click();
-  await expect(toc.getByRole('button', { name: /^命盘 2000-8-16 寅时 女$/ })).toHaveAttribute('aria-current', 'location');
   await dialog.getByRole('radio', { name: '原文' }).click();
-  await expect(dialog.getByRole('document')).toContainText('# 命盘 2000-8-16 寅时 女');
   await dialog.getByRole('button', { name: '复制提示词' }).click();
   await expect(dialog.getByRole('button', { name: '已复制' })).toBeVisible();
   expect((await page.evaluate(() => navigator.clipboard.readText())).startsWith('你在陪用户聊紫微斗数')).toBe(true);
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(open).toBeFocused();
-  await expect(page.locator('main')).toHaveCSS('visibility', 'visible');
 });
 
-test('窄屏：输入在上、盘在中、右栏在盘下；底栏三个按钮；在提示词页签点盘上的宫切到看盘', async ({ page }) => {
+test('手机：生辰 → 盘 → 看什么 → 看哪段时间 → 阅读；底栏选主题、跳到问 AI；小盘点了回到大盘', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(SAMPLE);
   const board = page.getByRole('button', { name: /^命宫，/ });
   await expect(board).toBeVisible();
   const top = async (loc: ReturnType<typeof page.locator>) => (await loc.boundingBox())!.y;
-  const layer = page.getByRole('region', { name: '运限' });
-  const side = page.getByRole('region', { name: '用这张盘' });
-  expect(await top(layer)).toBeLessThan(await top(board));
-  expect(await top(board)).toBeLessThan(await top(side));
+  const topics = page.getByRole('region', { name: '看什么' });
+  const when = page.getByRole('region', { name: '看哪段时间' });
+  expect(await top(board)).toBeLessThan(await top(topics));
+  expect(await top(topics)).toBeLessThan(await top(when));
+  expect(await top(when)).toBeLessThan(await top(side(page)));
   await expect(page.locator('body')).toHaveJSProperty('scrollWidth', 390);
+  // 宽屏的「盘上看」与「问 AI」在手机上由小盘与底栏承担。
+  await expect(step(page, 1).getByRole('button', { name: '盘上看', exact: true })).toBeHidden();
 
-  const bar = page.getByRole('button', { name: '提示词', exact: true }).last();
-  await bar.click();
-  await expect(page.getByRole('tab', { name: '提示词', selected: true })).toBeVisible();
-  await page.getByRole('button', { name: /^财帛，/ }).click();
-  await expect(page.getByRole('tab', { name: '看盘', selected: true })).toBeVisible();
-  await expect(page.getByRole('tabpanel', { name: '看盘' }).getByRole('heading', { level: 3 })).toHaveText('财帛');
+  await page.getByRole('button', { name: /^看什么/ }).click();
+  await page.getByRole('dialog', { name: '看什么' }).getByRole('option', { name: '婚恋' }).click();
+  await expect(side(page).getByRole('heading', { level: 2 })).toHaveText('婚恋');
+  await expect(side(page).getByRole('heading', { level: 2 })).toBeFocused();
 
-  // 提示词全文在手机上：目录收进头部的按钮。
-  await page.getByRole('tab', { name: '提示词' }).click();
-  const raw = await openPromptRaw(page);
-  await expect(raw).toContainText('# 我的问题');
-  const dialog = page.getByRole('dialog', { name: '提示词全文' });
-  const tocButton = dialog.getByRole('button', { name: /^目录/ });
-  await expect(tocButton).toHaveAttribute('aria-expanded', 'false');
-  await tocButton.click();
-  // 目录项与头部只取「我的问题」这一行，不带问题正文。
-  await dialog.getByRole('navigation', { name: '提示词的段落' }).getByRole('button', { name: '我的问题', exact: true }).click();
-  await expect(tocButton).toHaveAttribute('aria-expanded', 'false');
-  await expect(tocButton).toHaveText(/^目录\s*我的问题$/);
-  await closePrompt(page);
+  const mini = step(page, 2).getByRole('button', { name: /^到盘上看这一步的宫：/ });
+  await mini.click();
+  await expect(step(page, 2)).toHaveAttribute('data-on', '');
+  await expect(board).toBeInViewport();
+
+  await page.getByRole('button', { name: '问 AI', exact: true }).last().click();
+  await expect(side(page).getByRole('textbox', { name: '你想问什么' })).toBeFocused();
+  await expect(side(page).getByRole('textbox', { name: '你想问什么' })).toBeInViewport();
 });
 
-test('平板宽：同样单列，盘下是右栏，底栏有三个按钮', async ({ page }) => {
-  await page.setViewportSize({ width: 800, height: 1000 });
+test('未排盘：右栏写怎么开始；整张盘的完整提示词在全文视图里可按原文读', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/zh/chart');
+  await expect(side(page).getByRole('heading', { name: '排盘后在这里读' })).toBeVisible();
   await page.goto(SAMPLE);
-  const board = page.getByRole('button', { name: /^命宫，/ });
-  await expect(board).toBeVisible();
-  const side = page.getByRole('region', { name: '用这张盘' });
-  expect((await side.boundingBox())!.y).toBeGreaterThan((await board.boundingBox())!.y);
-  for (const name of ['看盘', '对话', '提示词']) await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
+  const raw = await openPromptRaw(page, 'chart');
+  await expect(raw).toContainText('# 我的问题');
+  await closePrompt(page);
 });

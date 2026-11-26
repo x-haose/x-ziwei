@@ -43,10 +43,25 @@ interface TocItem {
 }
 
 /**
- * 提示词全文（设计规范 21.5）：全屏阅读视图，左侧按一到三级标题的段落目录（随正文滚动标出当前段），右侧正文
- * （渲染或原文），头部可复制原文。打开时背后的页面不渲染、不进读屏；Esc 或关闭按钮收起，焦点回到「查看全文」（由调用方处理）。
+ * 提示词全文（设计规范 21.6）：全屏阅读视图，左侧按一到三级标题的段落目录（随正文滚动标出当前段），右侧正文
+ * （渲染或原文），头部可复制原文。打开时背后的页面不渲染、不进读屏；Esc 或关闭按钮收起，焦点回到打开它的按钮（由调用方处理）。
  */
-export function PromptFull({ t, lang, text, questionHeading, onClose }: { t: Messages; lang: Lang; text: string; questionHeading: string; onClose: () => void }) {
+export function PromptFull({
+  t,
+  lang,
+  title,
+  text,
+  questionHeading,
+  onClose,
+}: {
+  t: Messages;
+  lang: Lang;
+  /** 标题：「『事业』的提示词」或「整张盘的完整提示词」。 */
+  title: string;
+  text: string;
+  questionHeading: string;
+  onClose: () => void;
+}) {
   const [mode, setMode] = useState<'md' | 'raw'>('md');
   const [toc, setToc] = useState<TocItem[]>([]);
   const [current, setCurrent] = useState(0);
@@ -112,7 +127,7 @@ export function PromptFull({ t, lang, text, questionHeading, onClose }: { t: Mes
             </Button>
             <div className={css.title}>
               <Heading slot="title" id="prompt-full-title" className={css.titleText}>
-                {t.chart.fullTitle}
+                {title}
               </Heading>
               <small className={css.titleCount}>{count}</small>
             </div>
@@ -160,7 +175,7 @@ export function PromptFull({ t, lang, text, questionHeading, onClose }: { t: Mes
                 ))}
               </ol>
             </nav>
-            <div ref={content} className={css.content} tabIndex={-1} onScroll={onScroll} role="document" aria-label={t.chart.fullTitle}>
+            <div ref={content} className={css.content} tabIndex={-1} onScroll={onScroll} role="document" aria-label={title}>
               {mode === 'md' ? (
                 <Markdown source={text} variant="full" />
               ) : (

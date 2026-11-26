@@ -23,16 +23,14 @@ const conv = (id: string, updatedAt: number): Conversation => ({
 });
 
 describe('本机对话库', () => {
-  it('设置、页签与对话的读写；对话按最后更新从新到旧', async () => {
+  it('设置与对话的读写；对话按最后更新从新到旧', async () => {
     const db = await openChatDb(NO_EVENTS);
-    expect(await db.load()).toEqual({ settings: null, tab: null, conversations: [] });
+    expect(await db.load()).toEqual({ settings: null, conversations: [] });
     const settings = { provider: 'deepseek' as const, key: 'sk-x', baseURL: null, model: 'deepseek-flash', models: [] };
     await db.saveSettings(settings);
-    await db.saveTab('chat');
     await db.putConversation(conv('a', 1));
     const snap = await db.putConversation(conv('b', 2));
     expect(snap.settings).toEqual(settings);
-    expect(snap.tab).toBe('chat');
     expect(snap.conversations.map((c) => c.id)).toEqual(['b', 'a']);
     expect((await db.saveSettings(null)).settings).toBeNull();
     expect((await db.deleteConversation('b')).conversations.map((c) => c.id)).toEqual(['a']);

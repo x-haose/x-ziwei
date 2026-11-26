@@ -124,7 +124,7 @@ c(`${tableWrap}`, { margin: '.4em 0 .9em' });
 c('table', { fontSize: size.small });
 c('th', { fontSize: size.label });
 
-/* ── 提示词全文（设计规范 21.5）：同预览的规则，正文 15px 行高 1.85，最宽 780px，表格 14px，分隔线 1px `--line-2` ── */
+/* ── 提示词全文（设计规范 21.6）：同预览的规则，正文 15px 行高 1.85，最宽 780px，表格 14px，分隔线 1px `--line-2` ── */
 
 export const full = style({ maxWidth: 780, fontSize: size.body, lineHeight: 1.85, color: color.fg });
 

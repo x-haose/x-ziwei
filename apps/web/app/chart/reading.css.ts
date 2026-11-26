@@ -2,310 +2,427 @@ import { globalStyle, style } from '@vanilla-extract/css';
 import { media } from '../styles/media';
 import { color, font, motion, size, space, stroke } from '../styles/tokens.css';
 
-/** 看盘（设计规范 21.4）。 */
+/** 看盘（设计规范第 21 节）：左栏的「看什么」「看哪段时间」，右栏按主题的五步阅读、问 AI、页脚，手机底栏。 */
 
 const ring = (c: string) => `inset 0 0 0 ${stroke.hair} ${c}`;
 const hair = (c: string) => `${stroke.hair} solid ${c}`;
+/** 点按区上下扩到至少 44px（文字按钮）。 */
+const hit = (y: number, x = 0) => ({ content: '""', position: 'absolute' as const, inset: `-${y}px -${x}px` });
 
-export const reading = style({ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, minWidth: 0 });
+/* ── 左栏 ── */
 
-/** 子页签在看盘区内吸顶；看盘区在栏内滚动（<1024 随页面滚动）。 */
+export const nav = style({ minWidth: 0, paddingTop: 16, '@media': { [media.mDown]: { paddingTop: 24 } } });
+
+export const navTitle = style({
+  fontFamily: font.serif,
+  fontSize: 15,
+  fontWeight: 600,
+  paddingBottom: 6,
+  marginBottom: 8,
+  borderBottom: hair(color.line),
+});
+
+export const topicGrid = style({ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))', gap: 4 });
+
+export const topicButton = style({
+  display: 'grid',
+  placeItems: 'center',
+  minHeight: space.hit,
+  fontFamily: font.serif,
+  fontSize: 15,
+  color: color.fg2,
+  boxShadow: ring(color.line2),
+  transition: `background ${motion.fast}, color ${motion.fast}`,
+  selectors: {
+    '&:hover': { color: color.fg, boxShadow: ring(color.line3) },
+    '&[aria-pressed="true"]': { background: color.btn, color: color.btnFg, boxShadow: 'none' },
+    '&:disabled': { color: color.fg3, cursor: 'not-allowed' },
+  },
+});
+
+export const when = style({ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', '@media': { [media.lDown]: { maxWidth: 420 }, [media.mDown]: { maxWidth: 'none' } } });
+
+export const whenButton = style({
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 1,
+  minHeight: 52,
+  fontFamily: font.serif,
+  fontSize: 15,
+  lineHeight: 1.2,
+  color: color.fg2,
+  boxShadow: ring(color.line2),
+  selectors: {
+    '& + &': { marginLeft: -1 },
+    '&:hover': { color: color.fg },
+    '&[aria-pressed="true"]': { background: color.btn, color: color.btnFg, boxShadow: 'none', position: 'relative' },
+    '&:disabled': { color: color.fg3, cursor: 'not-allowed' },
+  },
+});
+
+export const whenSub = style({ fontFamily: font.num, fontSize: size.label, opacity: 0.8 });
+
+export const whenNow = style({ fontSize: size.label, color: color.fg2, marginTop: 8 });
+
+export const textButton = style({
+  position: 'relative',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  minHeight: 32,
+  fontSize: size.label,
+  color: color.fg2,
+  selectors: { '&:hover': { color: color.fg }, '&::after': hit(6), '&:disabled': { color: color.fg3, cursor: 'not-allowed' } },
+});
+
+export const caret = style({ display: 'inline-flex', transition: `transform ${motion.base}`, selectors: { '[aria-expanded="true"] > &': { transform: 'rotate(180deg)' } } });
+
+export const more = style([textButton, { marginTop: 4 }]);
+
+/* ── 右栏 ── */
+
 export const scroller = style({
   flex: 1,
   minHeight: 0,
   overflowY: 'auto',
   scrollbarWidth: 'thin',
   scrollbarColor: `${color.line2} transparent`,
+  scrollPaddingTop: 8,
   '@media': { [media.mDown]: { overflowY: 'visible' } },
 });
 
-export const views = style({ position: 'sticky', top: 0, zIndex: 2, background: color.bg, flex: 'none' });
+export const reading = style({ padding: '0 2px 40px 0' });
 
-globalStyle(`${views} > button`, { minHeight: 40, fontSize: size.small });
+export const head = style({ padding: '4px 0 16px', borderBottom: hair(color.line2) });
 
-export const body = style({ padding: '0 0 24px' });
+export const headTop = style({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 32 });
 
-export const head = style({
-  display: 'flex',
-  alignItems: 'baseline',
-  flexWrap: 'wrap',
-  gap: '4px 10px',
-  padding: '16px 0 8px',
-  borderBottom: hair(color.line2),
+export const eyebrow = style({ fontSize: size.label, color: color.fg3 });
+
+export const jumpAsk = style({
+  position: 'relative',
+  height: 32,
+  padding: '0 12px',
+  fontSize: size.label,
+  color: color.fg,
+  boxShadow: ring(color.line3),
+  selectors: { '&::after': hit(6), '&:hover': { boxShadow: ring(color.fg) } },
+  '@media': { [media.mDown]: { display: 'none' } },
 });
 
-export const headName = style({
+export const title = style({
   fontFamily: font.serif,
   fontWeight: 600,
-  fontSize: 28,
-  lineHeight: 1.2,
-  color: color.accent,
+  fontSize: 30,
+  lineHeight: 1.25,
+  marginTop: 2,
   selectors: { '&:focus': { outline: 'none' } },
+  '@media': { [media.s]: { fontSize: 26 } },
 });
 
-export const headGz = style({ fontFamily: font.serif, fontSize: size.emphasis, color: color.fg2 });
+export const sel = style({ fontSize: 15, lineHeight: 1.75, marginTop: 6 });
 
-export const headAges = style({ marginLeft: 'auto', fontFamily: font.num, fontSize: size.aux, color: color.fg3 });
+export const intro = style({ marginTop: 10, padding: '10px 12px', background: color.bg2, fontSize: size.small, lineHeight: 1.75, color: color.fg2 });
 
-export const tag = style({
-  display: 'inline-flex',
+export const term = style({
+  display: 'inline',
+  font: 'inherit',
+  color: 'inherit',
+  padding: 0,
+  boxShadow: `inset 0 -1px 0 ${color.line3}`,
+  position: 'relative',
+  selectors: { '&::after': hit(10, 2), '&:hover': { boxShadow: `inset 0 -1px 0 ${color.fg}` } },
+});
+
+export const steps = style({ listStyle: 'none', margin: '18px 0 0', padding: 0, counterReset: 'step' });
+
+export const step = style({
+  position: 'relative',
+  counterIncrement: 'step',
+  padding: '0 0 24px 44px',
+  selectors: {
+    '&::before': {
+      content: 'counter(step)',
+      position: 'absolute',
+      left: 0,
+      top: 8,
+      width: 28,
+      height: 28,
+      display: 'grid',
+      placeItems: 'center',
+      fontFamily: font.num,
+      fontSize: size.aux,
+      lineHeight: 1,
+      color: color.fg,
+      background: color.bg,
+      boxShadow: ring(color.line3),
+      transition: `background ${motion.fast}, color ${motion.fast}`,
+    },
+    '&::after': { content: '""', position: 'absolute', left: 14, top: 42, bottom: 4, width: 1, background: color.line2 },
+    '&:last-child::after': { display: 'none' },
+    '&[data-on]::before': { background: color.btn, color: color.btnFg, boxShadow: 'none' },
+  },
+  '@media': { [media.mDown]: { paddingBottom: 12 } },
+});
+
+export const stepHead = style({
+  display: 'flex',
   alignItems: 'center',
-  padding: '3px 5px',
-  fontFamily: font.sans,
-  fontWeight: 400,
+  gap: 10,
+  minHeight: space.hit,
+  '@media': { [media.mDown]: { display: 'block', minHeight: 0 } },
+});
+
+export const stepTitle = style({
+  fontFamily: font.serif,
+  fontWeight: 600,
+  fontSize: 19,
+  flex: 1,
+  selectors: { '&:focus': { outline: 'none' } },
+  '@media': { [media.mDown]: { lineHeight: '44px' } },
+});
+
+export const see = style([textButton, { padding: '0 4px', selectors: { '&[aria-pressed="true"]': { color: color.fg } } }, { '@media': { [media.mDown]: { display: 'none' } } }]);
+
+/** 手机上每步旁边的小盘：4×4 宫格，中间四格空。 */
+export const mini = style({
+  display: 'none',
+  '@media': {
+    [media.mDown]: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(4, 30px)',
+      gridTemplateRows: 'repeat(4, 22px)',
+      float: 'right',
+      margin: '2px 0 6px 12px',
+      boxShadow: ring(color.line2),
+      position: 'relative',
+    },
+  },
+  selectors: { '&::after': { content: '""', position: 'absolute', inset: -4 } },
+});
+
+export const miniCell = style({
+  display: 'grid',
+  placeItems: 'center',
+  fontFamily: font.serif,
   fontSize: size.label,
   lineHeight: 1,
-  color: color.fg2,
-  boxShadow: ring(color.line3),
-  alignSelf: 'center',
+  color: color.fg3,
+  boxShadow: `inset 0 0 0 0.5px ${color.line}`,
+  selectors: {
+    '&[data-on]': { background: color.bg3, color: color.fg },
+    '&[data-focus]': { background: color.bg3, color: color.accent, fontWeight: 600 },
+  },
 });
 
-export const layerNames = style({
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: '4px 20px',
-  padding: '8px 0',
-  borderBottom: hair(color.line),
-  fontSize: size.small,
-});
+export const facts = style({ marginTop: 2 });
 
-export const layerKind = style({ marginRight: 8, fontSize: size.aux, color: color.fg3 });
+globalStyle(`${facts} p`, { fontSize: size.body, lineHeight: 1.8 });
+globalStyle(`${facts} p + p`, { marginTop: 4 });
 
-export const layerName = style({ fontFamily: font.serif, fontWeight: 600 });
+export const acts = style({ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12, clear: 'both' });
 
-export const section = style({ padding: '12px 0 8px', borderBottom: hair(color.line) });
+export const actButton = style({ height: space.hit, padding: '0 16px', fontSize: size.small });
 
-export const sectionTitle = style({
-  display: 'flex',
-  alignItems: 'baseline',
-  flexWrap: 'wrap',
-  gap: '4px 10px',
-  marginBottom: 4,
-  fontFamily: font.serif,
-  fontWeight: 600,
-  fontSize: size.body,
-});
-
-export const sectionAside = style({ fontFamily: font.serif, fontWeight: 400, fontSize: size.small, color: color.fg2 });
-
-/** 四化两行：标签列 64px ｜ 内容，内容折行时与上一行对齐。 */
-export const huaRow = style({
+export const how = style({
   display: 'grid',
-  gridTemplateColumns: '64px minmax(0, 1fr)',
-  alignItems: 'baseline',
-  gap: '0 8px',
-  padding: '2px 0',
+  gridTemplateColumns: 'auto minmax(0, 1fr)',
+  gap: '0 10px',
   fontSize: size.small,
   lineHeight: 1.7,
   color: color.fg2,
+  marginTop: 10,
+  padding: '8px 0',
+  borderTop: hair(color.line),
+  clear: 'both',
 });
 
-export const huaLabel = style({ fontSize: size.label, color: color.fg3 });
+export const howLabel = style({ fontSize: size.label, color: color.fg3, lineHeight: '24px' });
 
-export const huaItems = style({ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px 14px' });
+export const notes = style({ marginTop: 6, clear: 'both' });
 
-export const huaItem = style({ display: 'inline-flex', alignItems: 'center', gap: 6 });
+export const notesLabel = style({ fontSize: size.label, color: color.fg3, margin: '6px 0 2px' });
 
-/** 四化块在行内：沿用盘上的样式（第 6 节），去掉竖排时的上距。 */
-export const tile = style({ display: 'inline-block', margin: '0 0 0 2px' });
-
-export const palaceLink = style({
-  position: 'relative',
-  fontFamily: font.serif,
-  fontWeight: 600,
-  lineHeight: 1.5,
-  color: color.fg,
-  boxShadow: `inset 0 calc(-1 * ${stroke.hair}) 0 ${color.line3}`,
-  selectors: {
-    '&::after': { content: '""', position: 'absolute', inset: '-10px -4px' },
-    '&:hover': { color: color.accent, boxShadow: `inset 0 calc(-1 * ${stroke.hair}) 0 ${color.accent}` },
-    '&:focus-visible': { outline: `${stroke.hair} solid ${color.fg}`, outlineOffset: 2 },
-  },
+export const note = style({
+  padding: '8px 0',
+  borderTop: hair(color.line),
+  selectors: { [`${notesLabel} + &`]: { borderTop: 0, paddingTop: 2 } },
 });
 
-export const none = style({ fontSize: size.small, lineHeight: 1.7, color: color.fg3 });
+export const noteName = style({ fontFamily: font.serif, fontWeight: 600, fontSize: size.body });
 
-export const star = style({ padding: '8px 0', borderTop: hair(color.line), selectors: { '&:first-child': { borderTop: 0, paddingTop: 2 } } });
+export const noteText = style({ fontSize: size.small, lineHeight: 1.8, color: color.fg2, marginTop: 2 });
 
-export const starHead = style({ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 6px' });
+export const noteNone = style([noteText, { color: color.fg3 }]);
 
-export const starName = style({ marginRight: 2, fontFamily: font.serif, fontWeight: 600, fontSize: size.star });
+export const noteActs = style({ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0 16px' });
 
-export const starNameSmall = style([starName, { fontSize: size.body }]);
+export const noteMore = style([textButton, { minHeight: 36, gap: 4, textAlign: 'left' }]);
 
-export const brightness = style({ fontSize: size.aux, color: color.fg2 });
+export const group = style({ padding: '4px 0', borderTop: hair(color.line) });
 
-/** 摘要层释义：14px 次级色。 */
-export const note = style({ marginTop: 2, fontSize: size.small, lineHeight: 1.75, color: color.fg2 });
+export const groupButton = style([noteMore, { fontSize: size.small, lineHeight: 1.5, padding: '4px 0' }]);
 
-globalStyle(`${note} p`, { margin: 0 });
-globalStyle(`${note} > div`, { fontSize: size.small, lineHeight: 1.75, color: color.fg2 });
+globalStyle(`${group} ${note}`, { paddingLeft: 12, boxShadow: `inset 1px 0 0 ${color.line2}` });
 
-export const noteNone = style({ marginTop: 2, fontSize: size.small, color: color.fg3 });
+export const full = style({ margin: '2px 0 6px', padding: '10px 12px', background: color.well, boxShadow: ring(color.line), fontSize: size.small, lineHeight: 1.8 });
 
-export const more = style({
-  position: 'relative',
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 4,
-  height: 32,
-  fontSize: size.aux,
-  color: color.fg2,
-  selectors: {
-    '&::after': { content: '""', position: 'absolute', inset: '-6px -4px' },
-    '&:hover': { color: color.fg },
-    '&:focus-visible': { outline: `${stroke.hair} solid ${color.fg}`, outlineOffset: 2 },
-  },
-});
+export const fullLabel = style({ fontSize: size.label, color: color.fg3, margin: '10px 0 2px', selectors: { '&:first-child': { marginTop: 0 } } });
 
-export const moreCaret = style({
-  transition: `transform ${motion.base}`,
-  selectors: { [`${more}[aria-expanded="true"] &`]: { transform: 'rotate(180deg)' } },
-  '@media': { [media.reducedMotion]: { transition: 'none' } },
-});
+export const quotes = style({ fontFamily: font.serif, fontSize: size.small, lineHeight: 1.8 });
 
-/** 展开的全文：`--well` 底。 */
-export const full = style({ margin: '4px 0', padding: '10px 12px', background: color.well, boxShadow: ring(color.line) });
+export const askStep = style([textButton, { marginTop: 2 }]);
 
-export const fullLabel = style({ margin: '10px 0 2px', fontSize: size.label, color: color.fg3, selectors: { '&:first-child': { marginTop: 0 } } });
+/* ── 问 AI ── */
 
-export const attrs = style({ marginTop: 8, fontSize: size.aux, lineHeight: 1.7, color: color.fg2 });
+export const ask = style({ marginTop: 24, padding: '18px 16px 16px', boxShadow: ring(color.line3), '@media': { [media.s]: { padding: '16px 12px 14px', margin: '24px -4px 0' } } });
 
-export const quotes = style({ fontFamily: font.serif, fontSize: size.small, lineHeight: 1.8, color: color.fg });
+export const askTitle = style({ fontFamily: font.serif, fontWeight: 600, fontSize: 21, selectors: { '&:focus': { outline: 'none' } } });
 
-export const pattern = style({ padding: '8px 0', borderTop: hair(color.line), selectors: { '&:first-of-type': { borderTop: 0, paddingTop: 2 } } });
+export const askField = style({ display: 'block', marginTop: 10 });
 
-export const patternHead = style({ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 8px' });
+export const askLabel = style({ display: 'block', fontSize: size.label, color: color.fg2, marginBottom: 4 });
 
-export const patternName = style({ fontFamily: font.serif, fontWeight: 600, fontSize: size.emphasis });
-
-export const scope = style({ padding: '2px 5px', fontSize: size.label, color: color.fg2, boxShadow: ring(color.line2) });
-
-export const patternPalace = style({ marginLeft: 'auto', fontSize: size.small });
-
-export const patternStars = style({ marginTop: 2, fontSize: size.aux, lineHeight: 1.7, color: color.fg2 });
-
-export const patternStarPalace = style({ marginLeft: 3, color: color.fg3 });
-
-export const surround = style({ listStyle: 'none' });
-
-export const surroundRow = style({
-  display: 'grid',
-  gridTemplateColumns: '34px auto 1fr',
-  alignItems: 'center',
-  gap: 8,
+export const askInput = style({
   width: '100%',
-  minHeight: space.hit,
-  padding: '4px 0',
-  textAlign: 'left',
-  borderBottom: hair(color.line),
-  selectors: { '&:focus-visible': { outline: `${stroke.hair} solid ${color.fg}`, outlineOffset: -2 } },
-});
-
-export const surroundRole = style({ fontSize: size.label, color: color.fg3 });
-
-export const surroundName = style({
-  fontFamily: font.serif,
-  fontWeight: 600,
+  minHeight: 76,
+  resize: 'vertical',
+  padding: '10px 12px',
+  font: 'inherit',
   fontSize: size.body,
-  color: color.fg2,
-  selectors: { [`${surroundRow}:hover &`]: { color: color.accent } },
-});
-
-export const surroundBranch = style({ marginLeft: 4, fontWeight: 400, fontSize: size.aux, color: color.fg3 });
-
-export const surroundStars = style({
-  display: 'flex',
-  flexWrap: 'wrap',
-  justifyContent: 'flex-end',
-  gap: '2px 10px',
-  fontFamily: font.serif,
-  fontSize: size.small,
-  color: color.fg2,
-});
-
-export const surroundStar = style({ display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' });
-
-export const foot = style({ paddingTop: 10 });
-
-export const footButton = style({
-  height: space.hit,
-  fontSize: size.small,
-  color: color.fg2,
-  selectors: { '&:hover': { color: color.fg }, '&:focus-visible': { outline: `${stroke.hair} solid ${color.fg}`, outlineOffset: 2 } },
-});
-
-export const hint = style({ padding: '12px 0 4px', fontSize: size.aux, color: color.fg3 });
-
-/** 表格放不下时只在自己的容器里横向滚动（第 13 节同一规则）。 */
-export const tableWrap = style({ overflowX: 'auto' });
-
-export const table = style({ width: '100%', borderCollapse: 'collapse', fontSize: size.small });
-
-globalStyle(`${table} th`, {
-  padding: '6px 8px 6px 0',
-  fontSize: size.label,
-  fontWeight: 400,
-  color: color.fg3,
-  textAlign: 'left',
-  borderBottom: hair(color.line2),
-  whiteSpace: 'nowrap',
-});
-
-globalStyle(`${table} td`, { padding: '4px 10px 4px 0', borderBottom: hair(color.line), whiteSpace: 'nowrap', verticalAlign: 'middle' });
-globalStyle(`${table} td:first-child`, { paddingLeft: 8 });
-
-export const rowOn = style({});
-globalStyle(`${rowOn} td`, { background: color.bg3 });
-globalStyle(`${rowOn} td:first-child`, { boxShadow: `inset 2px 0 0 ${color.fg}` });
-
-export const rowButton = style({
-  minHeight: 40,
-  fontFamily: font.num,
-  fontSize: size.body,
-  fontWeight: 500,
+  lineHeight: 1.6,
   color: color.fg,
-  boxShadow: `inset 0 calc(-1 * ${stroke.hair}) 0 ${color.line3}`,
-  selectors: {
-    '&:hover': { boxShadow: `inset 0 calc(-1 * ${stroke.hair}) 0 ${color.fg}` },
-    '&:focus-visible': { outline: `${stroke.hair} solid ${color.fg}`, outlineOffset: 2 },
-  },
-});
-
-export const rowSub = style({ display: 'block', margin: '-2px 0 4px', fontFamily: font.num, fontSize: size.label, color: color.fg3 });
-
-export const gz = style({ fontFamily: font.serif, color: color.fg2 });
-
-export const cellSerif = style({ fontFamily: font.serif });
-
-export const branch = style({ marginLeft: 4, fontSize: size.aux, color: color.fg3 });
-
-export const four = style({ fontFamily: font.serif, whiteSpace: 'normal', lineHeight: 1.6, minWidth: 120 });
-
-export const fourItem = style({ display: 'inline-block', marginRight: 8, whiteSpace: 'nowrap' });
-
-export const fourMark = style({ marginLeft: 1, fontStyle: 'normal', fontFamily: font.sans, fontSize: size.label, color: color.fg3 });
-
-export const nowTag = style({ marginLeft: 6, padding: '2px 4px', fontSize: size.label, color: color.fg2, boxShadow: ring(color.line3) });
-
-export const pager = style({ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 });
-
-export const pagerButton = style({
-  width: space.hit,
-  height: space.hit,
-  flex: 'none',
-  fontSize: 18,
-  color: color.fg2,
+  background: color.well,
+  border: 0,
   boxShadow: ring(color.line2),
-  selectors: { '&:disabled': { color: color.fg3, boxShadow: ring(color.line), cursor: 'not-allowed' } },
+  selectors: { '&:focus': { boxShadow: ring(color.fg), outline: 'none' } },
 });
 
-export const pagerText = style({ flex: 1, textAlign: 'center', fontSize: size.small, color: color.fg2 });
+export const askSummary = style({ fontSize: size.small, lineHeight: 1.7, color: color.fg2, marginTop: 8 });
 
-export const pagerAges = style({ marginRight: 8, fontFamily: font.num, fontWeight: 500, color: color.fg });
+export const askCount = style({ fontFamily: font.num, color: color.fg });
+
+export const inline = style({
+  position: 'relative',
+  minHeight: 32,
+  padding: '0 0 0 6px',
+  fontSize: size.label,
+  color: color.fg,
+  boxShadow: `inset 0 -1px 0 ${color.line3}`,
+  verticalAlign: 'baseline',
+  selectors: { '&::after': hit(6, 4) },
+});
+
+export const askSub = style({ fontSize: size.label, color: color.fg2, marginTop: 14 });
+
+export const sites = style({
+  display: 'grid',
+  gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+  gap: 6,
+  marginTop: 6,
+  '@media': { [media.s]: { gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' } },
+});
+
+export const site = style({ height: space.hit, padding: '0 4px', fontSize: size.small, textDecoration: 'none' });
+
+export const inPage = style({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  flexWrap: 'wrap',
+  gap: '8px 16px',
+  marginTop: 14,
+  paddingTop: 12,
+  borderTop: hair(color.line),
+});
+
+export const inPageText = style({ flex: '1 1 200px', fontSize: size.small, lineHeight: 1.6, color: color.fg2 });
+
+/* ── 页脚 ── */
+
+export const foot = style({ marginTop: 20, fontSize: size.small, lineHeight: 1.7, color: color.fg3 });
+
+export const footButtons = style({ display: 'flex', flexWrap: 'wrap', gap: '0 16px', marginTop: 2 });
+
+export const footButton = style([textButton, { padding: 0 }]);
+
+export const footNote = style({ margin: '0 0 8px', paddingLeft: 10, boxShadow: `inset 2px 0 0 ${color.accent}`, fontSize: size.small, color: color.fg2 });
+
+/* ── 术语浮层 ── */
+
+export const termPop = style({
+  width: 340,
+  maxWidth: 'calc(100vw - 16px)',
+  maxHeight: 'min(60vh, 420px)',
+  overflow: 'auto',
+  padding: '12px 14px 10px',
+  background: color.bg,
+  boxShadow: `${ring(color.line3)}, 0 0 0 1px ${color.bg}`,
+  outline: 'none',
+});
+
+export const termSheet = style({
+  position: 'fixed',
+  left: 0,
+  right: 0,
+  bottom: 0,
+  maxHeight: '70vh',
+  overflow: 'auto',
+  padding: `12px ${space.pad} max(10px, env(safe-area-inset-bottom))`,
+  background: color.bg,
+  boxShadow: `0 -1px 0 ${color.line3}`,
+  outline: 'none',
+});
+
+export const termScrim = style({ position: 'fixed', inset: 0, zIndex: 69, background: color.scrim });
+
+export const termHead = style({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 });
+
+export const termTitle = style({ fontFamily: font.serif, fontWeight: 600, fontSize: size.body });
+
+export const termClose = style({ width: space.hit, height: space.hit, display: 'grid', placeItems: 'center', margin: '-10px -12px -10px 0', color: color.fg2 });
+
+export const termBody = style({ fontSize: size.small, lineHeight: 1.8, color: color.fg2, marginTop: 4 });
+
+/* ── 空、加载、失败 ── */
 
 export const empty = style({ padding: '24px 0' });
 
 export const emptyTitle = style({ fontFamily: font.serif, fontWeight: 600, fontSize: 17 });
 
-export const emptyBody = style({ marginTop: 6, fontSize: size.small, lineHeight: 1.75, color: color.fg2 });
+export const emptyBody = style({ fontSize: size.small, lineHeight: 1.75, color: color.fg2, marginTop: 6 });
+
+/* ── 对话在右栏时的返回 ── */
+
+export const back = style([textButton, { padding: 0, marginBottom: 4, alignSelf: 'flex-start' }]);
+
+/* ── 手机底栏 ── */
+
+export const bar = style({
+  display: 'none',
+  '@media': {
+    [media.mDown]: {
+      position: 'fixed',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 30,
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1.3fr) minmax(0, 1fr)',
+      gap: 8,
+      padding: `8px ${space.pad} max(8px, env(safe-area-inset-bottom))`,
+      background: color.bg,
+      borderTop: hair(color.line2),
+    },
+  },
+});
+
+export const barTopic = style({ height: space.hit, gap: 6, fontSize: size.small });
+
+export const barTopicLabel = style({ color: color.fg3 });
+
+export const barTopicName = style({ fontFamily: font.serif, fontWeight: 600, fontSize: size.body });
+
+export const barAsk = style({ height: space.hit, fontSize: size.small });

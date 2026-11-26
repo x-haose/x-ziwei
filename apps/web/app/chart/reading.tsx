@@ -1,805 +1,558 @@
-import { type ReactNode, useMemo, useRef } from 'react';
-import type { Astrolabe, HoroscopeItem, KnowledgePack, PatternHit } from 'x-iztro';
-import { CaretIcon } from '../components/icons';
-import { Segmented } from '../components/segmented';
+import { Fragment, type ReactNode, type RefObject, useId } from 'react';
+import { Button, Dialog, DialogTrigger, Heading, Modal, ModalOverlay, Popover } from 'react-aria-components';
+import type { KnowledgePack, TopicEntry } from 'x-iztro';
+import { OptionGrid, Picker } from '../birth/picker';
+import * as controls from '../components/controls.css';
+import { CaretIcon, CloseIcon } from '../components/icons';
+import type { Lang } from '../i18n/lang';
 import { fmt, type Messages } from '../i18n/messages';
-import type { Kernel } from '../kernel/kernel';
+import { useMediaQuery } from '../lib/media';
 import { Markdown } from '../markdown/markdown';
-import * as boardCss from './board.css';
-import { monthLabel } from './layer-panel';
-import { type HuaMark, type LayerView, type PalaceView, type StarView, decadalOfAge, nominalAge } from './model';
+import type { MethodStep } from '../prompt/method';
+import { media } from '../styles/media';
+import type { PalaceView } from './model';
 import * as css from './reading.css';
-import { type ChartView, monthHoroscope } from './session';
-import type { LunarCalendar } from '../birth/calendar';
+import { type NoteRef, type Rich, type Step, type TermId, TERM_SLUGS, brightnessConcept, palaceFull } from './topic';
 
 /**
- * 看盘（设计规范 21.4）：给人读的结构化阅读，以盘为索引。事实全部取自排盘内核的结构化结果（星曜、亮度、各层四化与宫名、
- * 格局命中、大限与流年列表），释义取自本机生效的知识包组合；不从提示词文本里摘。
+ * 看盘（设计规范第 21 节）：按主题一步一步读这张盘。事实句由 `topic.ts` 从内核结果拼出；释义、主题说明、
+ * 术语解释取自生效组合的原文；每一步的「怎么看」取自解读方法。
  */
-
-export type ReadingView = 'palace' | 'patterns' | 'decades' | 'years';
-
-/** 看盘的界面状态：子页签、展开了的全文、流年一览翻到的大限序号（null 为所选大限）。由排盘页持有，换页签不丢；换盘时除子页签外清空。 */
-export interface ReadingState {
-  view: ReadingView;
-  open: ReadonlySet<string>;
-  yOrd: number | null;
-}
-
-export const INITIAL_READING: ReadingState = { view: 'palace', open: new Set(), yOrd: null };
-
-const HUA_CLASS: Record<HuaMark['source'], string> = {
-  n: boardCss.huaNatal,
-  d: boardCss.huaDecadal,
-  y: boardCss.huaYearly,
-  m: boardCss.huaMonthly,
-};
 
 /** 摘要层的宽度上限：显示宽度（汉字等全角计 2）不超过它的正文本身就是摘要（与内核的摘要规则一致）。 */
 const SUMMARY_WIDTH = 240;
 
 function displayWidth(text: string): number {
   let n = 0;
-  for (const ch of text) n += /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/.test(ch) ? 2 : 1;
+  for (const ch of text) n += /[ᄀ-ᅟ⺀-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦]/.test(ch) ? 2 : 1;
   return n;
 }
 
-interface Texted {
-  intro?: string | undefined;
-  summary?: string | undefined;
-}
-
 /** 摘要层：有摘要用摘要，正文不超过 240 宽用正文，否则没有（只给「全文」）。 */
-function noteOf(e: Texted): string | null {
-  if (e.summary) return e.summary;
-  return e.intro && displayWidth(e.intro) <= SUMMARY_WIDTH ? e.intro : null;
+function shortOf(summary: string | undefined, intro: string | undefined): string | null {
+  if (summary) return summary;
+  return intro && displayWidth(intro) <= SUMMARY_WIDTH ? intro : null;
 }
 
-function hasFull(e: Texted): boolean {
-  return !!e.intro && (!!e.summary || displayWidth(e.intro) > SUMMARY_WIDTH);
+export const smooth = (): ScrollBehavior => (matchMedia(media.reducedMotion).matches ? 'auto' : 'smooth');
+
+/** 按 `{name}` 占位拼出文字与元素混排的内容。 */
+function fmtNodes(template: string, values: Record<string, ReactNode>): ReactNode[] {
+  return template.split(/\{(\w+)\}/).map((x, i) => {
+    if (i % 2 === 0) return x;
+    if (!(x in values)) throw new Error(`文案占位 {${x}} 没有给值：${template}`);
+    return <Fragment key={i}>{values[x]}</Fragment>;
+  });
 }
 
-function Tile({ mark }: { mark: HuaMark }) {
-  return <i className={`${boardCss.hua} ${HUA_CLASS[mark.source]} ${css.tile}`}>{mark.text}</i>;
-}
+/* ── 术语 ── */
 
-function More({ id, label, state, onState, t }: { id: string; label: string; state: ReadingState; onState: (s: ReadingState) => void; t: Messages }) {
-  const on = state.open.has(id);
+/** 一个术语：生效组合里有对应条目时是按钮，点开看条目原文（≥700 贴着术语，<700 从底部升起）；没有时照常显示文字。 */
+function Term({ t, pack, slug, text }: { t: Messages; pack: KnowledgePack; slug: string | null; text: string }) {
+  const narrow = useMediaQuery(media.s);
+  const entry = slug ? pack.concept(slug) : undefined;
+  if (!entry) return <>{text}</>;
+  const dialog = (
+    <Dialog className={narrow ? css.termSheet : css.termPop} aria-label={entry.title ?? text}>
+      {({ close }) => (
+        <>
+          <div className={css.termHead}>
+            <Heading slot="title" className={css.termTitle}>
+              {entry.title ?? text}
+            </Heading>
+            <Button className={css.termClose} aria-label={t.read.termClose} onPress={close}>
+              <CloseIcon />
+            </Button>
+          </div>
+          {entry.intro && (
+            <div className={css.termBody}>
+              <Markdown source={entry.intro} variant="preview" />
+            </div>
+          )}
+        </>
+      )}
+    </Dialog>
+  );
   return (
-    <button
-      type="button"
-      className={css.more}
-      aria-expanded={on}
-      onClick={() => {
-        const open = new Set(state.open);
-        if (on) open.delete(id);
-        else open.add(id);
-        onState({ ...state, open });
-      }}
-    >
-      {on ? t.read.fold : label}
-      <span className={css.moreCaret}>
+    <DialogTrigger>
+      <Button className={css.term} render={(props) => <button {...props} aria-haspopup="dialog" />}>
+        {text}
+      </Button>
+      {narrow ? (
+        <ModalOverlay isDismissable className={css.termScrim}>
+          <Modal>{dialog}</Modal>
+        </ModalOverlay>
+      ) : (
+        <Popover placement="bottom start" offset={6}>
+          {dialog}
+        </Popover>
+      )}
+    </DialogTrigger>
+  );
+}
+
+function RichText({ t, pack, parts }: { t: Messages; pack: KnowledgePack; parts: Rich }) {
+  return (
+    <>
+      {parts.map((p, i) =>
+        typeof p === 'string' ? (
+          p
+        ) : 'term' in p ? (
+          <Term key={i} t={t} pack={pack} slug={TERM_SLUGS[p.term]} text={p.text} />
+        ) : (
+          <Term key={i} t={t} pack={pack} slug={brightnessConcept(pack, p.brightness)} text={p.brightness} />
+        ),
+      )}
+    </>
+  );
+}
+
+/* ── 释义 ── */
+
+function MoreButton({ open, label, t, onToggle, className = css.noteMore }: { open: boolean; label: string; t: Messages; onToggle: () => void; className?: string }) {
+  return (
+    <button type="button" className={className} aria-expanded={open} onClick={onToggle}>
+      {open ? t.read.fold : label}
+      <span className={css.caret}>
         <CaretIcon />
       </span>
     </button>
   );
 }
 
-/** 运限里所选的一层：显示用的标签、该层的内核数据、该层视角命中的格局。 */
-interface LayerInfo {
-  kind: LayerView['kind'];
-  label: string;
-  view: LayerView;
-  item: HoroscopeItem;
-  patterns: PatternHit[];
-}
-
-function layerInfos(chart: Astrolabe, lunar: LunarCalendar, view: ChartView, t: Messages): LayerInfo[] {
-  const { sel, layers } = view;
-  if (sel.layer === 'natal') return [];
-  const decadal = chart.decadalList()[sel.decadal];
-  if (!decadal) throw new Error(`大限序号越界：${sel.decadal}`);
-  const h = chart.horoscopeOfYear(sel.year);
-  const out: LayerInfo[] = [];
-  for (const l of layers) {
-    if (l.kind === 'decadal') {
-      out.push({ kind: l.kind, label: fmt(t.read.agesShort, { a: decadal.ageRange[0], b: decadal.ageRange[1] }), view: l, item: decadal, patterns: h.patterns('decadal') });
-    } else if (l.kind === 'yearly') {
-      out.push({ kind: l.kind, label: String(sel.year), view: l, item: h.yearly, patterns: h.patterns('yearly') });
-    } else {
-      const m = chart.monthlyList(sel.year).find((x) => x.month === sel.month.month && x.part === sel.month.part);
-      if (!m) throw new Error(`农历 ${sel.year} 年没有这一段流月`);
-      const patterns = monthHoroscope(chart, lunar, sel.year, sel.month).patterns('monthly');
-      out.push({ kind: l.kind, label: `${sel.year} ${monthLabel(t, m)}`, view: l, item: m, patterns });
-    }
-  }
-  return out;
-}
-
-/** 一颗星或一条格局的释义：摘要层，可展开全文（与门派属性）；当前组合里没有这一条时写明。 */
-function Note({
-  t,
-  id,
-  entry,
-  name,
-  packLabel,
-  attrs,
-  state,
-  onState,
-}: {
-  t: Messages;
-  id: string;
-  entry: Texted | undefined;
+interface NoteText {
   name: string;
-  packLabel: string;
-  attrs?: Record<string, unknown> | undefined;
-  state: ReadingState;
-  onState: (s: ReadingState) => void;
-}) {
-  if (!entry || (!entry.intro && !entry.summary)) return <p className={css.noteNone}>{fmt(t.read.noEntry, { label: packLabel, name })}</p>;
-  const short = noteOf(entry);
-  const attrLine = attrs
-    ? (Object.keys(t.read.attrs) as (keyof Messages['read']['attrs'])[])
-        .filter((k) => attrs[k] !== undefined && attrs[k] !== null && attrs[k] !== '')
-        .map((k) => {
-          const v = attrs[k];
-          const values: Record<string, string> = t.read.attrValues;
-          const text = Array.isArray(v) ? v.join(t.read.starsSep) : (values[String(v)] ?? String(v));
-          return `${t.read.attrs[k]} ${text}`;
-        })
-    : [];
-  const canOpen = hasFull(entry) || attrLine.length > 0;
-  const open = state.open.has(id);
+  short: string | null;
+  quotes?: readonly string[] | undefined;
+  conditions?: string | undefined;
+  /** 展开后的正文；摘要层已经是全文时为 null。 */
+  body: string | null;
+}
+
+/** 一条释义在生效组合里的原文；组合里没有这一条（或两颗主星没有组合解读）时为 null。 */
+function noteText(pack: KnowledgePack, n: NoteRef, t: Messages): NoteText | null | 'skip' {
+  if (n.kind === 'combo') {
+    const ea = pack.star(n.a.key);
+    const eb = pack.star(n.b.key);
+    const hit = ea?.combinations[n.b.key] ? { e: ea, other: n.b.key } : eb?.combinations[n.a.key] ? { e: eb, other: n.a.key } : null;
+    // 两颗主星同宫没有组合解读是常态，不列「没有这一条」。
+    if (!hit) return 'skip';
+    const body = hit.e.combinations[hit.other]!;
+    const short = shortOf(hit.e.combinationSummaries[hit.other], body);
+    return { name: fmt(t.read.combo, { a: n.a.name, b: n.b.name }), short, body: short === body ? null : body };
+  }
+  const e = n.kind === 'star' ? pack.star(n.key) : n.kind === 'mutagen' ? pack.mutagen(n.key) : pack.pattern(n.key);
+  if (!e || (!e.intro && !e.summary)) return null;
+  const short = shortOf(e.summary, e.intro);
+  const extra = n.kind === 'pattern' ? (e as { quotes?: string[]; conditions?: string }) : {};
+  return { name: n.label, short, quotes: extra.quotes, conditions: extra.conditions, body: e.intro && e.intro !== short ? e.intro : null };
+}
+
+function NoteBlock({ t, pack, note, id, open, onToggle }: { t: Messages; pack: KnowledgePack; note: NoteRef; id: string; open: ReadonlySet<string>; onToggle: (id: string) => void }) {
+  const text = noteText(pack, note, t);
+  if (text === 'skip') return null;
+  if (!text) {
+    return (
+      <div className={css.note}>
+        <b className={css.noteName}>{note.kind === 'combo' ? fmt(t.read.combo, { a: note.a.name, b: note.b.name }) : note.label}</b>
+        <p className={css.noteNone}>{t.read.noEntry}</p>
+      </div>
+    );
+  }
+  const canOpen = !!text.body || !!text.conditions || (text.quotes?.length ?? 0) > 0;
+  const isOpen = open.has(id);
   return (
     <div className={css.note}>
-      {short && <Markdown source={short} variant="preview" />}
-      {canOpen && <More id={id} label={t.read.full} state={state} onState={onState} t={t} />}
-      {open && (
+      <b className={css.noteName}>{text.name}</b>
+      {text.short && (
+        <div className={css.noteText}>
+          <Markdown source={text.short} variant="preview" />
+        </div>
+      )}
+      {canOpen && (
+        <div className={css.noteActs}>
+          <MoreButton open={isOpen} label={t.read.full} t={t} onToggle={() => onToggle(id)} />
+        </div>
+      )}
+      {isOpen && (
         <div className={css.full}>
-          {entry.intro && <Markdown source={entry.intro} variant="preview" />}
-          {attrLine.length > 0 && <p className={css.attrs}>{attrLine.join('；')}</p>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function StarItem({
-  t,
-  star,
-  pack,
-  packLabel,
-  id,
-  small = false,
-  extra,
-  state,
-  onState,
-}: {
-  t: Messages;
-  star: { key: string; name: string; brightness?: string | undefined; hua?: readonly HuaMark[] };
-  pack: KnowledgePack;
-  packLabel: string;
-  id: string;
-  small?: boolean;
-  extra?: ReactNode;
-  state: ReadingState;
-  onState: (s: ReadingState) => void;
-}) {
-  const entry = pack.star(star.key);
-  return (
-    <li className={css.star}>
-      <div className={css.starHead}>
-        <b className={small ? css.starNameSmall : css.starName}>{star.name}</b>
-        {star.brightness && <span className={css.brightness}>{star.brightness}</span>}
-        {extra}
-        {star.hua?.map((h) => (
-          <Tile key={h.source} mark={h} />
-        ))}
-      </div>
-      <Note t={t} id={id} entry={entry} name={star.name} packLabel={packLabel} attrs={small ? undefined : (entry?.attributes as Record<string, unknown> | undefined)} state={state} onState={onState} />
-    </li>
-  );
-}
-
-/** 一条格局：名称、所属各层、破格、本宫（可点）、所用的星与所在宫、摘要与可展开的成立条件和全文。 */
-function PatternItem({
-  t,
-  hit,
-  scopes,
-  palaces,
-  pack,
-  packLabel,
-  id,
-  onPalace,
-  state,
-  onState,
-}: {
-  t: Messages;
-  hit: PatternHit;
-  scopes: readonly ('natal' | LayerView['kind'])[];
-  palaces: readonly PalaceView[];
-  pack: KnowledgePack;
-  packLabel: string;
-  id: string;
-  onPalace: (index: number) => void;
-  state: ReadingState;
-  onState: (s: ReadingState) => void;
-}) {
-  const entry = pack.pattern(hit.key);
-  const seen = new Set<string>();
-  const stars = hit.stars.filter((s) => {
-    const k = `${s.name}@${s.palaceIndex}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-  const short = entry ? noteOf(entry) : null;
-  const canOpen = !!entry && (!!entry.conditions || (entry.quotes?.length ?? 0) > 0 || hasFull(entry));
-  const open = state.open.has(id);
-  return (
-    <div className={css.pattern}>
-      <div className={css.patternHead}>
-        <b className={css.patternName}>{hit.name}</b>
-        {scopes.map((s) => (
-          <span key={s} className={css.scope}>
-            {t.read.layerNames[s]}
-          </span>
-        ))}
-        {hit.broken && <span className={css.tag}>{t.read.broken}</span>}
-        <button type="button" className={`${css.palaceLink} ${css.patternPalace}`} onClick={() => onPalace(hit.palaceIndex)}>
-          {palaces[hit.palaceIndex]?.name ?? hit.palaceName}
-        </button>
-      </div>
-      <p className={css.patternStars}>
-        {stars.map((s, i) => (
-          <span key={`${s.key}@${s.palaceIndex}`}>
-            {i > 0 && t.read.starsSep}
-            {s.name}
-            {s.brightness ? `(${s.brightness})` : ''}
-            <span className={css.patternStarPalace}>{palaces[s.palaceIndex]?.name}</span>
-          </span>
-        ))}
-      </p>
-      {entry ? (
-        <div className={css.note}>
-          {short && <Markdown source={short} variant="preview" />}
-          {canOpen && <More id={id} label={t.read.patternFull} state={state} onState={onState} t={t} />}
-          {open && (
-            <div className={css.full}>
-              {entry.quotes && entry.quotes.length > 0 && (
-                <>
-                  <p className={css.fullLabel}>{t.read.quotes}</p>
-                  <p className={css.quotes}>
-                    {entry.quotes.map((q, i) => (
-                      <span key={i}>
-                        {i > 0 && <br />}
-                        {q}
-                      </span>
-                    ))}
-                  </p>
-                </>
-              )}
-              {entry.conditions && (
-                <>
-                  <p className={css.fullLabel}>{t.read.conditions}</p>
-                  <Markdown source={entry.conditions} variant="preview" />
-                </>
-              )}
-              {entry.intro && (
-                <>
-                  <p className={css.fullLabel}>{t.read.intro}</p>
-                  <Markdown source={entry.intro} variant="preview" />
-                </>
-              )}
-            </div>
-          )}
-        </div>
-      ) : (
-        <p className={css.noteNone}>{fmt(t.read.noEntry, { label: packLabel, name: hit.name })}</p>
-      )}
-    </div>
-  );
-}
-
-/**
- * 一条命中的标识：格局、本宫、口径、破格与所用的星（按星与所在宫去重排序）都相同才算同一条。
- * 同一格局在同一本宫可以有几条命中（口径不同或所用的星不同），各自成条。
- */
-function hitId(h: PatternHit): string {
-  const stars = [...new Set(h.stars.map((s) => `${s.key}@${s.palaceIndex}`))].sort();
-  return `${h.key}@${h.palaceIndex}/${h.variant ?? ''}/${h.broken ? 1 : 0}/${stars.join(',')}`;
-}
-
-/** 合并同一条命中（见 hitId）在几层里的出现，层按传入顺序（本命、大限、流年、流月）排。 */
-function mergeHits(groups: readonly { scope: 'natal' | LayerView['kind']; hits: readonly PatternHit[] }[], keep: (h: PatternHit) => boolean) {
-  const out = new Map<string, { id: string; hit: PatternHit; scopes: ('natal' | LayerView['kind'])[] }>();
-  for (const g of groups) {
-    for (const h of g.hits) {
-      if (!keep(h)) continue;
-      const id = hitId(h);
-      const same = out.get(id);
-      if (same) {
-        if (!same.scopes.includes(g.scope)) same.scopes.push(g.scope);
-      } else out.set(id, { id, hit: h, scopes: [g.scope] });
-    }
-  }
-  return [...out.values()];
-}
-
-export function ReadingPanel({
-  t,
-  kernel,
-  chart,
-  lunar,
-  view,
-  pack,
-  packLabel,
-  todayYear,
-  state,
-  onState,
-  onAsk,
-  onToast,
-}: {
-  t: Messages;
-  kernel: Kernel;
-  chart: Astrolabe;
-  lunar: LunarCalendar;
-  view: ChartView;
-  /** 本机生效的知识包组合合并后的包，与它的组合名。 */
-  pack: KnowledgePack;
-  packLabel: string;
-  /** 今天所在的农历年（流年一览标「今年」、大限一览标「现在」）。 */
-  todayYear: number;
-  state: ReadingState;
-  onState: (s: ReadingState) => void;
-  /** 「在对话里问…」：预填的问题。 */
-  onAsk: (text: string) => void;
-  onToast: (text: string) => void;
-}) {
-  const scroller = useRef<HTMLDivElement>(null);
-  const heading = useRef<HTMLHeadingElement>(null);
-  const { palaces, sel } = view;
-  const layers = useMemo(() => layerInfos(chart, lunar, view, t), [chart, lunar, view, t]);
-  const natalPatterns = useMemo(() => chart.patterns(), [chart]);
-  const decadals = useMemo(() => chart.decadalList(), [chart]);
-  const starName = (key: string) => kernel.i18n.translate(key, 'zh-CN') ?? key;
-
-  const goPalace = (i: number) => {
-    view.select(i);
-    onState({ ...state, view: 'palace' });
-    if (scroller.current) scroller.current.scrollTop = 0;
-    requestAnimationFrame(() => heading.current?.focus({ preventScroll: true }));
-  };
-
-  const views = (
-    <Segmented
-      label={t.read.viewsLabel}
-      className={css.views}
-      value={state.view}
-      options={(Object.keys(t.read.views) as ReadingView[]).map((v) => ({ value: v, label: t.read.views[v] }))}
-      onChange={(v) => onState({ ...state, view: v, yOrd: null })}
-    />
-  );
-
-  let body: ReactNode;
-  if (state.view === 'palace') {
-    const i = view.palace;
-    const p = palaces[i]!;
-    const pal = chart.palaces[i]!;
-    const inPalace = [...p.majors, ...p.minors];
-    const flyIn = inPalace.flatMap((s) => s.hua.map((h) => ({ mark: h, text: `${t.read.source[h.source]} ${s.name}${t.read.huaFull[view.hua.indexOf(h.text)] ?? h.text}` })));
-    const whereStar = (key: string) => palaces.findIndex((q) => [...q.majors, ...q.minors].some((s) => s.key === key));
-    const flyOut = pal.mutagenStarKeys.map((key, j) => ({ key, j, to: whereStar(key) }));
-    const pats = mergeHits(
-      [{ scope: 'natal', hits: natalPatterns }, ...layers.map((l) => ({ scope: l.kind, hits: l.patterns }))],
-      (h) => h.palaceIndex === i || h.stars.some((s) => s.palaceIndex === i),
-    );
-    const flows = layers.flatMap((l) => (l.item.stars?.[i] ?? []).map((s) => ({ star: s, kind: l.kind })));
-    const opposite = palaces[(i + 6) % 12]!;
-    const combo = p.majors.length === 2 ? comboOf(pack, p.majors[0]!, p.majors[1]!) : null;
-    const set = view.surround;
-    body = (
-      <>
-        <div className={css.head}>
-          <h3 ref={heading} tabIndex={-1} className={css.headName}>
-            {p.name}
-          </h3>
-          <span className={css.headGz}>{`${p.stem}${p.branch}`}</span>
-          {p.isBody && <span className={css.tag}>{t.read.body}</span>}
-          {p.isOriginal && <span className={css.tag}>{t.read.original}</span>}
-          <span className={css.headAges}>{fmt(t.read.ages, { a: p.decadal[0], b: p.decadal[1] })}</span>
-        </div>
-        {layers.length > 0 && (
-          <ul className={css.layerNames}>
-            {layers.map((l) => (
-              <li key={l.kind}>
-                <span className={css.layerKind}>{`${t.read.layerNames[l.kind]} ${l.label}`}</span>
-                <b className={css.layerName}>{`${t.read.layerNames[l.kind]}${l.view.names[i]}`}</b>
-              </li>
-            ))}
-          </ul>
-        )}
-        <section className={css.section}>
-          <h4 className={css.sectionTitle}>{t.read.hua}</h4>
-          <p className={css.huaRow}>
-            <span className={css.huaLabel}>{t.read.flyIn}</span>
-            <span className={css.huaItems}>
-              {flyIn.length ? (
-                flyIn.map((f, k) => (
-                  <span key={k} className={css.huaItem}>
-                    <Tile mark={f.mark} />
-                    {f.text}
-                  </span>
-                ))
-              ) : (
-                <span className={css.none}>{layers.length ? t.read.flyInNone : t.read.flyInNoneNatal}</span>
-              )}
-            </span>
-          </p>
-          <p className={css.huaRow}>
-            <span className={css.huaLabel}>{fmt(t.read.flyOut, { stem: p.stem })}</span>
-            <span className={css.huaItems}>
-              {flyOut.map((f) => (
-                <span key={f.j} className={css.huaItem}>
-                  {`${starName(f.key)}${t.read.huaFull[f.j]}→`}
-                  {f.to < 0 ? '—' : f.to === i ? t.read.self : (
-                    <button type="button" className={css.palaceLink} onClick={() => goPalace(f.to)}>
-                      {palaces[f.to]!.name}
-                    </button>
-                  )}
+          {text.quotes && text.quotes.length > 0 && (
+            <p className={css.quotes}>
+              {text.quotes.map((q, i) => (
+                <span key={i}>
+                  {i > 0 && <br />}
+                  {q}
                 </span>
               ))}
-            </span>
-          </p>
-        </section>
-        <section className={css.section}>
-          <h4 className={css.sectionTitle}>{t.read.majors}</h4>
-          {p.majors.length ? (
-            <ul>
-              {p.majors.map((s) => (
-                <StarItem key={s.key} t={t} star={s} pack={pack} packLabel={packLabel} id={`s-${i}-${s.key}`} state={state} onState={onState} />
-              ))}
-            </ul>
-          ) : (
-            <p className={css.none}>
-              {opposite.majors.length
-                ? fmt(t.read.empty, { palace: opposite.name, stars: opposite.majors.map((s) => s.name).join(t.read.starsSep) })
-                : fmt(t.read.emptyNoStars, { palace: opposite.name })}
             </p>
           )}
-        </section>
-        {combo && (
-          <section className={css.section}>
-            <h4 className={css.sectionTitle}>{t.read.combo}</h4>
-            <div className={css.pattern}>
-              <div className={css.patternHead}>
-                <b className={css.patternName}>{`${p.majors[0]!.name} × ${p.majors[1]!.name}`}</b>
-              </div>
-              {combo.text ? (
-                <div className={css.note}>
-                  {combo.short && <Markdown source={combo.short} variant="preview" />}
-                  {combo.long && <More id={`c-${i}`} label={t.read.full} state={state} onState={onState} t={t} />}
-                  {combo.long && state.open.has(`c-${i}`) && (
-                    <div className={css.full}>
-                      <Markdown source={combo.text} variant="preview" />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <p className={css.noteNone}>{fmt(t.read.noEntry, { label: packLabel, name: `${p.majors[0]!.name} × ${p.majors[1]!.name}` })}</p>
-              )}
-            </div>
-          </section>
-        )}
-        {p.minors.length > 0 && (
-          <section className={css.section}>
-            <h4 className={css.sectionTitle}>{t.read.minors}</h4>
-            <ul>
-              {p.minors.map((s) => (
-                <StarItem key={s.key} t={t} star={s} pack={pack} packLabel={packLabel} id={`s-${i}-${s.key}`} state={state} onState={onState} />
-              ))}
-            </ul>
-          </section>
-        )}
-        {p.adjectives.length > 0 && (
-          <section className={css.section}>
-            <h4 className={css.sectionTitle}>
-              {t.read.adjectives}
-              <span className={css.sectionAside}>{p.adjectives.map((s) => s.name).join(t.read.starsSep)}</span>
-            </h4>
-            <More id={`a-${i}`} label={t.read.seeNotes} state={state} onState={onState} t={t} />
-            {state.open.has(`a-${i}`) && (
-              <ul>
-                {p.adjectives.map((s) => (
-                  <StarItem key={s.key} t={t} star={{ key: s.key, name: s.name }} small pack={pack} packLabel={packLabel} id={`s-${i}-${s.key}`} state={state} onState={onState} />
-                ))}
-              </ul>
-            )}
-          </section>
-        )}
-        {flows.length > 0 && (
-          <section className={css.section}>
-            <h4 className={css.sectionTitle}>
-              {t.read.flows}
-              <span className={css.sectionAside}>{flows.map((f) => f.star.name).join(t.read.starsSep)}</span>
-            </h4>
-            <More id={`o-${i}`} label={t.read.seeNotes} state={state} onState={onState} t={t} />
-            {state.open.has(`o-${i}`) && (
-              <ul>
-                {flows.map((f) => (
-                  <StarItem
-                    key={`${f.kind}-${f.star.key}`}
-                    t={t}
-                    star={{ key: f.star.key, name: f.star.name }}
-                    small
-                    extra={<span className={css.brightness}>{t.read.layerNames[f.kind]}</span>}
-                    pack={pack}
-                    packLabel={packLabel}
-                    id={`o-${i}-${f.kind}-${f.star.key}`}
-                    state={state}
-                    onState={onState}
-                  />
-                ))}
-              </ul>
-            )}
-          </section>
-        )}
-        <section className={css.section}>
-          <h4 className={css.sectionTitle}>{t.read.patterns}</h4>
-          {pats.length ? (
-            pats.map((x) => (
-              <PatternItem
-                key={x.id}
-                t={t}
-                hit={x.hit}
-                scopes={x.scopes}
-                palaces={palaces}
-                pack={pack}
-                packLabel={packLabel}
-                id={`p-${i}-${x.id}`}
-                onPalace={goPalace}
-                state={state}
-                onState={onState}
-              />
-            ))
-          ) : (
-            <p className={css.none}>{layers.length ? t.read.patternsNone : t.read.patternsNoneNatal}</p>
+          {text.conditions && (
+            <>
+              <p className={css.fullLabel}>{t.read.conditions}</p>
+              <Markdown source={text.conditions} variant="preview" />
+            </>
           )}
-        </section>
-        <section className={css.section}>
-          <h4 className={css.sectionTitle}>{t.read.surround}</h4>
-          <ul className={css.surround}>
-            {set.slice(1).map((j, k) => {
-              const q = palaces[j]!;
-              return (
-                <li key={j}>
-                  <button type="button" className={css.surroundRow} onClick={() => goPalace(j)}>
-                    <small className={css.surroundRole}>{t.read.roles[k + 1]}</small>
-                    <span className={css.surroundName}>
-                      {q.name}
-                      <span className={css.surroundBranch}>{q.branch}</span>
-                    </span>
-                    <span className={css.surroundStars}>
-                      {q.majors.length
-                        ? q.majors.map((s) => (
-                            <span key={s.key} className={css.surroundStar}>
-                              {s.name}
-                              {s.hua.map((h) => (
-                                <Tile key={h.source} mark={h} />
-                              ))}
-                            </span>
-                          ))
-                        : t.read.noMajor}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-        <div className={css.foot}>
-          <button type="button" className={css.footButton} onClick={() => onAsk(fmt(t.read.askText, { palace: p.name }))}>
-            {fmt(t.read.ask, { palace: p.name })}
-          </button>
+          {text.body && <Markdown source={text.body} variant="preview" />}
         </div>
-      </>
-    );
-  } else if (state.view === 'patterns') {
-    const groups = [
-      { key: 'natal', title: t.read.layerNames.natal, hits: natalPatterns, scope: 'natal' as const },
-      ...layers.map((l) => ({ key: l.kind, title: `${t.read.layerNames[l.kind]} ${l.label}`, hits: l.patterns, scope: l.kind })),
-    ].map((g) => ({ ...g, items: mergeHits([g], () => true) }));
-    body = (
-      <>
-        {groups.map((g) => (
-          <section key={g.key} className={css.section}>
-            <h4 className={css.sectionTitle}>
-              {g.title}
-              <span className={css.sectionAside}>{fmt(t.read.groupCount, { n: g.items.length })}</span>
-            </h4>
-            {g.items.length ? (
-              g.items.map((x) => (
-                <PatternItem
-                  key={x.id}
-                  t={t}
-                  hit={x.hit}
-                  scopes={x.scopes}
-                  palaces={palaces}
-                  pack={pack}
-                  packLabel={packLabel}
-                  id={`g-${g.key}-${x.id}`}
-                  onPalace={goPalace}
-                  state={state}
-                  onState={onState}
-                />
-              ))
-            ) : (
-              <p className={css.none}>{t.read.groupNone}</p>
-            )}
-          </section>
-        ))}
-        {sel.layer === 'natal' && <p className={css.hint}>{t.read.patternsHint}</p>}
-      </>
-    );
-  } else if (state.view === 'decades') {
-    const nowAge = nominalAge(chart, todayYear);
-    const selected = sel.layer === 'natal' ? -1 : sel.decadal;
-    body = (
-      <>
-        <p className={css.hint}>{t.read.decadesHint}</p>
-        <div className={css.tableWrap}>
-          <table className={css.table}>
-            <thead>
-              <tr>
-                <th>{t.read.colAges}</th>
-                <th>{t.read.colGz}</th>
-                <th>{t.read.colDecadalSoul}</th>
-                <th>{t.read.colHua}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {decadals.map((d, k) => (
-                <tr key={d.index} className={k === selected ? css.rowOn : undefined}>
-                  <td>
-                    <button
-                      type="button"
-                      className={css.rowButton}
-                      onClick={() => {
-                        view.pickDecadal(k);
-                        onToast(fmt(t.read.toastDecade, { a: d.ageRange[0], b: d.ageRange[1] }));
-                      }}
-                    >
-                      {`${d.ageRange[0]}–${d.ageRange[1]}`}
-                    </button>
-                    {nowAge >= d.ageRange[0] && nowAge <= d.ageRange[1] && <span className={css.nowTag}>{t.read.now}</span>}
-                    <span className={css.rowSub}>{`${d.yearRange[0]}–${d.yearRange[1]}`}</span>
-                  </td>
-                  <td className={css.gz}>{`${d.heavenlyStem}${d.earthlyBranch}`}</td>
-                  <td className={css.cellSerif}>
-                    {palaces[d.index]!.name}
-                    <span className={css.branch}>{palaces[d.index]!.branch}</span>
-                  </td>
-                  <td className={css.four}>
-                    <Four keys={d.mutagenStarKeys} starName={starName} hua={view.hua} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </>
-    );
-  } else {
-    const ord = state.yOrd ?? (sel.decadal >= 0 ? sel.decadal : decadalOfAge(chart, nominalAge(chart, todayYear)));
-    const d = decadals[ord]!;
-    const years = Array.from({ length: d.yearRange[1] - d.yearRange[0] + 1 }, (_, k) => d.yearRange[0] + k);
-    const selected = sel.layer === 'yearly' || sel.layer === 'monthly' ? sel.year : null;
-    body = (
-      <>
-        <div className={css.pager}>
-          <button type="button" className={css.pagerButton} aria-label={t.read.prevDecade} disabled={ord === 0} onClick={() => onState({ ...state, yOrd: ord - 1 })}>
-            ‹
-          </button>
-          <span className={css.pagerText}>
-            <b className={css.pagerAges}>{fmt(t.read.agesShort, { a: d.ageRange[0], b: d.ageRange[1] })}</b>
-            {fmt(t.read.decadeBar, { gz: `${d.heavenlyStem}${d.earthlyBranch}`, a: d.yearRange[0], b: d.yearRange[1] })}
-          </span>
-          <button
-            type="button"
-            className={css.pagerButton}
-            aria-label={t.read.nextDecade}
-            disabled={ord === decadals.length - 1}
-            onClick={() => onState({ ...state, yOrd: ord + 1 })}
-          >
-            ›
-          </button>
-        </div>
-        <p className={css.hint}>{t.read.yearsHint}</p>
-        <div className={css.tableWrap}>
-          <table className={css.table}>
-            <thead>
-              <tr>
-                <th>{t.read.colYear}</th>
-                <th>{t.read.colGz}</th>
-                <th>{t.read.colYearlySoul}</th>
-                <th>{t.read.colHua}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {years.map((y) => {
-                const item = chart.horoscopeOfYear(y).yearly;
-                return (
-                  <tr key={y} className={y === selected ? css.rowOn : undefined}>
-                    <td>
-                      <button
-                        type="button"
-                        className={css.rowButton}
-                        onClick={() => {
-                          view.pickYear(y);
-                          onState({ ...state, yOrd: ord });
-                          onToast(fmt(t.read.toastYear, { y }));
-                        }}
-                      >
-                        {y}
-                      </button>
-                      {y === todayYear && <span className={css.nowTag}>{t.read.thisYear}</span>}
-                      <span className={css.rowSub}>{fmt(t.read.nominalAge, { n: nominalAge(chart, y) })}</span>
-                    </td>
-                    <td className={css.gz}>{`${item.heavenlyStem}${item.earthlyBranch}`}</td>
-                    <td className={css.cellSerif}>
-                      {palaces[item.index]!.name}
-                      <span className={css.branch}>{palaces[item.index]!.branch}</span>
-                    </td>
-                    <td className={css.four}>
-                      <Four keys={item.mutagenStarKeys} starName={starName} hua={view.hua} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </>
-    );
-  }
-
-  return (
-    <div className={css.reading}>
-      <div ref={scroller} className={css.scroller}>
-        {views}
-        <div className={css.body}>{body}</div>
-      </div>
+      )}
     </div>
   );
 }
 
-/** 「天梁禄 紫微权 ……」：一项一组不断开。 */
-function Four({ keys, starName, hua }: { keys: readonly string[]; starName: (key: string) => string; hua: readonly string[] }) {
+const noteId = (n: NoteRef) => (n.kind === 'combo' ? `c:${n.a.key}+${n.b.key}` : `${n.kind}:${n.key}`);
+
+/* ── 左栏 ── */
+
+/** 「看什么」：生效组合里的主题。 */
+export function TopicNav({
+  t,
+  className,
+  topics,
+  topic,
+  onTopic,
+}: {
+  t: Messages;
+  className: string;
+  topics: readonly TopicEntry[];
+  topic: string;
+  onTopic: (slug: string) => void;
+}) {
+  const id = useId();
   return (
-    <>
-      {keys.map((k, j) => (
-        <span key={j} className={css.fourItem}>
-          {starName(k)}
-          <i className={css.fourMark}>{hua[j]}</i>
-        </span>
-      ))}
-    </>
+    <section className={`${css.nav} ${className}`} aria-labelledby={id}>
+      <h2 id={id} className={css.navTitle}>
+        {t.read.topics}
+      </h2>
+      <div className={css.topicGrid} role="group" aria-label={t.read.topicsLabel}>
+        {topics.map((x) => (
+          <button key={x.slug} type="button" className={css.topicButton} aria-pressed={x.slug === topic} onClick={() => onTopic(x.slug)}>
+            {x.title ?? x.slug}
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
-/** 同宫两颗主星的组合释义：取任一颗的组合里写了对方的那一条；`short` 是摘要层，`long` 为正文长于摘要层。 */
-function comboOf(pack: KnowledgePack, a: StarView, b: StarView): { text: string | null; short: string | null; long: boolean } {
-  for (const [x, y] of [
-    [a, b],
-    [b, a],
-  ] as const) {
-    const e = pack.star(x.key);
-    const text = e?.combinations[y.key];
-    if (text) {
-      const summary = e?.combinationSummaries[y.key];
-      const short = summary ?? (displayWidth(text) <= SUMMARY_WIDTH ? text : null);
-      return { text, short, long: !!summary || displayWidth(text) > SUMMARY_WIDTH };
-    }
-  }
-  return { text: null, short: null, long: false };
+export type WhenKey = 'life' | 'decade' | 'year';
+
+/** 「看哪段时间」：一生、这十年、今年；下面是展开运限选择的按钮与「盘上是……」。 */
+export function WhenNav({
+  t,
+  className,
+  current,
+  decadeSub,
+  yearSub,
+  canDecade,
+  canYear,
+  nowLabel,
+  moreOpen,
+  moreId,
+  onWhen,
+  onMore,
+}: {
+  t: Messages;
+  className: string;
+  current: WhenKey | null;
+  decadeSub: string;
+  yearSub: string;
+  canDecade: boolean;
+  canYear: boolean;
+  /** 三格都不按下时盘上是哪一段；按下其中一格时为 null。 */
+  nowLabel: string | null;
+  moreOpen: boolean;
+  moreId: string;
+  onWhen: (k: WhenKey) => void;
+  onMore: () => void;
+}) {
+  const id = useId();
+  const cells: { k: WhenKey; label: string; sub: string; ok: boolean }[] = [
+    { k: 'life', label: t.read.whenLife, sub: t.read.whenLifeSub, ok: true },
+    { k: 'decade', label: t.read.whenDecade, sub: decadeSub, ok: canDecade },
+    { k: 'year', label: t.read.whenYear, sub: yearSub, ok: canYear },
+  ];
+  return (
+    <section className={`${css.nav} ${className}`} aria-labelledby={id}>
+      <h2 id={id} className={css.navTitle}>
+        {t.read.when}
+      </h2>
+      <div className={css.when} role="group" aria-label={t.read.whenLabel}>
+        {cells.map((c) => (
+          <button key={c.k} type="button" className={css.whenButton} aria-pressed={current === c.k} disabled={!c.ok} onClick={() => onWhen(c.k)} data-when={c.k}>
+            {c.label}
+            <small className={css.whenSub}>{c.sub}</small>
+          </button>
+        ))}
+      </div>
+      {nowLabel && <p className={css.whenNow}>{fmt(t.read.whenNow, { label: nowLabel })}</p>}
+      <button type="button" className={css.more} aria-expanded={moreOpen} aria-controls={moreId} onClick={onMore}>
+        {t.read.moreLayer}
+        <span className={css.caret}>
+          <CaretIcon />
+        </span>
+      </button>
+    </section>
+  );
 }
+
+/* ── 右栏 ── */
+
+/** 一步的小盘（<1024）：标出这一步看的宫，点了到大盘上看。 */
+function MiniBoard({ t, palaces, step, onSee }: { t: Messages; palaces: readonly PalaceView[]; step: Step; onSee: () => void }) {
+  const names = step.hl.map((i) => palaceFull(palaces[i]!.name, t));
+  return (
+    <button type="button" className={css.mini} aria-label={fmt(t.read.miniLabel, { list: names.join(t.read.sep) || t.read.miniNone })} onClick={onSee}>
+      {palaces.map((p) => (
+        <span
+          key={p.index}
+          aria-hidden="true"
+          className={css.miniCell}
+          data-on={step.hl.includes(p.index) ? '' : undefined}
+          data-focus={p.index === step.focus ? '' : undefined}
+          style={{ gridArea: `${p.cell[0] + 1} / ${p.cell[1] + 1}` }}
+        >
+          {p.name.slice(0, 2)}
+        </span>
+      ))}
+    </button>
+  );
+}
+
+/** 三方四正、四化、格局三步的步名本身是术语。 */
+const STEP_TERMS: readonly (TermId | null)[] = [null, 'sanFang', 'siHua', 'geJu', null];
+
+export interface AskInfo {
+  question: string;
+  onQuestion: (q: string) => void;
+  /** 复制的材料（整个主题）。 */
+  prompt: string;
+  /** 概要里「、2026 年（虚岁 27）的运限」一段；看一生时为空。 */
+  whenPart: string;
+  /** 填过 Key 时的服务名与模型；没有为 null。 */
+  key: { service: string; model: string } | null;
+  onCopy: (site: string) => void;
+  onViewFull: () => void;
+  onAskHere: () => void;
+}
+
+/** 聊天网站：复制材料后在新标签页打开。 */
+const SITES: readonly { name: Record<Lang, string>; url: string }[] = [
+  { name: { zh: 'DeepSeek', en: 'DeepSeek' }, url: 'https://chat.deepseek.com/' },
+  { name: { zh: '豆包', en: 'Doubao' }, url: 'https://www.doubao.com/chat/' },
+  { name: { zh: 'Kimi', en: 'Kimi' }, url: 'https://www.kimi.com/' },
+  { name: { zh: 'ChatGPT', en: 'ChatGPT' }, url: 'https://chatgpt.com/' },
+  { name: { zh: 'Claude', en: 'Claude' }, url: 'https://claude.ai/new' },
+];
+
+export interface ReadingProps {
+  t: Messages;
+  lang: Lang;
+  pack: KnowledgePack;
+  topic: TopicEntry;
+  /** 选宫句（已拼好的带术语文字）。 */
+  selection: Rich;
+  whenLabel: string;
+  steps: readonly Step[];
+  method: readonly MethodStep[];
+  palaces: readonly PalaceView[];
+  step: number;
+  onSee: (k: number) => void;
+  open: ReadonlySet<string>;
+  onToggle: (id: string) => void;
+  onWhen: (k: WhenKey) => void;
+  onAskStep: (k: number) => void;
+  ask: AskInfo;
+  /** 页脚：释义来源一句、暂用默认包的说明、换一套释义、完整提示词、复制链接。 */
+  footer: ReactNode;
+  titleRef: RefObject<HTMLHeadingElement | null>;
+  askRef: RefObject<HTMLTextAreaElement | null>;
+  stepRefs: RefObject<(HTMLLIElement | null)[]>;
+  onJumpAsk: () => void;
+}
+
+/** 右栏的阅读：头部、五步、问 AI、页脚。 */
+export function Reading(p: ReadingProps) {
+  const { t, lang, pack, topic, steps, method, palaces, step, open, ask } = p;
+  const name = topic.title ?? topic.slug;
+  const askId = useId();
+  return (
+    <article className={css.reading}>
+      <header className={css.head}>
+        <div className={css.headTop}>
+          <p className={css.eyebrow}>{p.whenLabel}</p>
+          <button type="button" className={css.jumpAsk} onClick={p.onJumpAsk}>
+            {t.read.jumpAsk}
+          </button>
+        </div>
+        <h2 ref={p.titleRef} className={css.title} tabIndex={-1}>
+          {name}
+        </h2>
+        <p className={css.sel}>
+          <RichText t={t} pack={pack} parts={p.selection} />
+        </p>
+        {topic.intro && (
+          <div className={css.intro}>
+            <Markdown source={topic.intro} variant="preview" />
+          </div>
+        )}
+      </header>
+      <ol className={css.steps} aria-label={fmt(t.read.stepsLabel, { topic: name })}>
+        {steps.map((s, k) => {
+          const m = method[k]!;
+          const termId = STEP_TERMS[k];
+          return (
+            <li
+              key={k}
+              ref={(el) => {
+                p.stepRefs.current[k] = el;
+              }}
+              className={css.step}
+              data-on={step === k ? '' : undefined}
+            >
+              <div className={css.stepHead}>
+                <MiniBoard t={t} palaces={palaces} step={s} onSee={() => p.onSee(k)} />
+                <h3 className={css.stepTitle} tabIndex={-1} data-step={k}>
+                  {termId ? <Term t={t} pack={pack} slug={TERM_SLUGS[termId]} text={m.title} /> : m.title}
+                </h3>
+                <button type="button" className={css.see} aria-pressed={step === k} onClick={() => p.onSee(k)}>
+                  {t.read.seeOnBoard}
+                </button>
+              </div>
+              <div className={css.facts}>
+                {s.facts.map((f, i) => (
+                  <p key={i}>
+                    <RichText t={t} pack={pack} parts={f} />
+                  </p>
+                ))}
+              </div>
+              {s.when && (
+                <div className={css.acts}>
+                  <button type="button" className={`${controls.ghost} ${css.actButton}`} disabled={!s.when.decade} onClick={() => p.onWhen('decade')}>
+                    {fmt(t.read.seeDecade, { topic: name })}
+                  </button>
+                  <button type="button" className={`${controls.ghost} ${css.actButton}`} disabled={!s.when.year} onClick={() => p.onWhen('year')}>
+                    {fmt(t.read.seeYear, { topic: name })}
+                  </button>
+                </div>
+              )}
+              <p className={css.how}>
+                <span className={css.howLabel}>{t.read.how}</span>
+                {m.how}
+              </p>
+              {(s.notes.length > 0 || s.groups.length > 0) && (
+                <div className={css.notes}>
+                  <p className={css.notesLabel}>{t.read.notes}</p>
+                  {s.notes.map((n) => (
+                    <NoteBlock key={noteId(n)} t={t} pack={pack} note={n} id={`${k}:${noteId(n)}`} open={open} onToggle={p.onToggle} />
+                  ))}
+                  {s.groups.map((g) => {
+                    const gid = `${k}:${g.id}`;
+                    return (
+                      <div key={g.id} className={css.group}>
+                        <MoreButton open={open.has(gid)} label={g.title} t={t} onToggle={() => p.onToggle(gid)} className={css.groupButton} />
+                        {open.has(gid) && g.notes.map((n) => <NoteBlock key={noteId(n)} t={t} pack={pack} note={n} id={`${gid}:${noteId(n)}`} open={open} onToggle={p.onToggle} />)}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <button type="button" className={css.askStep} onClick={() => p.onAskStep(k)}>
+                {t.read.askStep}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+      <section className={css.ask} aria-labelledby={askId} id="ask-ai">
+        <h3 id={askId} className={css.askTitle} tabIndex={-1}>
+          {t.read.askTitle}
+        </h3>
+        <label className={css.askField}>
+          <span className={css.askLabel}>{t.read.askLabel}</span>
+          <textarea
+            ref={p.askRef}
+            className={css.askInput}
+            rows={3}
+            value={ask.question}
+            placeholder={t.read.askPlaceholders[topic.slug] ?? fmt(t.read.askPlaceholder, { topic: name })}
+            onChange={(e) => ask.onQuestion(e.target.value)}
+          />
+        </label>
+        <p className={css.askSummary}>
+          {fmtNodes(t.read.askSummary, {
+            topic: name,
+            when: ask.whenPart,
+            n: <span className={css.askCount}>{[...ask.prompt].length.toLocaleString(lang === 'zh' ? 'zh-CN' : 'en')}</span>,
+          })}
+          <button type="button" className={css.inline} onClick={ask.onViewFull}>
+            {t.read.viewFull}
+          </button>
+        </p>
+        <p className={css.askSub}>{t.read.copyOpen}</p>
+        <div className={css.sites}>
+          {SITES.map((s) => (
+            <a key={s.url} className={`${controls.ghost} ${css.site}`} href={s.url} target="_blank" rel="noopener noreferrer" onClick={() => ask.onCopy(s.name[lang])}>
+              {s.name[lang]}
+            </a>
+          ))}
+        </div>
+        <div className={css.inPage}>
+          <p className={css.inPageText}>{ask.key ? fmt(t.read.inPageKey, { service: ask.key.service }) : t.read.inPageNoKey}</p>
+          <button type="button" className={`${controls.ghost} ${css.actButton}`} onClick={ask.onAskHere}>
+            {ask.key ? fmt(t.read.askHereModel, { model: ask.key.model }) : t.read.askHere}
+          </button>
+        </div>
+      </section>
+      {p.footer}
+    </article>
+  );
+}
+
+/** 没有盘时的右栏：未排盘、正在排盘、排盘程序没装上。 */
+export function ReadingEmpty({ title, body }: { title: string; body: string }) {
+  return (
+    <div className={css.empty}>
+      <h3 className={css.emptyTitle}>{title}</h3>
+      <p className={css.emptyBody}>{body}</p>
+    </div>
+  );
+}
+
+/** 手机底栏（<1024）：左边选主题，右边到问 AI。 */
+export function ReadingBar({ t, topics, topic, onTopic, onAsk }: { t: Messages; topics: readonly TopicEntry[]; topic: TopicEntry; onTopic: (slug: string) => void; onAsk: () => void }) {
+  return (
+    <div className={css.bar}>
+      <Picker
+        label={t.read.topics}
+        title={t.read.topics}
+        width={300}
+        placeholder=""
+        triggerClass={`${controls.ghost} ${css.barTopic}`}
+        value={
+          <>
+            <span className={css.barTopicLabel}>{t.read.barTopic} </span>
+            <b className={css.barTopicName}>{topic.title ?? topic.slug}</b>
+          </>
+        }
+      >
+        {(close) => (
+          <OptionGrid
+            label={t.read.topicsLabel}
+            columns={3}
+            autoFocus
+            options={topics.map((x) => ({ key: x.slug, text: x.title ?? x.slug, content: <b>{x.title ?? x.slug}</b> }))}
+            selected={topic.slug}
+            onSelect={(slug) => {
+              close();
+              onTopic(slug);
+            }}
+          />
+        )}
+      </Picker>
+      <button type="button" className={`${controls.button} ${css.barAsk}`} onClick={onAsk}>
+        {t.read.jumpAsk}
+      </button>
+    </div>
+  );
+}
+

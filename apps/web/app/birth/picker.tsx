@@ -40,6 +40,7 @@ export function Picker({
   onKeyDownCapture,
   onOpenChange,
   triggerClass,
+  bare = false,
   children,
 }: {
   /** 字段名（「出生年份」）；触发钮的无障碍名称是字段名加当前值。 */
@@ -63,6 +64,8 @@ export function Picker({
   onOpenChange?: (open: boolean) => void;
   /** 触发钮的附加样式（流年选择条里的居中触发钮）。 */
   triggerClass?: string;
+  /** 触发钮只用 `triggerClass`、不带框与下箭头（阅读页脚的文字按钮）。 */
+  bare?: boolean;
   children: (close: () => void) => ReactNode;
 }) {
   const t = useMessages();
@@ -107,7 +110,7 @@ export function Picker({
   return (
     <DialogTrigger onOpenChange={onOpenChange}>
       <Button
-        className={triggerClass ? `${css.trigger} ${triggerClass}` : css.trigger}
+        className={bare ? triggerClass : triggerClass ? `${css.trigger} ${triggerClass}` : css.trigger}
         aria-labelledby={value === null ? labelId : `${labelId} ${valueId}`}
         isDisabled={isDisabled}
         aria-describedby={errorId}
@@ -119,9 +122,11 @@ export function Picker({
         <span id={valueId} className={value === null ? css.placeholder : css.triggerValue}>
           {value ?? placeholder}
         </span>
-        <span className={css.caret}>
-          <CaretIcon />
-        </span>
+        {!bare && (
+          <span className={css.caret}>
+            <CaretIcon />
+          </span>
+        )}
       </Button>
       {narrow ? (
         <ModalOverlay isDismissable className={css.overlay}>

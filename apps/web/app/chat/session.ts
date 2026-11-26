@@ -17,10 +17,10 @@ import {
 } from './conversation';
 import { instructions } from './instructions';
 import { type ChatSettings, PROVIDERS, type ProviderId } from './providers';
-import { type ChatSnapshot, type SideTab, openChatDb } from './store';
+import { type ChatSnapshot, openChatDb } from './store';
 
 /**
- * 对话在页面里的状态：本机对话库（设置、页签、对话），加上内存里的这几样，右栏与全屏面板共用一份，
+ * 对话在页面里的状态：本机对话库（设置、对话），加上内存里的这几样，右栏与全屏面板共用一份，
  * 窗口跨过断点、面板开合时不丢：
  * - 正在生成的那段对话（含生成中的回答）与它的停止开关；同一时刻只有一段在生成；
  * - 当前看的是哪段对话；
@@ -62,7 +62,7 @@ interface SessionState {
   /** 当前对话；null 为这张盘上还没发问的新对话。 */
   currentId: string | null;
   drafts: Readonly<Record<string, string>>;
-  /** 平板与手机上的全屏面板是否开着。 */
+  /** 对话是否开着：≥1024 在右栏里，更窄时是全屏面板。 */
   sheet: boolean;
   drawer: DrawerKind;
   setup: SetupDraft;
@@ -127,15 +127,17 @@ export function setEditing(id: string | null): void {
 }
 
 /**
- * 把一句问题填进这张盘当前对话的输入框（不发送）：看盘里的「在对话里问…」用。
- * 输入框里已有没发出的字时接在后面另起一行，不覆盖。
+ * 把一句问题填进这张盘当前对话的输入框（不发送）：阅读里「在这页问」用。
+ * 输入框里已有没发出的字时接在后面另起一行，不覆盖；已经以这句结尾时不再重复。
+ * `ifEmpty`：只在输入框是空的时候填（替用户拟的默认问题，不往用户写的字后面接）。
  */
-export function prefillQuestion(chart: string, text: string): void {
+export function prefillQuestion(chart: string, text: string, { ifEmpty = false }: { ifEmpty?: boolean } = {}): void {
   const now = db.current();
   const conv = shownConversation(session, now.status === 'ready' ? now.conversations : [], chart);
   const key = draftKey(conv?.id ?? null, chart);
-  const draft = session.drafts[key] ?? '';
-  setDraft(key, draft.trim() ? `${draft.trimEnd()}\n${text}` : text);
+  const draft = (session.drafts[key] ?? '').trimEnd();
+  if (!draft.trim()) setDraft(key, text);
+  else if (!ifEmpty && !draft.endsWith(text)) setDraft(key, `${draft}\n${text}`);
 }
 
 export function selectConversation(id: string | null): void {
@@ -169,7 +171,6 @@ async function write(run: (c: Parameters<Parameters<typeof db.mutate>[0]>[0]) =>
 }
 
 export const saveSettings = (s: ChatSettings | null) => write((c) => c.saveSettings(s));
-export const saveTab = (tab: SideTab) => write((c) => c.saveTab(tab));
 export const deleteConversation = (id: string) => write((c) => c.deleteConversation(id));
 export const deleteAllConversations = () => write((c) => c.deleteAllConversations());
 export const putConversation = (conv: Conversation) => write((c) => c.putConversation(conv));

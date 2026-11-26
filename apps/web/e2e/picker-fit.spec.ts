@@ -1,4 +1,4 @@
-import { type Locator, expect, test } from './test';
+import { type Locator, expect, layerTab, test } from './test';
 
 /**
  * 选择器弹层在矮窗口里：弹层整个在视口内、内容区能滚到最后一项、选项文字不溢出各自的边框；
@@ -51,6 +51,7 @@ for (const [width, height] of [
     await page.setViewportSize({ width, height });
     await page.goto('/zh/chart#cal=solar&d=2000-8-16&p=night&h=2&g=f');
     await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
+    await (await layerTab(page, '流年')).click();
     await page.locator('button[aria-expanded="false"]').filter({ hasText: '修改' }).click();
     for (const name of TRIGGERS) {
       const trigger = page.getByRole('button', { name });
