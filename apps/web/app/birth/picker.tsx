@@ -188,7 +188,11 @@ export function OptionGrid<K extends string | number>({
   /** 列表式选项：一行里左名右注。 */
   row?: boolean;
 }) {
-  const byKey = new Map(options.map((o) => [String(o.key), o.key]));
+  // 集合的键用序号，不用选项的值：React Aria 会把键拼进选项的 DOM id，而值可能是生辰（年月日）或盘的地址参数，
+  // 统计脚本会上报元素选择器。
+  const byIndex = new Map(options.map((o, i) => [String(i), o.key]));
+  const indexOf = (k: K) => options.findIndex((o) => o.key === k);
+  const sel = selected === null ? -1 : indexOf(selected);
   return (
     <ListBox
       ref={listRef}
@@ -196,7 +200,7 @@ export function OptionGrid<K extends string | number>({
       layout="grid"
       selectionMode="single"
       escapeKeyBehavior="none"
-      selectedKeys={selected === null ? [] : [selected]}
+      selectedKeys={sel < 0 ? [] : [String(sel)]}
       onSelectionChange={(keys) => {
         if (keys === 'all') throw new Error('单选网格不会选中全部');
         const [first] = keys;
@@ -205,19 +209,19 @@ export function OptionGrid<K extends string | number>({
           onSelect(selected);
           return;
         }
-        const key = byKey.get(String(first));
+        const key = byIndex.get(String(first));
         if (key === undefined) throw new Error(`选中的项不在网格里：${String(first)}`);
         onSelect(key);
       }}
-      disabledKeys={options.filter((o) => o.disabledReason !== undefined).map((o) => o.key)}
+      disabledKeys={options.flatMap((o, i) => (o.disabledReason !== undefined ? [String(i)] : []))}
       autoFocus={autoFocus ? 'first' : false}
       className={css.options}
       style={assignInlineVars({ [css.columns]: String(columns) })}
     >
       {options.map((o, i) => (
         <ListBoxItem
-          key={o.key}
-          id={o.key}
+          key={i}
+          id={String(i)}
           textValue={o.text}
           aria-label={o.label}
           className={[css.option, row ? css.optionRow : '', o.now ? css.optionNow : ''].filter(Boolean).join(' ')}

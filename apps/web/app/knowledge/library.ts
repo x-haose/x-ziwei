@@ -14,6 +14,19 @@ export type Counts = Record<Section, number>;
 /** 包的 JSON 原文（已通过内核读入）。 */
 export type PackRaw = Record<string, unknown>;
 
+/**
+ * 编辑本机包的草稿与包库对不上：`packGone` 那个包已被删除；`stale` 包库里那一版不是开始编辑时的那一版
+ * （别的标签页保存过，或删掉后重新导入了同标识的包）。新包草稿与对得上的草稿为 null。
+ */
+export type DraftConflict = 'packGone' | 'stale';
+
+export function draftConflict(d: Draft, packs: readonly Pack[]): DraftConflict | null {
+  if (d.editing === null) return null;
+  const p = packs.find((x) => x.id === d.editing);
+  if (!p) return 'packGone';
+  return JSON.stringify(p.raw) === JSON.stringify(d.snapshot) ? null : 'stale';
+}
+
 /** 存在本机的包：原文、导入时间与在编辑器里最后保存的时间（毫秒时间戳；没在编辑器里保存过为 undefined）。 */
 export interface StoredPack {
   id: string;

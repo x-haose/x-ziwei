@@ -3,7 +3,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_PACK_ID, DEFAULT_USE, type Draft, type Use } from './library';
 import { StorageNewerError, StorageUnavailableError } from '../lib/local-db';
-import { DraftGoneError, LibraryConflictError, openLibrary } from './store';
+import { DraftConflictError, DraftGoneError, LibraryConflictError, openLibrary } from './store';
 
 /** 测试里只有一个连接，不会遇到版本协调。 */
 const NO_EVENTS = { onBlocked: () => undefined, onSuperseded: () => undefined };
@@ -213,45 +213,54 @@ describe('与其他标签页的版本协调', () => {
   });
 
   describe('编辑器的草稿', () => {
-    const draft = (id: string, raw: Record<string, unknown>, editing: string | null = null): Draft => ({ id, raw, editing, snapshot: null, createdAt: 1, updatedAt: 1 });
+    const draft = (id: string, raw: Record<string, unknown>, editing: string | null = null, snapshot: Record<string, unknown> | null = null): Draft => ({ id, raw, editing, snapshot, createdAt: 1, updatedAt: 1 });
 
     it('草稿不进包库；保存新包时存入包库、草稿改为与包库一致，要求时一并放到生效组合最上面', async () => {
       const lib = await openLibrary(NO_EVENTS);
-      await lib.putDraft(draft('d1', overlay('mine')));
+      await lib.createDraft(draft('d1', overlay('mine')));
       let snap = await lib.load();
       expect(snap.packs).toEqual([]);
-      expect(snap.drafts.map((d) => d.id)).toEqual(['d1']);
-      snap = await lib.saveDraft(draft('d1', overlay('mine')), 5, true);
+      snap = await lib.saveDraft('d1', overlay('mine'), 1, 5, true);
       expect(snap.packs.map((p) => [p.id, p.importedAt, p.savedAt])).toEqual([['mine', 5, 5]]);
-      // 草稿留着，改为编辑这个包、与包库一致。
-      expect(snap.drafts.map((d) => [d.id, d.editing, JSON.stringify(d.snapshot) === JSON.stringify(d.raw)])).toEqual([['d1', 'mine', true]]);
+      expect(snap.drafts.map((d) => [d.id, d.editing, d.updatedAt, JSON.stringify(d.snapshot) === JSON.stringify(d.raw)])).toEqual([['d1', 'mine', 5, true]]);
       expect(snap.use.layers).toEqual([DEFAULT_PACK_ID, 'mine']);
       lib.close();
     });
 
-    it('保存编辑本机的包：同标识替换原文，导入时间不变；新包的标识与本机的包重复、草稿已不在时拒绝且库不变', async () => {
+    it('写草稿以库里当前版本为准：别的标签页改过（更新时间对不上）时报冲突、不写', async () => {
       const lib = await openLibrary(NO_EVENTS);
-      await lib.add(overlay('mine'), 1);
-      const edited = { ...overlay('mine'), version: '2' };
-      await lib.putDraft(draft('d1', edited, 'mine'));
-      let snap = await lib.saveDraft(draft('d1', edited, 'mine'), 9, false);
-      expect(snap.packs.map((p) => [p.id, p.version, p.importedAt, p.savedAt])).toEqual([['mine', '2', 1, 9]]);
-      expect(snap.use).toEqual(DEFAULT_USE);
-
-      await lib.putDraft(draft('d2', overlay('mine')));
-      await expect(lib.saveDraft(draft('d2', overlay('mine')), 10, false)).rejects.toBeInstanceOf(LibraryConflictError);
-      await expect(lib.saveDraft(draft('gone', overlay('other')), 10, false)).rejects.toBeInstanceOf(DraftGoneError);
-      snap = await lib.load();
-      expect(snap.packs.map((p) => [p.id, p.version])).toEqual([['mine', '2']]);
-      expect(snap.drafts.map((d) => d.id)).toEqual(['d1', 'd2']);
+      await lib.createDraft(draft('d1', overlay('mine')));
+      await lib.writeDraft('d1', { ...overlay('mine'), version: '2' }, 1, 7);
+      await expect(lib.writeDraft('d1', { ...overlay('mine'), version: '3' }, 1, 8)).rejects.toMatchObject({ kind: 'edited' });
+      await expect(lib.saveDraft('d1', overlay('mine'), 1, 9, false)).rejects.toBeInstanceOf(DraftConflictError);
+      await expect(lib.writeDraft('gone', overlay('x'), 1, 9)).rejects.toBeInstanceOf(DraftGoneError);
+      const snap = await lib.load();
+      expect(snap.drafts.map((d) => [d.updatedAt, d.raw.version])).toEqual([[7, '2']]);
+      expect(snap.packs).toEqual([]);
       lib.close();
     });
 
-    it('丢弃草稿不动包库', async () => {
+    it('编辑的包被删除后草稿留着；重新导入同标识的包后，旧草稿不能覆盖它', async () => {
       const lib = await openLibrary(NO_EVENTS);
       await lib.add(overlay('mine'), 1);
-      await lib.putDraft(draft('d1', overlay('mine'), 'mine'));
-      const snap = await lib.deleteDraft('d1');
+      await lib.createDraft(draft('d1', { ...overlay('mine'), version: '2' }, 'mine', overlay('mine')));
+      await lib.remove('mine');
+      let snap = await lib.load();
+      expect(snap.drafts.map((d) => d.id)).toEqual(['d1']);
+      await expect(lib.saveDraft('d1', { ...overlay('mine'), version: '2' }, 1, 5, false)).rejects.toMatchObject({ kind: 'packGone' });
+      await lib.add({ ...overlay('mine'), version: 'imported' }, 6);
+      await expect(lib.saveDraft('d1', { ...overlay('mine'), version: '2' }, 1, 7, false)).rejects.toMatchObject({ kind: 'stale' });
+      snap = await lib.load();
+      expect(snap.packs.map((p) => [p.id, p.version])).toEqual([['mine', 'imported']]);
+      lib.close();
+    });
+
+    it('新包的标识与本机的包重复时拒绝且库不变；丢弃草稿不动包库', async () => {
+      const lib = await openLibrary(NO_EVENTS);
+      await lib.add(overlay('mine'), 1);
+      await lib.createDraft(draft('d2', overlay('mine')));
+      await expect(lib.saveDraft('d2', overlay('mine'), 1, 10, false)).rejects.toBeInstanceOf(LibraryConflictError);
+      const snap = await lib.deleteDraft('d2');
       expect(snap.drafts).toEqual([]);
       expect(snap.packs.map((p) => p.id)).toEqual(['mine']);
       lib.close();

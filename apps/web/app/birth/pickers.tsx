@@ -45,11 +45,12 @@ export function YearPicker({
 
   useEffect(() => {
     if (focusYear === null) return;
-    const el = listRef.current?.querySelector<HTMLElement>(`[data-key="${focusYear}"]`);
+    // 网格的键是选项序号（见 OptionGrid），按这一页的年份找到序号。
+    const el = listRef.current?.querySelector<HTMLElement>(`[data-key="${yearsOfDecade(page).indexOf(focusYear)}"]`);
     if (!el) throw new Error(`年份 ${focusYear} 不在当前页`);
     el.focus();
     setFocusYear(null);
-  }, [focusYear]);
+  }, [focusYear, page]);
 
   const onKeys = (e: KeyboardEvent) => {
     if (!/^\d$/.test(e.key)) return;

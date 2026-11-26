@@ -187,6 +187,7 @@ function ChartBody({
   mark,
   change,
   libNote,
+  editable,
   hash,
   onOpenChart,
 }: {
@@ -206,6 +207,8 @@ function ChartBody({
   change: ReactNode;
   /** 释义暂用默认包的原因；用着生效组合时为 null。 */
   libNote: string | null;
+  /** 本机包库读好了、能写草稿（「改写这一条」只在这时出现）。 */
+  editable: boolean;
   /** 地址 `#` 之后的生辰参数（不含 `#`）。 */
   hash: string;
   onOpenChart: (hash: string) => void;
@@ -584,7 +587,7 @@ function ChartBody({
     </div>
   );
 
-  /** 「改写这一条」到编辑器的入口（生辰只在 `#` 之后）。 */
+  /** 「改写这一条」到编辑器的入口（生辰只在 `#` 之后）；本机包库不能用时没有这个入口（草稿存不下）。 */
   const rewriteHref = (section: string, key: string, combo?: string) => {
     const q = new URLSearchParams({ entry: `${section}/${key}` });
     if (combo) q.set('combo', combo);
@@ -592,7 +595,7 @@ function ChartBody({
   };
 
   return (
-    <RewriteContext.Provider value={rewriteHref}>
+    <RewriteContext.Provider value={editable ? rewriteHref : null}>
       {topic && <TopicNav t={t} className={css.topics} topics={topics} topic={topic.slug} onTopic={(slug) => pickTopic(slug, false)} />}
       <WhenNav
         t={t}
@@ -814,6 +817,7 @@ export function ChartPage() {
           mark={mark}
           change={change}
           libNote={libraryNote(lib, t)}
+          editable={lib.status === 'ready'}
           hash={bare}
           onOpenChart={openChart}
         />

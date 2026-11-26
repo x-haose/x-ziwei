@@ -3,7 +3,9 @@ import { type OpenEvents, openLocalDb, writing } from '../lib/local-db';
 import {
   DEFAULT_USE,
   type Draft,
-  type LibraryProblem,
+  type DraftConflict,
+  draftConflict,
+    type LibraryProblem,
   type Pack,
   type PackRaw,
   type StoredPack,
@@ -53,6 +55,17 @@ export interface Snapshot {
   use: Use;
   drafts: Draft[];
   repaired: string[];
+}
+
+/**
+ * 草稿与库里的数据对不上，这次写入没有发生：`edited` 别的标签页改过这份草稿；`stale` 包库里这个包已不是开始编辑时的那一版；
+ * `packGone` 编辑的包已被删除。
+ */
+export class DraftConflictError extends Error {
+  constructor(readonly kind: 'edited' | DraftConflict) {
+    super(`草稿与库里的数据对不上：${kind}`);
+    this.name = 'DraftConflictError';
+  }
 }
 
 /** 要保存的草稿不在库里了（别的标签页删除或已保存了它）；这次写入没有发生。 */
@@ -148,9 +161,24 @@ export class Library {
   }
 
   /** 存一份草稿（新建或覆盖同标识的那份）。 */
-  async putDraft(draft: Draft): Promise<Snapshot> {
+  /** 新建一份草稿。 */
+  async createDraft(draft: Draft): Promise<Snapshot> {
     return this.change(async (tx, now) => {
-      await tx.objectStore('drafts').put(draft);
+      await tx.objectStore('drafts').add(draft);
+      return now.use;
+    });
+  }
+
+  /**
+   * 写下草稿的原文。以库里此刻的草稿为准，只换原文与更新时间；库里那份的更新时间不是 `known`（本页上次读到或写下的版本）时，
+   * 说明别的标签页改过它，报 `DraftConflictError('edited')`、不写。草稿已不在时报 `DraftGoneError`。
+   */
+  async writeDraft(id: string, raw: PackRaw, known: number, at: number): Promise<Snapshot> {
+    return this.change(async (tx, now) => {
+      const cur = await tx.objectStore('drafts').get(id);
+      if (!cur) throw new DraftGoneError(id);
+      if (cur.updatedAt !== known) throw new DraftConflictError('edited');
+      await tx.objectStore('drafts').put({ ...cur, raw, updatedAt: at });
       return now.use;
     });
   }
@@ -165,22 +193,28 @@ export class Library {
 
   /**
    * 把草稿存进包库（设计规范 20.11）；同一个事务里草稿改为编辑这个包、与包库一致，`use` 为真时再把它放到生效组合的最上面（`addLayer`）。
-   * 按库里此刻的数据再查一遍：草稿还在（不在时报 `DraftGoneError`）；新包的标识不与本机已有的包重复，编辑本机包时标识不变
-   * 且那个包还在（不合时报 `LibraryConflictError`）。包格式的检查在调用之前由内核做过。
+   * 按库里此刻的数据再查一遍，不合时什么都不写：
+   * - 草稿不在（`DraftGoneError`），或别的标签页改过它（`DraftConflictError('edited')`）；
+   * - 编辑本机的包时：那个包已被删除（`'packGone'`），或包库里那一版不是开始编辑时的那一版（`'stale'`，别的标签页保存过、或删掉后重新导入了同标识的包）；
+   * - 本机包库的标识规则（`LibraryConflictError`）。
+   * 包格式的检查在调用之前由内核做过。
    */
-  async saveDraft(draft: Draft, at: number, use: boolean): Promise<Snapshot> {
+  async saveDraft(id: string, raw: PackRaw, known: number, at: number, use: boolean): Promise<Snapshot> {
     return this.change(async (tx, now) => {
-      if (!(await tx.objectStore('drafts').get(draft.id))) throw new DraftGoneError(draft.id);
-      const id = typeof draft.raw.id === 'string' ? draft.raw.id : '';
-      const problems = libraryProblems(draft.raw, now.packs, draft.editing);
-      if (draft.editing !== null && (id !== draft.editing || !now.packs.some((p) => p.id === id))) problems.push({ code: 'idTaken', id });
+      const cur = await tx.objectStore('drafts').get(id);
+      if (!cur) throw new DraftGoneError(id);
+      if (cur.updatedAt !== known) throw new DraftConflictError('edited');
+      const conflict = draftConflict(cur, now.packs);
+      if (conflict) throw new DraftConflictError(conflict);
+      const problems = libraryProblems(raw, now.packs, cur.editing);
       if (problems.length) throw new LibraryConflictError(problems);
-      const old = await tx.objectStore('packs').get(id);
-      await tx.objectStore('packs').put({ id, raw: draft.raw, importedAt: old?.importedAt ?? at, savedAt: at });
+      const packId = String(raw.id);
+      const old = await tx.objectStore('packs').get(packId);
+      await tx.objectStore('packs').put({ id: packId, raw, importedAt: old?.importedAt ?? at, savedAt: at });
       // 草稿留下、与包库一致（编辑器接着显示这个包）；与包库一致的草稿不列在草稿区。
-      await tx.objectStore('drafts').put({ ...draft, editing: id, snapshot: draft.raw, updatedAt: at });
+      await tx.objectStore('drafts').put({ ...cur, raw, editing: packId, snapshot: raw, updatedAt: at });
       if (!use) return now.use;
-      const next = addLayer(now.use, id);
+      const next = addLayer(now.use, packId);
       await tx.objectStore('state').put(next, 'use');
       return next;
     });

@@ -14,19 +14,21 @@ import { entryName } from './entry-editor';
 import { type Compare, type EntryRef, entryOf } from './model';
 import { ChartPicker } from './write-page';
 
-/** 预览用的合并（设计规范 20.9）：叠在当前生效上（编辑的包本来在组合里时用原位），或只用这个包。 */
-function mergedFor(kernel: Kernel, raw: PackRaw, draft: Draft, layers: readonly string[], packs: readonly Pack[], only: boolean): KnowledgePack {
-  if (only) return kernel.KnowledgePack.fromObject(raw);
+/** 预览用的合并（设计规范 20.9）：叠在当前生效上（编辑的包本来在组合里时用原位），或只用这个包。`order` 是实际合并的各层，从下到上。 */
+function mergedFor(kernel: Kernel, raw: PackRaw, draft: Draft, layers: readonly string[], packs: readonly Pack[], only: boolean): { pack: KnowledgePack; order: string[] } {
   const own = draft.editing ?? '\u0000draft';
-  const list = layers.includes(own) ? layers : [...layers, own];
+  if (only) return { pack: kernel.KnowledgePack.fromObject(raw), order: [own] };
+  const list = layers.includes(own) ? [...layers] : [...layers, own];
   let merged: KnowledgePack | null = null;
+  const order: string[] = [];
   for (const id of list) {
     const layer = id === own ? raw : id === DEFAULT_PACK_ID ? builtinPack(kernel) : packs.find((p) => p.id === id)?.raw;
     if (!layer) continue;
+    order.push(id);
     merged = merged ? merged.merged(layer) : layer instanceof kernel.KnowledgePack ? layer : kernel.KnowledgePack.fromObject(layer);
   }
   if (!merged) throw new Error('预览的合并结果是空的');
-  return merged;
+  return { pack: merged, order };
 }
 
 /** 本命文本里的一段：标题行与它下面的段落（按空行分开）。 */
@@ -68,7 +70,7 @@ export function Preview({
   const e = t.editor;
   const [mode, setMode] = useState<'stack' | 'only'>('stack');
   const [view, setView] = useState<'prompt' | 'full'>('prompt');
-  const merged = useMemo(() => {
+  const result = useMemo(() => {
     try {
       return mergedFor(kernel, raw, draft, layers, packs, mode === 'only');
     } catch (err) {
@@ -76,7 +78,11 @@ export function Preview({
       throw err;
     }
   }, [kernel, raw, draft, layers, packs, mode]);
-  const stackLabel = [...layers.filter((id) => id !== draft.editing).map((id) => (id === DEFAULT_PACK_ID ? 'iztro-docs' : (packs.find((p) => p.id === id)?.name ?? id))), String((raw.source as { name?: string } | undefined)?.name ?? raw.id)].join(' + ');
+  const merged = result?.pack ?? null;
+  const ownId = draft.editing ?? '\u0000draft';
+  const ownName = String((raw.source as { name?: string } | undefined)?.name ?? raw.id);
+  // 说明行按实际合并的顺序写（编辑的包在组合里时在它原来的位置）。
+  const stackLabel = (result?.order ?? []).map((id) => (id === ownId ? ownName : id === DEFAULT_PACK_ID ? 'iztro-docs' : (packs.find((p) => p.id === id)?.name ?? id))).join(' + ');
   const c: Astrolabe | undefined = chart?.chart;
 
   let content: React.ReactNode = null;

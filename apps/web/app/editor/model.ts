@@ -1,7 +1,7 @@
 import type { Astrolabe, KnowledgeIssue, KnowledgePack, TopicEntry } from 'x-iztro';
 import type { Kernel } from '../kernel/kernel';
-import { builtinPack } from '../knowledge/kernel-pack';
-import { DEFAULT_PACK_ID, type Draft, type LibraryProblem, type Pack, type PackRaw, type Section, type Use, libraryProblems } from '../knowledge/library';
+import { builtinPack, domains } from '../knowledge/kernel-pack';
+import { DEFAULT_PACK_ID, type Draft, type LibraryProblem, type Pack, type PackRaw, SECTIONS, type Section, type Use, libraryProblems } from '../knowledge/library';
 
 /**
  * 知识包编辑器（设计规范第 20 节）的纯规则：草稿怎么建、写进哪个包、对照哪个包、一个条目与字段的状态、
@@ -301,4 +301,28 @@ export function draftProblems(kernel: Kernel, draft: Draft, compare: Compare | n
   if (draft.editing === null && id && !idFree(id, packs, drafts, draft.id) && !out.length) out.push({ level: 'error', issue: null, library: { code: 'idTaken', id }, at: { entry: null, field: 'id' } });
   for (const issue of kernel.KnowledgePack.check(draft.raw, compare ? { base: compare.pack } : {})) out.push({ level: issue.level, issue, library: null, at: problemAt(issue.path) });
   return out;
+}
+
+/** 术语、主题的标识：小写字母、数字与连字符（SCHEMA §3）。 */
+export const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/** 地址参数里的条目（「改写这一条」与编辑器的 `entry`、`combo`）为什么不对。 */
+export type EntryParamProblem = 'section' | 'key' | 'combo';
+
+/**
+ * 解析地址里的条目（外部输入）：`段/标识`，段在六段之内；星曜、格局、宫位、四化的标识在内核的清单里，术语与主题的标识合格式；
+ * `combo` 只能跟在主星后面，且是另一颗主星。没给 `entry` 时为 null。
+ */
+export function parseEntryParam(kernel: Kernel, entry: string | null, combo: string | null): { ok: true; entry: EntryRef; combo: string | undefined } | { ok: false; problem: EntryParamProblem } | null {
+  if (entry === null) return null;
+  const parts = entry.split('/');
+  const [section, key] = parts;
+  if (parts.length !== 2 || !section || !(SECTIONS as readonly string[]).includes(section)) return { ok: false, problem: 'section' };
+  const known = domains(kernel)[section as Section];
+  if (!key || (known ? !known.includes(key) : !SLUG.test(key))) return { ok: false, problem: 'key' };
+  if (combo !== null) {
+    const majors = Object.values(kernel.MajorStar) as string[];
+    if (section !== 'stars' || !majors.includes(key) || !majors.includes(combo) || combo === key) return { ok: false, problem: 'combo' };
+  }
+  return { ok: true, entry: { section: section as Section, key }, combo: combo ?? undefined };
 }

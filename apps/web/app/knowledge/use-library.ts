@@ -32,9 +32,14 @@ export async function updateUse(next: (use: Use, packs: readonly Pack[]) => Use)
   return store.mutate((lib) => lib.updateUse(next));
 }
 
-/** 存一份草稿（新建或覆盖）。 */
-export async function putDraft(draft: Draft): Promise<void> {
-  await store.mutate((lib) => lib.putDraft(draft));
+/** 新建一份草稿。 */
+export async function createDraft(draft: Draft): Promise<void> {
+  await store.mutate((lib) => lib.createDraft(draft));
+}
+
+/** 写下草稿的原文；`known` 是本页上次读到或写下的版本（更新时间），别的标签页改过时报冲突（见 `Library.writeDraft`）。 */
+export async function writeDraft(id: string, raw: PackRaw, known: number, at: number): Promise<void> {
+  await store.mutate((lib) => lib.writeDraft(id, raw, known, at));
 }
 
 /** 丢弃一份草稿。 */
@@ -42,7 +47,7 @@ export async function deleteDraft(id: string): Promise<void> {
   await store.mutate((lib) => lib.deleteDraft(id));
 }
 
-/** 把草稿存进包库并删掉草稿；`use` 为真时一并放到生效组合的最上面。 */
-export async function saveDraft(draft: Draft, use: boolean): Promise<Snapshot> {
-  return store.mutate((lib) => lib.saveDraft(draft, Date.now(), use));
+/** 把草稿存进包库（见 `Library.saveDraft`）；`use` 为真时一并放到生效组合的最上面。 */
+export async function saveDraft(id: string, raw: PackRaw, known: number, at: number, use: boolean): Promise<Snapshot> {
+  return store.mutate((lib) => lib.saveDraft(id, raw, known, at, use));
 }

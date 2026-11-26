@@ -180,8 +180,8 @@ export interface SectionCoverage {
   missing: string[];
 }
 
-/** 内核认识的标识（星曜含各层流耀与四组十二神；宫位是十二宫，不含身宫、来因）。 */
-function domains(kernel: Kernel): Partial<Record<Section, string[]>> {
+/** 内核认识的标识（星曜含各层流耀与四组十二神；宫位是十二宫，不含身宫、来因）。术语与主题由包起名，不在其中。 */
+export function domains(kernel: Kernel): Partial<Record<Section, string[]>> {
   const values = (...objs: Record<string, string>[]) => [...new Set(objs.flatMap((o) => Object.values(o)))];
   const k = kernel;
   return {

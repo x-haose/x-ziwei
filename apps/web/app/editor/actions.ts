@@ -1,7 +1,7 @@
 import type { Lang } from '../i18n/lang';
 import { localePath } from '../i18n/lang';
-import type { Draft, Pack, PackRaw, Section } from '../knowledge/library';
-import { putDraft } from '../knowledge/use-library';
+import { type Draft, type Pack, type PackRaw, type Section, draftConflict } from '../knowledge/library';
+import { createDraft } from '../knowledge/use-library';
 import { blankRaw, freshId, today } from './model';
 
 /** 编辑器的地址（全是静态路径，参数在查询串里；生辰只放在 `#` 之后）。 */
@@ -31,14 +31,28 @@ export function editorHref(lang: Lang, q: EditorQuery, birth: string): string {
 export async function newDraft(raw: PackRaw, editing: Pack | null): Promise<Draft> {
   const now = Date.now();
   const draft: Draft = { id: crypto.randomUUID(), raw, editing: editing?.id ?? null, snapshot: editing?.raw ?? null, createdAt: now, updatedAt: now };
-  await putDraft(draft);
+  await createDraft(draft);
   return draft;
 }
 
-/** 编辑本机的一个包：已有编辑它的草稿就接着用，否则从包库里的原文建一份。 */
-export async function draftForPack(pack: Pack, drafts: readonly Draft[]): Promise<Draft> {
+/** 草稿区里已有一份编辑这个包的草稿，但它是从包库里另一版开始的（见 `draftConflict`）：不能接着用，要先在草稿区处理。 */
+export class StaleDraftError extends Error {
+  constructor(readonly draft: Draft) {
+    super(`草稿 ${draft.id} 不是从包库里现在这一版开始的`);
+    this.name = 'StaleDraftError';
+  }
+}
+
+/**
+ * 编辑本机的一个包：已有编辑它、且从包库里现在这一版开始的草稿就接着用，否则从包库里的原文建一份。
+ * 已有的草稿是从另一版开始的（别的标签页保存过、或删掉后重新导入了同标识的包）时报 `StaleDraftError`，不覆盖。
+ */
+export async function draftForPack(pack: Pack, packs: readonly Pack[], drafts: readonly Draft[]): Promise<Draft> {
   const d = drafts.find((x) => x.editing === pack.id);
-  if (d) return d;
+  if (d) {
+    if (draftConflict(d, packs)) throw new StaleDraftError(d);
+    return d;
+  }
   if (!pack.raw) throw new Error(`默认包 ${pack.id} 不能直接编辑`);
   return newDraft(structuredClone(pack.raw), pack);
 }

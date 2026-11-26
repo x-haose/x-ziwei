@@ -17,6 +17,7 @@ import {
   DEFAULT_PACK_ID,
   DEFAULT_USE,
   type Draft,
+  draftConflict,
   type ExtendsAdvice,
   type Pack,
   SECTIONS,
@@ -36,7 +37,7 @@ import { type LibraryState, addPack, deleteDraft, removePack, updateUse, useLibr
 import { useBrokenPacks, useRepairNotice, useRetireBroken } from './chart-knowledge';
 import { ViewDrawer } from './view-drawer';
 import { downloadJson } from '../lib/download';
-import { draftForPack, editorHref, newDraft } from '../editor/actions';
+import { StaleDraftError, draftForPack, editorHref, newDraft } from '../editor/actions';
 import { compareOf, draftProblems, sameAsLibrary } from '../editor/model';
 import { NewPackDialog } from '../editor/new-dialog';
 import { draftLine } from '../editor/write-page';
@@ -377,7 +378,8 @@ function DraftList({ t, kernel, lib, onDiscard }: { t: Messages; kernel: Kernel;
   const navigate = useNavigate();
   const e = t.editor;
   const def = defaultPackInfo(kernel);
-  const drafts = lib.drafts.filter((d) => !sameAsLibrary(d));
+  // 与包库一致的草稿不列；编辑的包已被删除、或包库里换了版本的草稿要列出来处理。
+  const drafts = lib.drafts.filter((d) => draftConflict(d, lib.packs) !== null || !sameAsLibrary(d));
   if (!drafts.length) return null;
   return (
     <section aria-labelledby="knowledge-drafts-title" className={css.drafts}>
@@ -402,6 +404,7 @@ function DraftList({ t, kernel, lib, onDiscard }: { t: Messages; kernel: Kernel;
                   <span>{compare ? fmt(e.basedOn, { name: compare.label }) : e.newPack}</span>
                   <span>{draftLine(d, t)}</span>
                   {errors > 0 && <span className={css.draftErrors}>{fmt(e.draftErrors, { n: errors })}</span>}
+                  {draftConflict(d, lib.packs) && <span className={css.draftErrors}>{draftConflict(d, lib.packs) === 'packGone' ? e.draftPackGone : e.draftPackStale}</span>}
                 </div>
               </div>
               <div className={css.packActions} role="group" aria-label={name}>
@@ -661,10 +664,13 @@ export function KnowledgePage({ initialDefault }: { initialDefault: Pack }) {
             onEdit={
               ready && kernel
                 ? (p) =>
-                    void act(async () => {
-                      const d = await draftForPack(p, lib.drafts);
-                      navigate(editorHref(lang, { draft: d.id, from: 'knowledge' }, ''));
-                    })
+                    void draftForPack(p, lib.packs, lib.drafts).then(
+                      (d) => navigate(editorHref(lang, { draft: d.id, from: 'knowledge' }, '')),
+                      (err: unknown) => {
+                        console.error(err);
+                        toast(err instanceof StaleDraftError ? fmt(t.editor.staleDraft, { name: p.name }) : fmt(t.knowledge.actionFailed, { reason: err instanceof Error ? err.message : String(err) }));
+                      },
+                    )
                 : null
             }
             onBaseNew={ready && kernel ? (p) => setCreating({ base: p.id }) : null}

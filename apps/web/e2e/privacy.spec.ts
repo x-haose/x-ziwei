@@ -51,3 +51,34 @@ test('从看盘进编辑器：生辰只在 # 之后（不进查询串），编�
   const ids = await page.evaluate((f) => [...document.querySelectorAll('[id]')].map((e) => e.id).filter((id) => f.some((x) => id.includes(x))), FIELDS);
   expect(ids).toEqual([]);
 });
+
+test('选择器的选项 id 不含选项的值：盘选择器（第一屏、编辑器左栏、预览）、生辰表单的年份与时辰、候选时辰都不带生辰', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const idsWith = (f: readonly string[]) => page.evaluate((x) => [...document.querySelectorAll('[id]')].map((e) => e.id).filter((id) => x.some((y) => id.includes(y))), f);
+  // 候选时辰与生辰表单。
+  await page.goto('/zh/chart#cal=solar&d=2000-8-16&p=night&h=2&g=f');
+  await expect(page.getByRole('radiogroup', { name: '候选时辰' })).toBeVisible();
+  await page.getByRole('button', { name: /修改/ }).click();
+  await page.getByRole('button', { name: /^出生年份/ }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  expect(await idsWith(['2000', 'p=', 'h=2'])).toEqual([]);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: /^出生时辰/ }).click();
+  expect(await idsWith(['2000', 'h=2'])).toEqual([]);
+  await page.keyboard.press('Escape');
+
+  // 第一屏、编辑器左栏与预览的盘选择器。
+  await page.goto(`/zh/chart#${encodeBirth(BIRTH)}`);
+  await page.getByRole('region', { name: '用这张盘' }).getByRole('link', { name: '改写这一条：紫微' }).click();
+  await expect(page.getByRole('heading', { level: 2, name: /^紫微/ })).toBeVisible();
+  for (const picker of await page.getByRole('button', { name: /^盘/ }).all()) {
+    await picker.click();
+    await expect(page.getByRole('dialog', { name: '盘' })).toBeVisible();
+    expect(await idsWith(FIELDS)).toEqual([]);
+    await page.keyboard.press('Escape');
+  }
+  await page.goto(`/zh/knowledge/write#${encodeBirth(BIRTH)}`);
+  await page.getByRole('button', { name: /^盘/ }).first().click();
+  await expect(page.getByRole('dialog', { name: '盘' })).toBeVisible();
+  expect(await idsWith(FIELDS)).toEqual([]);
+});

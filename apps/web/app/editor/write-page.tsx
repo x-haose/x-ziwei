@@ -11,14 +11,14 @@ import { useLang, useMessages } from '../i18n/use-lang';
 import { type Kernel, loadKernel, useKernelState } from '../kernel/kernel';
 import { useActiveKnowledge, useBrokenPacks } from '../knowledge/chart-knowledge';
 import { builtinPack, defaultPackInfo } from '../knowledge/kernel-pack';
-import { DEFAULT_PACK_ID, type Draft, type PackRaw, SECTIONS, type Section } from '../knowledge/library';
+import { DEFAULT_PACK_ID, type Draft, type PackRaw, SECTIONS, type Section, draftConflict } from '../knowledge/library';
 import { importedText } from '../knowledge/parts';
 import { type LibraryState, useLibrary } from '../knowledge/use-library';
 import { orderedTopics, topicPalaces } from '../chart/topic';
-import { draftForPack, draftOnTop, editorHref, newDraft } from './actions';
+import { StaleDraftError, draftForPack, draftOnTop, editorHref, newDraft } from './actions';
 import { type ChartChoice, useChartChoices } from './charts';
 import * as css from './editor.css';
-import { type EntryGroup, chartEntries, compareOf, entryStatus, sameAsLibrary, topLayer, topicEntries, writeTarget, writtenCount } from './model';
+import { type EntryGroup, type EntryParamProblem, chartEntries, compareOf, entryStatus, parseEntryParam, sameAsLibrary, topLayer, topicEntries, writeTarget, writtenCount } from './model';
 import { NewPackDialog } from './new-dialog';
 
 /** 「写进」的一项：本机的包、还没进包库的新包草稿，或「新包（叠在生效组合最上面的包上）」。 */
@@ -97,26 +97,26 @@ function WriteBody({ kernel, lib }: { kernel: Kernel; lib: Extract<LibraryState,
 
   const fail = (err: unknown) => {
     console.error(err);
+    if (err instanceof StaleDraftError) {
+      const p = lib.packs.find((x) => x.id === err.draft.editing);
+      setEntryError(fmt(e.staleDraft, { name: p?.name ?? String(err.draft.editing) }));
+      return;
+    }
     toast(fmt(t.knowledge.actionFailed, { reason: err instanceof Error ? err.message : String(err) }));
   };
 
-  /* 看盘的「改写这一条」：找到或建草稿，换到编辑器的这一条。 */
+  /* 看盘的「改写这一条」：地址参数是外部输入，先核对；对了再找到或建草稿，换到编辑器的这一条。 */
   const entry = params.get('entry');
+  const parsed = parseEntryParam(kernel, entry, params.get('combo'));
+  const [entryError, setEntryError] = useState<string | null>(null);
   useEffect(() => {
-    if (!entry || busy.current) return;
+    if (!parsed?.ok || busy.current) return;
     busy.current = true;
-    const [section, key] = entry.split('/');
-    if (!section || !key || !(SECTIONS as readonly string[]).includes(section)) {
-      busy.current = false;
-      throw new Error(`改写入口的条目参数不对：${entry}`);
-    }
     const target = writeTarget(top, lib.packs, lib.drafts);
-    const ready = target.kind === 'draft' ? Promise.resolve(target.draft) : target.kind === 'edit' ? draftForPack(target.pack, lib.drafts) : draftOnTop(target.base, e.myPackName, lib.packs, lib.drafts);
+    const own = target.kind === 'edit' ? target.pack : target.kind === 'draft' && target.draft.editing ? lib.packs.find((p) => p.id === target.draft.editing) : undefined;
+    const ready = own ? draftForPack(own, lib.packs, lib.drafts) : target.kind === 'draft' ? Promise.resolve(target.draft) : draftOnTop(top, e.myPackName, lib.packs, lib.drafts);
     ready.then(
-      (d) =>
-        navigate(editorHref(lang, { draft: d.id, from: 'read', entry: { section: section as Section, key }, combo: params.get('combo') ?? undefined }, hash.replace(/^#/, '')), {
-          replace: true,
-        }),
+      (d) => navigate(editorHref(lang, { draft: d.id, from: 'read', entry: parsed.entry, combo: parsed.combo }, hash.replace(/^#/, '')), { replace: true }),
       fail,
     );
   }, [entry]);
@@ -158,12 +158,14 @@ function WriteBody({ kernel, lib }: { kernel: Kernel; lib: Extract<LibraryState,
       into.kind === 'draft'
         ? Promise.resolve(lib.drafts.find((d) => d.id === into.id)!)
         : into.kind === 'pack'
-          ? draftForPack(lib.packs.find((p) => p.id === into.id)!, lib.drafts)
+          ? draftForPack(lib.packs.find((p) => p.id === into.id)!, lib.packs, lib.drafts)
           : draftOnTop(top, e.myPackName, lib.packs, lib.drafts);
     ready.then((d) => navigate(editorHref(lang, { draft: d.id, from: 'write', ...opts }, choice?.hash ?? '')), fail);
   };
 
-  if (entry) return null;
+  if (parsed && !parsed.ok) return <BadEntry t={t} problem={parsed.problem} entry={entry ?? ''} />;
+  if (entryError) return <p className={css.hint}>{entryError}</p>;
+  if (parsed) return null;
 
   const chart: Astrolabe | null = choice?.chart ?? null;
   const groups = chart ? chartEntries(kernel, chart) : [];
@@ -171,7 +173,7 @@ function WriteBody({ kernel, lib }: { kernel: Kernel; lib: Extract<LibraryState,
   const majors = groups.find((g) => g.kind === 'majors')?.entries ?? [];
   const topics = active ? orderedTopics(active.pack) : orderedTopics(builtinPack(kernel));
   const intoInfo = intos.find((x) => intoKey(x.into) === intoKey(into))!;
-  const resumable = lib.drafts.filter((d) => !sameAsLibrary(d));
+  const resumable = lib.drafts.filter((d) => draftConflict(d, lib.packs) !== null || !sameAsLibrary(d));
 
   return (
     <>
@@ -336,3 +338,17 @@ export function ChartPicker({ t, charts, value, onChange }: { t: Messages; chart
   );
 }
 
+
+/** 地址里的条目不对（「改写这一条」的参数是外部输入）：写明哪里不对，给回第一屏的入口，不打开条目。 */
+export function BadEntry({ t, problem, entry }: { t: Messages; problem: EntryParamProblem; entry: string }) {
+  const lang = useLang();
+  return (
+    <div className={css.empty} role="alert">
+      <h2 className={css.emptyTitle}>{fmt(t.editor.badEntry, { reason: t.editor.badEntryReasons[problem] })}</h2>
+      <p className={css.emptyBody}>{entry}</p>
+      <Link className={controls.ghost} href={localePath(lang, '/knowledge/write')}>
+        {t.editor.toWrite}
+      </Link>
+    </div>
+  );
+}

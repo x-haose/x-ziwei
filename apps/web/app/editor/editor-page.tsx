@@ -16,15 +16,16 @@ import { useActiveKnowledge, useBrokenPacks } from '../knowledge/chart-knowledge
 import { problemText } from '../knowledge/import-panel';
 import { builtinPack, defaultPackInfo } from '../knowledge/kernel-pack';
 import * as kcss from '../knowledge/knowledge.css';
-import { DEFAULT_PACK_ID, type Draft, type PackRaw, SECTIONS, type Section, withoutPacks } from '../knowledge/library';
+import { DEFAULT_PACK_ID, type Draft, type PackRaw, SECTIONS, type Section, draftConflict, withoutPacks } from '../knowledge/library';
+import { DraftConflictError } from '../knowledge/store';
 import { importedText } from '../knowledge/parts';
 import { StorageFullError } from '../lib/local-db';
 import { downloadJson } from '../lib/download';
 import { useMediaQuery } from '../lib/media';
-import { type LibraryState, putDraft, saveDraft, updateUse, useLibrary } from '../knowledge/use-library';
+import { type LibraryState, saveDraft, updateUse, useLibrary, writeDraft } from '../knowledge/use-library';
 import { addLayer } from '../knowledge/library';
 import { media } from '../styles/media';
-import { type EditorFrom, draftForPack, editorHref, newDraft } from './actions';
+import { type EditorFrom, StaleDraftError, draftForPack, editorHref, newDraft } from './actions';
 import { type ChartChoice, useChartChoices } from './charts';
 import * as css from './editor.css';
 import { EntryEditor, entryName, starCategory } from './entry-editor';
@@ -40,13 +41,15 @@ import {
   entryOf,
   entryStatus,
   extendsChain,
+  freshId,
+  parseEntryParam,
   setField,
   topicEntries,
   writtenCount,
 } from './model';
 import { PackInfo } from './pack-info';
 import { Preview } from './preview';
-import { ChartPicker } from './write-page';
+import { BadEntry, ChartPicker } from './write-page';
 
 /** 输入停这么久（毫秒）后存草稿（设计规范 20.11）。 */
 const DRAFT_DELAY_MS = 700;
@@ -69,9 +72,28 @@ export function EditorPage() {
   }, []);
   const id = params.get('draft');
   const kernel = kstate.status === 'ready' ? kstate.kernel : null;
-  if (!kernel || lib.status !== 'ready') {
+  // 本机包库读好过一次之后又不能用了（被别的标签页挡住、被更新的版本接管、读库出错）：编辑器留着这一页的改动，写明原因，
+  // 写入与保存失败时照常提示；从没读好过时不进编辑器。
+  const lastReady = useRef<Ready | null>(null);
+  if (lib.status === 'ready') lastReady.current = lib;
+  const libNote = libraryProblem(lib, t);
+  if (kernel && lib.status !== 'ready' && lib.status !== 'loading' && !lastReady.current) {
+    return (
+      <main className={css.page}>
+        <div className={css.empty} role="alert">
+          <h1 className={css.emptyTitle}>{libNote?.title}</h1>
+          <p className={css.emptyBody}>{libNote?.body}</p>
+          <RouterLink className={controls.ghost} to={localePath(lang, '/knowledge')}>
+            {t.editor.toKnowledge}
+          </RouterLink>
+        </div>
+      </main>
+    );
+  }
+  const ready = lib.status === 'ready' ? lib : lastReady.current;
+  if (!kernel || !ready) {
     // 内核没装好（设计规范 20.14）：左栏只有包信息，中栏写明在加载并给进度条；草稿在本机，不会丢。
-    const waiting = lib.status === 'ready' ? lib.drafts.find((d) => d.id === id) : undefined;
+    const waiting = ready?.drafts.find((d) => d.id === id);
     return (
       <main className={css.page}>
         <div className={css.body}>
@@ -92,7 +114,7 @@ export function EditorPage() {
       </main>
     );
   }
-  const draft = lib.drafts.find((d) => d.id === id);
+  const draft = ready.drafts.find((d) => d.id === id);
   if (!draft) {
     return (
       <main className={css.page}>
@@ -106,12 +128,22 @@ export function EditorPage() {
       </main>
     );
   }
-  return <Editor key={draft.id} kernel={kernel} lib={lib} stored={draft} />;
+  return <Editor key={draft.id} kernel={kernel} lib={ready} stored={draft} libNote={libNote} />;
+}
+
+/** 本机包库不能用时的标题与说明（复用知识包页的文案）；能用或还在读时为 null。 */
+function libraryProblem(lib: LibraryState, t: Messages): { title: string; body: string } | null {
+  const k = t.knowledge;
+  if (lib.status === 'unavailable') return { title: k.blockedTitle, body: k.blockedBody };
+  if (lib.status === 'failed') return { title: k.failedTitle, body: fmt(k.failedBody, { reason: lib.message }) };
+  if (lib.status === 'blocked') return { title: k.blockedByTabsTitle, body: k.blockedByTabsBody };
+  if (lib.status === 'superseded') return { title: k.supersededTitle, body: k.supersededBody };
+  return null;
 }
 
 type Ready = Extract<LibraryState, { status: 'ready' }>;
 
-function Editor({ kernel, lib, stored }: { kernel: Kernel; lib: Ready; stored: Draft }) {
+function Editor({ kernel, lib, stored, libNote }: { kernel: Kernel; lib: Ready; stored: Draft; libNote: { title: string; body: string } | null }) {
   const t = useMessages();
   const e = t.editor;
   const lang = useLang();
@@ -124,37 +156,68 @@ function Editor({ kernel, lib, stored }: { kernel: Kernel; lib: Ready; stored: D
   const xl = useMediaQuery('(min-width: 1360px)');
   const narrow = useMediaQuery(media.mDown);
 
-  /* 草稿：本页编辑的是内存里的这一份，停 700ms 存进本机。 */
+  /*
+   * 草稿：本页编辑的是内存里的这一份，停 700ms 写进本机。写入以库里当前的草稿为准、只换原文；`known` 是本页上次读到或写下的版本
+   * （更新时间），别的标签页改过时写入报冲突、不覆盖。保存到包库与离开之前先把待写的写下去（`flush`），写入一次只跑一个。
+   */
   const [raw, setRaw] = useState<PackRaw>(stored.raw);
   const [savedAt, setSavedAt] = useState<number>(stored.updatedAt);
-  const [full, setFull] = useState(false);
+  /** 草稿写入的结果：正常、存储满、别的标签页改过、其他失败。 */
+  const [store, setStore] = useState<'ok' | 'full' | 'edited' | 'failed'>('ok');
   /** 刚保存到包库、之后还没改过。 */
   const [justSaved, setJustSaved] = useState(false);
+  const known = useRef(stored.updatedAt);
+  const written = useRef<PackRaw>(stored.raw);
+  const queue = useRef<Promise<boolean>>(Promise.resolve(true));
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const latest = useRef(raw);
+  latest.current = raw;
   const draft: Draft = { ...stored, raw };
   const edit = (f: (r: PackRaw) => PackRaw) => {
     setJustSaved(false);
     setRaw((r) => f(r));
   };
-  useEffect(() => {
-    if (JSON.stringify(raw) === JSON.stringify(stored.raw)) return;
-    const timer = setTimeout(() => {
+  const flush = (): Promise<boolean> => {
+    clearTimeout(timer.current);
+    queue.current = queue.current.then(async () => {
+      const next = latest.current;
+      if (next === written.current) return true;
       const at = Date.now();
-      putDraft({ ...stored, raw, updatedAt: at }).then(
-        () => {
-          setFull(false);
-          setSavedAt(at);
-        },
-        (err: unknown) => {
-          if (err instanceof StorageFullError) setFull(true);
-          else {
-            console.error(err);
-            toast(fmt(t.knowledge.actionFailed, { reason: err instanceof Error ? err.message : String(err) }));
-          }
-        },
-      );
-    }, DRAFT_DELAY_MS);
-    return () => clearTimeout(timer);
+      try {
+        await writeDraft(stored.id, next, known.current, at);
+        known.current = at;
+        written.current = next;
+        setSavedAt(at);
+        setStore('ok');
+        return true;
+      } catch (err) {
+        if (err instanceof StorageFullError) setStore('full');
+        else if (err instanceof DraftConflictError) setStore('edited');
+        else {
+          console.error(err);
+          setStore('failed');
+        }
+        return false;
+      }
+    });
+    return queue.current;
+  };
+  useEffect(() => {
+    if (raw === written.current) return;
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => void flush(), DRAFT_DELAY_MS);
   }, [raw]);
+  // 切走标签页、关掉编辑器时把待写的写下去（关页面时来不及等，见下面的离开确认）。
+  useEffect(() => {
+    const hide = () => {
+      if (document.visibilityState === 'hidden') void flush();
+    };
+    document.addEventListener('visibilitychange', hide);
+    return () => {
+      document.removeEventListener('visibilitychange', hide);
+      void flush();
+    };
+  }, []);
 
   const compare: Compare | null = useMemo(() => compareOf(kernel, raw, lib.packs, def), [kernel, raw.extends, lib.packs, def]);
   const [problems, setProblems] = useState<Problem[]>(() => draftProblems(kernel, draft, compare, lib.packs, lib.drafts));
@@ -165,12 +228,16 @@ function Editor({ kernel, lib, stored }: { kernel: Kernel; lib: Ready; stored: D
   const errors = problems.filter((p) => p.level === 'error');
   const warnings = problems.filter((p) => p.level === 'warning');
   const inLibrary = lib.packs.find((p) => p.id === draft.editing);
-  const synced = draft.snapshot !== null && JSON.stringify(raw) === JSON.stringify(draft.snapshot);
+  /** 编辑的包已被删除，或包库里那一版不是开始编辑时的那一版：不能保存，只能另存为新包。 */
+  const conflict = draftConflict(stored, lib.packs);
+  const synced = !conflict && draft.snapshot !== null && JSON.stringify(raw) === JSON.stringify(draft.snapshot);
   const empty = writtenCount(raw) === 0 && draft.editing === null;
 
   /* 当前在看的条目、范围与盘。 */
   const entryParam = params.get('entry');
-  const current: EntryRef | 'info' | null = entryParam === 'info' ? 'info' : entryParam ? { section: entryParam.split('/')[0] as Section, key: entryParam.split('/').slice(1).join('/') } : null;
+  // 地址里的条目是外部输入：不对时中栏写明，不打开它（见 parseEntryParam）。
+  const parsed = entryParam === 'info' ? null : parseEntryParam(kernel, entryParam, params.get('combo'));
+  const current: EntryRef | 'info' | null = entryParam === 'info' ? 'info' : parsed?.ok ? parsed.entry : null;
   const select = (next: EntryRef | 'info') => {
     setParams(
       (p) => {
@@ -207,19 +274,47 @@ function Editor({ kernel, lib, stored }: { kernel: Kernel; lib: Ready; stored: D
     if (!xl) setDrawer(true);
   };
 
-  /* 保存到包库。 */
+  /** 另存为新包：复制这一页的原文建一份新包草稿（标识加序号），聚焦包信息里的标识。 */
+  const saveAsNew = () => {
+    const copy = { ...structuredClone(latest.current), id: freshId(String(latest.current.id), lib.packs, lib.drafts) };
+    newDraft(copy, null).then(
+      (d) => navigate(editorHref(lang, { draft: d.id, from, entry: 'info' }, hash.replace(/^#/, ''))),
+      (err: unknown) => toast(fmt(t.knowledge.actionFailed, { reason: err instanceof Error ? err.message : String(err) })),
+    );
+  };
+
+  /* 保存到包库：先写下待写的草稿，再在一个事务里按库里此刻的数据存包（见 `Library.saveDraft`）。 */
   const save = async (use: boolean): Promise<boolean> => {
+    if (!(await flush())) {
+      toast(fmt(e.saveFailed, { reason: e.draftNotWritten }));
+      return false;
+    }
+    const at = Date.now();
+    const now = latest.current;
     try {
-      const snap = await saveDraft({ ...stored, raw }, use);
-      setSavedAt(Date.now());
+      const snap = await saveDraft(stored.id, now, known.current, at, use);
+      known.current = at;
+      written.current = now;
+      setSavedAt(at);
       setJustSaved(true);
-      const id = String(raw.id);
-      const name = String((raw.source as { name?: string } | undefined)?.name ?? id);
+      const id = String(now.id);
+      const name = String((now.source as { name?: string } | undefined)?.name ?? id);
       toast(fmt(use ? e.savedUsedToast : snap.use.layers.includes(id) ? e.savedActiveToast : e.savedToast, { name }));
       return true;
     } catch (err) {
       console.error(err);
-      toast(fmt(e.saveFailed, { reason: err instanceof Error ? err.message : String(err) }));
+      const reason =
+        err instanceof DraftConflictError
+          ? err.kind === 'edited'
+            ? e.conflictEdited
+            : err.kind === 'packGone'
+              ? fmt(e.conflictGone, { id: String(stored.editing) })
+              : fmt(e.conflictStale, { id: String(stored.editing) })
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      if (err instanceof DraftConflictError && err.kind === 'edited') setStore('edited');
+      toast(fmt(e.saveFailed, { reason }));
       return false;
     }
   };
@@ -230,8 +325,18 @@ function Editor({ kernel, lib, stored }: { kernel: Kernel; lib: Ready; stored: D
   };
 
   /* 离开（设计规范 20.12）：有还没进包库的改动、或草稿没能存下时拦下站内跳转，关页面时用浏览器自带的确认。 */
-  const dirty = !synced || full;
+  // 一条都没写的新包不拦（草稿照样留在本机）；其余还没进包库、或草稿没能写下时拦。
+  const dirty = store !== 'ok' || (!synced && !empty);
   const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty && currentLocation.pathname !== nextLocation.pathname);
+  /** 拦下离开后先把待写的写下去；写不下去时确认框按「没能存下」写。 */
+  const [leaveWritten, setLeaveWritten] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (blocker.state !== 'blocked') {
+      setLeaveWritten(null);
+      return;
+    }
+    void flush().then(setLeaveWritten);
+  }, [blocker.state]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (ev: BeforeUnloadEvent) => ev.preventDefault();
@@ -244,8 +349,8 @@ function Editor({ kernel, lib, stored }: { kernel: Kernel; lib: Ready; stored: D
   const name = String((raw.source as { name?: string } | undefined)?.name ?? raw.id ?? '');
   const ext = typeof raw.extends === 'string' ? raw.extends : null;
   const baseText = compare ? fmt(e.basedOn, { name: compare.label }) : ext ? fmt(e.declaredOn, { id: ext }) : e.newPack;
-  const status = full ? e.draftFull : synced ? (justSaved ? fmt(e.savedLibrary, { time: timeText(savedAt) }) : e.sameAsLibrary) : fmt(draft.editing ? e.savedDraftOld : e.savedDraft, { time: timeText(savedAt) });
-  const canSave = errors.length === 0 && !empty;
+  const status = store === 'full' ? e.draftFull : store === 'edited' ? e.draftEdited : store === 'failed' ? e.draftFailed : synced ? (justSaved ? fmt(e.savedLibrary, { time: timeText(savedAt) }) : e.sameAsLibrary) : fmt(draft.editing ? e.savedDraftOld : e.savedDraft, { time: timeText(savedAt) });
+  const canSave = errors.length === 0 && !empty && !conflict && store !== 'edited' && libNote === null;
 
   /* 左栏的条目。 */
   const listGroups = useMemo(() => {
@@ -259,7 +364,9 @@ function Editor({ kernel, lib, stored }: { kernel: Kernel; lib: Ready; stored: D
   };
 
   const center =
-    current === 'info' ? (
+    parsed && !parsed.ok ? (
+      <BadEntry t={t} problem={parsed.problem} entry={entryParam ?? ''} />
+    ) : current === 'info' ? (
       <PackInfo
         t={t}
         kernel={kernel}
@@ -270,16 +377,10 @@ function Editor({ kernel, lib, stored }: { kernel: Kernel; lib: Ready; stored: D
         problems={problems}
         edit={edit}
         onExport={exportJson}
-        onSaveAsNew={() => {
-          const copy = { ...structuredClone(raw), id: `${String(raw.id)}-2` };
-          newDraft(copy, null).then(
-            (d) => navigate(editorHref(lang, { draft: d.id, from, entry: 'info' }, hash.replace(/^#/, ''))),
-            (err: unknown) => toast(fmt(t.knowledge.actionFailed, { reason: err instanceof Error ? err.message : String(err) })),
-          );
-        }}
+        onSaveAsNew={saveAsNew}
       />
     ) : current ? (
-      <EntryEditor key={entryId(current)} t={t} kernel={kernel} raw={raw} compare={compare} entry={current} problems={problems} combo={params.get('combo') ?? undefined} edit={edit} titleRef={titleRef} />
+      <EntryEditor key={entryId(current)} t={t} kernel={kernel} raw={raw} compare={compare} entry={current} problems={problems} combo={parsed?.ok ? parsed.combo : undefined} edit={edit} titleRef={titleRef} />
     ) : (
       <div className={css.empty}>
         <h2 className={css.emptyTitle} ref={titleRef} tabIndex={-1}>
@@ -374,7 +475,7 @@ function Editor({ kernel, lib, stored }: { kernel: Kernel; lib: Ready; stored: D
         <span className={css.barId}>{String(raw.id ?? '')}</span>
         <span className={css.barBase}>{baseText}</span>
         <span className={css.barSpace} />
-        <span className={full ? `${css.barStatus} ${css.barStatusBad}` : css.barStatus} role="status">
+        <span className={store !== 'ok' ? `${css.barStatus} ${css.barStatusBad}` : css.barStatus} role="status">
           {status}
         </span>
         <button type="button" className={`${controls.ghost} ${css.issuesButton}`} aria-label={fmt(e.issuesLabel, { e: errors.length, w: warnings.length })} onClick={() => openPanel('issues')}>
@@ -397,10 +498,22 @@ function Editor({ kernel, lib, stored }: { kernel: Kernel; lib: Ready; stored: D
             {e.exportJson}
           </button>
         )}
-        <button type="button" className={`${controls.button} ${css.barButton}`} disabled={!canSave} onClick={() => void save(false)}>
+        <button type="button" className={`${controls.button} ${css.barButton}`} disabled={!canSave || synced} onClick={() => void save(false)}>
           {e.save}
         </button>
-        {!canSave && <p className={css.barNote}>{errors.length ? fmt(e.saveBlockedErrors, { n: errors.length }) : e.saveBlockedEmpty}</p>}
+        {!canSave && (
+          <p className={css.barNote}>
+            {conflict === 'packGone'
+              ? fmt(e.conflictGone, { id: String(stored.editing) })
+              : conflict === 'stale'
+                ? fmt(e.conflictStale, { id: String(stored.editing) })
+                : store === 'edited'
+                  ? e.conflictEdited
+                  : errors.length
+                    ? fmt(e.saveBlockedErrors, { n: errors.length })
+                    : e.saveBlockedEmpty}
+          </p>
+        )}
         {synced && inLibrary && !lib.use.layers.includes(inLibrary.id) && (
           <p className={css.barNote}>
             {e.notInUse}{' '}
@@ -416,6 +529,31 @@ function Editor({ kernel, lib, stored }: { kernel: Kernel; lib: Ready; stored: D
           </p>
         )}
       </header>
+      {libNote && (
+        <div className={css.strip} role="alert">
+          <span className={css.stripText}>
+            <b>{libNote.title}</b> {libNote.body}
+          </span>
+          <button type="button" className={css.textButton} onClick={exportJson}>
+            {e.exportJson}
+          </button>
+        </div>
+      )}
+      {(conflict || store === 'edited') && (
+        <div className={css.strip} role="status">
+          <span className={css.stripText}>
+            {conflict === 'packGone' ? fmt(e.conflictGone, { id: String(stored.editing) }) : conflict === 'stale' ? fmt(e.conflictStale, { id: String(stored.editing) }) : e.conflictEdited}
+          </span>
+          {store === 'edited' && !conflict && (
+            <button type="button" className={css.textButton} onClick={() => window.location.reload()}>
+              {e.reopenDraft}
+            </button>
+          )}
+          <button type="button" className={css.textButton} onClick={saveAsNew}>
+            {e.saveAsNew}
+          </button>
+        </div>
+      )}
       {draft.editing === null && from === 'read' && compare && (
         <div className={css.strip} role="status">
           <span className={css.stripText}>{fmt(e.newPackNote, { name, id: String(raw.id), base: compare.label })}</span>
@@ -441,9 +579,10 @@ function Editor({ kernel, lib, stored }: { kernel: Kernel; lib: Ready; stored: D
               type="button"
               className={css.textButton}
               onClick={() =>
-                draftForPack(p, lib.drafts).then(
+                draftForPack(p, lib.packs, lib.drafts).then(
                   (d) => navigate(editorHref(lang, { draft: d.id, from: 'knowledge' }, hash.replace(/^#/, ''))),
-                  (err: unknown) => toast(fmt(t.knowledge.actionFailed, { reason: err instanceof Error ? err.message : String(err) })),
+                  (err: unknown) =>
+                    toast(err instanceof StaleDraftError ? fmt(e.staleDraft, { name: p.name }) : fmt(t.knowledge.actionFailed, { reason: err instanceof Error ? err.message : String(err) })),
                 )
               }
             >
@@ -511,15 +650,16 @@ function Editor({ kernel, lib, stored }: { kernel: Kernel; lib: Ready; stored: D
           </Modal>
         </ModalOverlay>
       )}
-      {blocker.state === 'blocked' && (
+      {blocker.state === 'blocked' && leaveWritten !== null && (
         <LeaveDialog
           t={t}
           draft={draft}
           name={name}
           time={timeText(savedAt)}
           errors={errors.length}
-          full={full}
-          toChart={from === 'read' && (blocker.location.pathname.endsWith('/chart'))}
+          unwritten={leaveWritten ? null : store === 'ok' ? 'failed' : store}
+          canSave={canSave}
+          toChart={from === 'read' && blocker.location.pathname.endsWith('/chart')}
           onStay={() => blocker.reset()}
           onLeave={() => blocker.proceed()}
           onExport={exportJson}
@@ -877,7 +1017,8 @@ function LeaveDialog({
   name,
   time,
   errors,
-  full,
+  unwritten,
+  canSave,
   toChart,
   onStay,
   onLeave,
@@ -889,7 +1030,10 @@ function LeaveDialog({
   name: string;
   time: string;
   errors: number;
-  full: boolean;
+  /** 这一页的改动没能写下的原因；都写下了为 null。 */
+  unwritten: 'full' | 'edited' | 'failed' | null;
+  /** 能不能保存到包库（没有必须改的问题、写了条目、与包库对得上）。 */
+  canSave: boolean;
   toChart: boolean;
   onStay: () => void;
   onLeave: () => void;
@@ -897,9 +1041,18 @@ function LeaveDialog({
   onExport: () => void;
 }) {
   const e = t.editor;
-  const changed = draft.snapshot ? SECTIONS.reduce((n, s) => n + Object.keys({ ...((draft.raw[s] ?? {}) as object), ...((draft.snapshot![s] ?? {}) as object) }).filter((k) => JSON.stringify((draft.raw[s] as Record<string, unknown> | undefined)?.[k]) !== JSON.stringify((draft.snapshot![s] as Record<string, unknown> | undefined)?.[k])).length, 0) : 0;
-  const title = full ? e.leaveFullTitle : draft.editing ? fmt(e.leaveTitleOwn, { n: changed }) : e.leaveTitleNew;
-  const body = full ? e.leaveFullBody : draft.editing ? fmt(e.leaveBodyOwn, { time, name }) : fmt(e.leaveBodyNew, { time });
+  const changed = draft.snapshot
+    ? SECTIONS.reduce(
+        (n, s) =>
+          n +
+          Object.keys({ ...((draft.raw[s] ?? {}) as object), ...((draft.snapshot![s] ?? {}) as object) }).filter(
+            (k) => JSON.stringify((draft.raw[s] as Record<string, unknown> | undefined)?.[k]) !== JSON.stringify((draft.snapshot![s] as Record<string, unknown> | undefined)?.[k]),
+          ).length,
+        0,
+      )
+    : 0;
+  const title = unwritten ? e.leaveFullTitle : draft.editing ? fmt(e.leaveTitleOwn, { n: changed }) : e.leaveTitleNew;
+  const body = unwritten === 'full' ? e.leaveFullBody : unwritten ? e.leaveUnwrittenBody : draft.editing ? fmt(e.leaveBodyOwn, { time, name }) : fmt(e.leaveBodyNew, { time });
   return (
     <ModalOverlay isOpen isDismissable onOpenChange={(o) => !o && onStay()} className={kcss.scrim}>
       <Modal className={kcss.dialog}>
@@ -909,7 +1062,7 @@ function LeaveDialog({
           </Heading>
           <p id="leave-body" className={kcss.dialogBody}>
             {body}
-            {!full && errors > 0 && (
+            {!unwritten && errors > 0 && (
               <>
                 <br />
                 {fmt(e.leaveErrors, { n: errors })}
@@ -920,7 +1073,7 @@ function LeaveDialog({
             <Button className={controls.ghost} onPress={onStay} autoFocus>
               {e.keepEditing}
             </Button>
-            {full ? (
+            {unwritten ? (
               <>
                 <Button className={controls.ghost} onPress={onExport}>
                   {e.exportJson}
@@ -934,7 +1087,7 @@ function LeaveDialog({
                 <Button className={controls.ghost} onPress={onLeave}>
                   {e.leaveDraft}
                 </Button>
-                {errors === 0 && (
+                {canSave && (
                   <Button className={controls.button} onPress={() => onSave(toChart)}>
                     {toChart ? e.saveUseBack : e.saveLeave}
                   </Button>
@@ -947,4 +1100,3 @@ function LeaveDialog({
     </ModalOverlay>
   );
 }
-
