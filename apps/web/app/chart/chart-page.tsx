@@ -7,6 +7,8 @@ import type { LunarCalendar } from '../birth/calendar';
 import { birthSummary, hourName } from '../birth/labels';
 import type { ChatChart } from '../chat/chat-panel';
 import { SidePanel, useSideTab } from '../chat/side';
+import { prefillQuestion, setSheet } from '../chat/session';
+import { useMediaQuery } from '../lib/media';
 import type { SideTab } from '../chat/store';
 import { type RecentState, pushRecent, removeRecent, useRecent } from '../birth/recent';
 import * as controls from '../components/controls.css';
@@ -31,7 +33,8 @@ import * as css from './chart-page.css';
 import { LayerPanel, monthLabel } from './layer-panel';
 import { decadalClockwise, decadalOfAge, nominalAge, yearRange } from './model';
 import { PromptPanel } from './prompt-panel';
-import { ReadPanel } from './read-panel';
+import { INITIAL_READING, ReadingPanel, type ReadingState } from './reading';
+import * as readingCss from './reading.css';
 import { type Today, castChart, chartHour, todayOf, useChartView } from './session';
 import * as boardCss from './board.css';
 
@@ -177,6 +180,8 @@ function ChartBody({
   tab,
   onTab,
   onOpenChart,
+  reading,
+  onReading,
 }: {
   kernel: Kernel;
   lunar: LunarCalendar;
@@ -197,6 +202,9 @@ function ChartBody({
   tab: SideTab;
   onTab: (tab: SideTab) => void;
   onOpenChart: (hash: string) => void;
+  /** 看盘的子页签与展开状态（由页面持有，换页签、换盘时不丢）。 */
+  reading: ReadingState;
+  onReading: (next: ReadingState) => void;
 }) {
   const view = useChartView(kernel, chart, today);
   const { sel, layers, palaces } = view;
@@ -272,6 +280,19 @@ function ChartBody({
     },
   };
 
+  const wide = useMediaQuery('(min-width: 1024px)');
+  const toast = useToast();
+  /** 点盘上的宫：≥1024 只改看盘的内容；<1024 右栏在盘下，不在看盘页签时切过去，否则点了看不到变化（设计规范 21.2）。 */
+  const selectPalace = (i: number) => {
+    view.select(i);
+    if (!wide && tab !== 'read') onTab('read');
+  };
+  const ask = (q: string) => {
+    prefillQuestion(hash, q);
+    onTab('chat');
+    if (!wide) setSheet(true);
+  };
+
   const hitTitles = palaces.map((p) => fmt(t.layer.pickDecadal, { a: p.decadal[0], b: p.decadal[1], palace: p.name }));
   const cellLabels = palaces.map((p) =>
     fmt(t.read.cell, { name: p.name, gz: `${p.stem}${p.branch}`, stars: p.majors.map((s) => s.name).join(t.read.starsSep) || t.read.noMajor }),
@@ -286,7 +307,7 @@ function ChartBody({
         layers={layers}
         surround={view.surround}
         nowDecadal={nowDecadal}
-        onSelect={view.select}
+        onSelect={selectPalace}
         cellLabels={cellLabels}
         drawKey={`${sel.layer}|${sel.decadal}|${sel.year}|${sel.month.month}${sel.month.part}|${view.palace}`}
         ring={{
@@ -303,7 +324,6 @@ function ChartBody({
         }}
         centre={(density) => <ChartCentre chart={chart} density={density} layer={act} layerLabel={layerLabel} t={t} />}
       />
-      <ReadPanel chart={chart} palaces={palaces} layers={layers} surround={view.surround} onSelect={view.select} t={t} />
       <SidePanel
         t={t}
         lang={lang}
@@ -316,6 +336,21 @@ function ChartBody({
         className={css.side}
         onOpenChart={onOpenChart}
         panels={{
+          read: knowledge ? (
+            <ReadingPanel
+              t={t}
+              kernel={kernel}
+              chart={chart}
+              view={view}
+              pack={knowledge.pack}
+              packLabel={knowledge.label}
+              todayYear={today.year}
+              state={reading}
+              onState={onReading}
+              onAsk={ask}
+              onToast={toast}
+            />
+          ) : null,
           prompt: (
             <PromptPanel
               t={t}
@@ -329,7 +364,7 @@ function ChartBody({
               question={question}
               onQuestion={(next) => onInput({ choice, question: next })}
               questionHeading={questionHeading(lang)}
-              mark={mark}
+              knowLabel={knowledge?.label ?? null}
             />
           ),
         }}
@@ -385,6 +420,7 @@ export function ChartPage() {
   const [formOpen, setFormOpen] = useState(false);
   const reported = useRef('');
   const { tab, setTab } = useSideTab(t);
+  const [reading, setReading] = useState<ReadingState>(INITIAL_READING);
   const bare = hash.replace(/^#/, '');
   const openChart = (h: string) => navigate({ hash: h }, { replace: true, preventScrollReset: true });
 
@@ -450,7 +486,7 @@ export function ChartPage() {
   }
 
   return (
-    <main className={[css.page, tab === 'chat' ? css.chatOn : '', chart ? css.withBar : ''].filter(Boolean).join(' ')}>
+    <main className={chart ? `${css.page} ${css.withBar}` : css.page}>
       <section className={css.birth} aria-label={t.chart.birth}>
         {birth && hour !== null && (
           <BirthSummary
@@ -472,6 +508,7 @@ export function ChartPage() {
         )}
         {!birth && <RecentList state={recent} t={t} onOpen={(h) => navigate({ hash: h }, { replace: true, preventScrollReset: true })} />}
       </section>
+      {chart && mark && <div className={css.kp}>{mark}</div>}
       {chart && kernel && lunar && today && birth && hour !== null ? (
         <ChartBody
           key={hash}
@@ -491,6 +528,8 @@ export function ChartPage() {
           tab={tab}
           onTab={setTab}
           onOpenChart={openChart}
+          reading={reading}
+          onReading={setReading}
         />
       ) : (
         <>
@@ -516,6 +555,18 @@ export function ChartPage() {
             className={`${css.side} ${css.sideEmpty}`}
             onOpenChart={openChart}
             panels={{
+              read: (
+                <div className={readingCss.empty}>
+                  <h3 className={readingCss.emptyTitle}>{waiting ? t.read.loadingTitle : t.read.emptyTitle}</h3>
+                  <p className={readingCss.emptyBody}>
+                    {waiting && kstate.status === 'loading'
+                      ? fmt(t.read.loadingBody, { a: Math.round(kstate.loaded / 1024), b: Math.round(kstate.total / 1024) })
+                      : waiting
+                        ? t.chart.loading
+                        : t.read.emptyBody}
+                  </p>
+                </div>
+              ),
               prompt: (
                 <PromptPanel
                   t={t}
@@ -529,6 +580,7 @@ export function ChartPage() {
                   question=""
                   onQuestion={() => undefined}
                   questionHeading={questionHeading(lang)}
+                  knowLabel={null}
                 />
               ),
             }}

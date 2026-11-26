@@ -124,6 +124,14 @@ c(`${tableWrap}`, { margin: '.4em 0 .9em' });
 c('table', { fontSize: size.small });
 c('th', { fontSize: size.label });
 
+/* ── 提示词全文（设计规范 21.5）：同预览的规则，正文 15px 行高 1.85，最宽 780px，表格 14px，分隔线 1px `--line-2` ── */
+
+export const full = style({ maxWidth: 780, fontSize: size.body, lineHeight: 1.85, color: color.fg });
+
+const f = within(full);
+f('table', { fontSize: size.small });
+f('hr', { borderTop: hair(color.line2), margin: '28px 0' });
+
 /* ── 内容页正文（设计规范第 14 节） ── */
 
 export const prose = style({

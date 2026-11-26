@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { expect, test } from './test';
+import { closePrompt, expect, layerTab, openPromptRaw, test } from './test';
 
 /** 金标里的一张盘：每宫的地支、宫名与主星（见文件里的 source）。 */
 const gold = JSON.parse(readFileSync(path.join(import.meta.dirname, 'fixtures', 'gold-chart.json'), 'utf8')) as {
@@ -56,60 +56,65 @@ test('运限：大限、流年、流月切换，选宫跳到该层命宫，读�
   const board = page.getByRole('button', { name: /^命宫，/ });
   await expect(board).toBeVisible();
 
-  await page.getByRole('radio', { name: '大限' }).click();
+  await layerTab(page, '大限').click();
   await page.getByRole('button', { name: '33–42 岁　子女' }).click();
   await expect(page.getByRole('button', { name: '33–42 岁　子女' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: /^子女，/ })).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByLabel('选中宫的读数')).toContainText('大限命宫');
+  await expect(page.getByRole('tabpanel', { name: '看盘' })).toContainText('大限命宫');
 
-  await page.getByRole('radio', { name: '流年' }).click();
+  await layerTab(page, '流年').click();
   await expect(page.getByRole('button', { name: '2032 年，虚岁 33', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: '下一年' }).click();
   await expect(page.getByRole('button', { name: '2033 年，虚岁 34', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByText('流年 癸丑　2033　虚岁 34')).toBeVisible();
 
-  await page.getByRole('radio', { name: '流月' }).click();
+  await layerTab(page, '流月').click();
   await page.getByRole('button', { name: '三月', exact: true }).click();
   await expect(page.getByRole('button', { name: '三月', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByText(/^流月 .{2}　2033 三月　虚岁 34$/)).toBeVisible();
 
-  await page.getByRole('radio', { name: '本命' }).click();
+  await layerTab(page, '本命').click();
   await expect(page.getByRole('button', { name: /^命宫，壬午/ })).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: /^财帛，/ }).click();
-  await expect(page.getByLabel('选中宫的读数')).toContainText('武曲');
+  await expect(page.getByRole('tabpanel', { name: '看盘' }).getByRole('heading', { level: 3 })).toHaveText('财帛');
+  await expect(page.getByRole('tabpanel', { name: '看盘' })).toContainText('武曲');
 });
 
 test('流月含闰月：2020 年的闰四月拆成前后两段', async ({ page }) => {
   await page.goto(SAMPLE);
-  await page.getByRole('radio', { name: '流年' }).click();
+  await layerTab(page, '流年').click();
   await page.getByRole('button', { name: /^选流年/ }).click();
   const dialog = page.getByRole('dialog', { name: '流年' });
   await dialog.getByRole('button', { name: '上一页' }).click();
   await dialog.getByRole('option', { name: '2020 年，虚岁 21' }).click();
-  await page.getByRole('radio', { name: '流月' }).click();
+  await layerTab(page, '流月').click();
   await expect(page.getByRole('button', { name: '闰四月（初一至十五）' })).toBeVisible();
   await page.getByRole('button', { name: '闰四月（十六至月末）' }).click();
-  await expect(page.getByText(/2020 闰四月下/)).toBeVisible();
+  await expect(page.getByText(/2020 闰四月下/).first()).toBeVisible();
+  await expect(page.getByRole('tabpanel', { name: '看盘' })).toContainText('流月 2020 闰四月下');
 });
 
 test('提示词：内核文本、方法正文与问题，复制原文与链接', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto(SAMPLE);
   await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
+  await page.getByRole('tab', { name: '提示词' }).click();
   await page.getByRole('textbox', { name: '你的问题' }).fill('今年适合换工作吗');
-  await page.getByRole('radio', { name: '原文' }).click();
-  await expect(page.getByRole('radio', { name: '原文' })).toBeChecked();
-  const preview = page.getByRole('region', { name: '提示词预览' });
+  let preview = await openPromptRaw(page);
   await expect(preview).toContainText('你在陪用户聊紫微斗数');
   await expect(preview).toContainText('# 命盘 2000-8-16 寅时 女');
   await expect(preview).toContainText('# 运限');
   await expect(preview).toContainText('# 我的问题');
+  await closePrompt(page);
 
   await page.locator('label').filter({ hasText: '大限一览' }).click();
   await expect(page.getByRole('checkbox', { name: '大限一览' })).toBeChecked();
-  await expect(preview).toContainText('# 大限一览');
   await page.locator('label').filter({ hasText: /^2022–2031 流年$/ }).click();
+  await expect(page.getByText('会发送：解读方法、本命盘、2026 年运限、大限一览、2022–2031 流年、我的问题；释义按 iztro-docs。')).toBeVisible();
+  preview = await openPromptRaw(page);
+  await expect(preview).toContainText('# 大限一览');
   await expect(preview).toContainText('# 流年一览 2022-2031');
+  await closePrompt(page);
 
   await page.getByRole('button', { name: '复制提示词' }).click();
   await expect(page.getByRole('status').filter({ hasText: '已在剪贴板' })).toBeVisible();
@@ -118,7 +123,7 @@ test('提示词：内核文本、方法正文与问题，复制原文与链接',
   expect(copied).toMatch(/# 我的问题\n\n今年适合换工作吗$/);
   expect(copied).toContain('# 大限一览');
 
-  await page.getByRole('button', { name: '复制链接' }).click();
+  await page.getByRole('button', { name: '复制这张盘的链接' }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${new URL(page.url()).origin}${SAMPLE}`);
 });
 
@@ -129,6 +134,7 @@ test('只知道大概时间：夜里有四个候选，所选候选写进地址�
   const cands = page.getByRole('radiogroup', { name: '候选时辰' });
   await expect(cands.getByRole('radio')).toHaveText(['早子', '丑', '寅', '晚子']);
   await expect(cands.getByRole('radio', { name: '丑' })).toBeChecked();
+  await page.getByRole('tab', { name: '提示词' }).click();
   await page.getByRole('textbox', { name: '你的问题' }).fill('今年适合换工作吗');
   await page.locator('label').filter({ hasText: '大限一览' }).click();
   await cands.getByRole('radio', { name: '寅' }).click();
@@ -137,26 +143,25 @@ test('只知道大概时间：夜里有四个候选，所选候选写进地址�
   // 换候选是换一张盘，已写的问题与勾选留着。
   await expect(page.getByRole('textbox', { name: '你的问题' })).toHaveValue('今年适合换工作吗');
   await expect(page.getByRole('checkbox', { name: '大限一览' })).toBeChecked();
-  await page.getByRole('radio', { name: '原文' }).click();
-  await expect(page.getByRole('radio', { name: '原文' })).toBeChecked();
-  await expect(page.getByRole('region', { name: '提示词预览' })).toContainText(
+  await expect(await openPromptRaw(page)).toContainText(
     '时辰未定：出生在所填日期的夜里（00:00–04:59、23:00–23:59），候选 早子（00:00–00:59）、丑（01:00–02:59）、寅（03:00–04:59）、晚子（23:00–23:59）；这张盘按寅时排。',
   );
-  await page.getByRole('button', { name: '复制链接' }).click();
+  await closePrompt(page);
+  await page.getByRole('button', { name: '复制这张盘的链接' }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toMatch(/#cal=solar&d=2000-8-16&p=night&h=2&g=f$/);
 });
 
 test('提示词：选在流月层时勾选项写到流月；按年时附流月一览', async ({ page }) => {
   await page.goto(SAMPLE);
   await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
-  await page.getByRole('radio', { name: '原文' }).click();
-  await expect(page.getByRole('radio', { name: '原文' })).toBeChecked();
-  const preview = page.getByRole('region', { name: '提示词预览' });
-  await expect(page.getByRole('checkbox', { name: /^\d{4} 年运限$/ })).toBeChecked();
+  let preview = await openPromptRaw(page);
   await expect(preview).toContainText('# 流月一览');
-  await page.getByRole('radio', { name: '流月' }).click();
+  await closePrompt(page);
+  await expect(page.getByRole('checkbox', { name: /^\d{4} 年运限$/ })).toBeChecked();
+  await layerTab(page, '流月').click();
   await page.getByRole('button', { name: '三月', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: /^\d{4} 年三月运限$/ })).toBeChecked();
+  preview = await openPromptRaw(page);
   await expect(preview).toContainText('## 流月');
   await expect(preview).not.toContainText('# 流月一览');
 });

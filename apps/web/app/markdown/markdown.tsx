@@ -137,12 +137,12 @@ const components: Components = {
 
 /**
  * Markdown 渲染：提示词预览、对话的回答与内容页共用同一套元素映射，样式按 `variant` 区分
- * （`preview` 见设计规范第 13 节，`chat` 见 19.4，`prose` 见第 14 节）。
+ * （`preview` 见设计规范第 13 节，`chat` 见 19.4，`full` 见 21.5，`prose` 见第 14 节）。
  * 输入先经 remend 补全未闭合的标记，流式输出途中的半截文本也能正常显示。
  */
-export function Markdown({ source, variant }: { source: string; variant: 'preview' | 'chat' | 'prose' }) {
+export function Markdown({ source, variant }: { source: string; variant: 'preview' | 'chat' | 'full' | 'prose' }) {
   return (
-    <div className={variant === 'preview' ? css.preview : variant === 'chat' ? `${css.preview} ${css.chat}` : css.prose}>
+    <div className={variant === 'preview' ? css.preview : variant === 'chat' ? `${css.preview} ${css.chat}` : variant === 'full' ? `${css.preview} ${css.full}` : css.prose}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkCjkFriendly]}
         allowedElements={ALLOWED}

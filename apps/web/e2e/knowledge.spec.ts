@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { type Page, expect, test } from './test';
+import { type Page, closePrompt, expect, openPromptRaw, test } from './test';
 
 /** 知识包页：导入、组合、导出、删除与各种不可用的状态，以及排盘页的释义随组合变化。 */
 
@@ -85,23 +85,25 @@ test('叠放顺序决定排盘页的释义与提示词出处；排盘页的「�
   await page.getByRole('button', { name: '把 乙 加入生效组合' }).click();
   await expect(page.getByRole('region', { name: '当前生效' })).toContainText('iztro-docs + 甲 + 乙');
 
-  const preview = page.getByRole('region', { name: '提示词预览' });
   await page.goto(SAMPLE);
   await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
-  await page.getByRole('radio', { name: '原文' }).click();
+  let preview = await openPromptRaw(page);
   await expect(preview).toContainText('乙说紫微。');
   await expect(preview).not.toContainText('甲说紫微。');
   await expect(preview).toContainText('释义摘自知识包 iztro-docs 2026-08-19 + a 2026-11-20 + b 2026-11-20');
+  await closePrompt(page);
 
   await page.goto('/zh/knowledge');
   await page.getByRole('button', { name: '把 乙 往下移一层' }).click();
   await expect(page.getByRole('region', { name: '当前生效' })).toContainText('iztro-docs + 乙 + 甲');
   await page.goto(SAMPLE);
-  await page.getByRole('radio', { name: '原文' }).click();
+  preview = await openPromptRaw(page);
   await expect(preview).toContainText('甲说紫微。');
+  await closePrompt(page);
 
   await page.getByRole('button', { name: /^释义：iztro-docs \+ 乙 \+ 甲/ }).click();
   await page.getByRole('dialog', { name: '释义用哪套知识包' }).getByRole('option', { name: 'iztro-docs，单独' }).click();
+  preview = await openPromptRaw(page);
   await expect(preview).not.toContainText('甲说紫微。');
   await expect(preview).toContainText('释义摘自知识包 iztro-docs 2026-08-19（');
 });
@@ -206,12 +208,12 @@ test('独立的新包可以单独生效，也能与默认包任意顺序叠放�
   await page.getByRole('button', { name: '加入生效组合', exact: true }).click();
   await expect(use).toContainText('某门派 + 门内笔记');
 
-  const preview = page.getByRole('region', { name: '提示词预览' });
   await page.goto(SAMPLE);
   await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
-  await page.getByRole('radio', { name: '原文' }).click();
+  let preview = await openPromptRaw(page);
   await expect(preview).toContainText('门内又说紫微。');
   await expect(preview).toContainText('释义摘自知识包 school 2025-03-01 + school-notes 2026-11-20');
+  await closePrompt(page);
   await page.getByRole('button', { name: /^释义：某门派 \+ 门内笔记/ }).click();
   const options = page.getByRole('dialog', { name: '释义用哪套知识包' }).getByRole('option');
   await expect(options).toHaveText([
@@ -223,6 +225,7 @@ test('独立的新包可以单独生效，也能与默认包任意顺序叠放�
     /^iztro-docs \+ 门内笔记叠在默认包上$/,
   ]);
   await options.filter({ hasText: /^某门派单独$/ }).click();
+  preview = await openPromptRaw(page);
   await expect(preview).toContainText('本门说紫微。');
   await expect(preview).toContainText('释义摘自知识包 school 2025-03-01（');
 });
@@ -306,10 +309,9 @@ test('id 里带逗号的包也能在排盘页「更换」里选用', async ({ pa
   await expect(page.getByText('已导入「逗号」')).toBeVisible();
   await page.goto(SAMPLE);
   await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
-  await page.getByRole('radio', { name: '原文' }).click();
   await page.getByRole('button', { name: /^释义：iztro-docs/ }).click();
   await page.getByRole('dialog', { name: '释义用哪套知识包' }).getByRole('option', { name: 'iztro-docs + 逗号，叠在默认包上' }).click();
-  await expect(page.getByRole('region', { name: '提示词预览' })).toContainText('逗号说紫微。');
+  await expect(await openPromptRaw(page)).toContainText('逗号说紫微。');
 });
 
 test('导入成功时提醒可以展开查看', async ({ page }) => {
@@ -351,8 +353,8 @@ test('旧版本导入、现在需要改的包：标为需要改并列出问题�
   expect(JSON.parse(readFileSync((await file.path())!, 'utf8')).stars).toEqual({ ziweiMjj: { intro: '旧。' } });
 
   await page.goto(SAMPLE);
-  await page.getByRole('radio', { name: '原文' }).click();
-  await expect(page.getByRole('region', { name: '提示词预览' })).toContainText('好包说紫微。');
+  await expect(await openPromptRaw(page)).toContainText('好包说紫微。');
+  await closePrompt(page);
   await page.getByRole('button', { name: /^释义：iztro-docs \+ 好包/ }).click();
   await expect(page.getByRole('dialog', { name: '释义用哪套知识包' }).getByRole('option', { name: /旧包/ })).toHaveCount(0);
 });
@@ -380,9 +382,9 @@ test('别的标签页开着旧版本的库：提示关掉它们，排盘页提�
   await page.goto(SAMPLE);
   await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
   await expect(page.getByText('本机知识包还没打开，释义暂用默认包')).toBeVisible();
-  await page.getByRole('radio', { name: '原文' }).click();
-  const preview = page.getByRole('region', { name: '提示词预览' });
+  const preview = await openPromptRaw(page);
   await expect(preview).toContainText('释义摘自知识包 iztro-docs 2026-08-19');
+  await closePrompt(page);
   await expect(page.getByRole('button', { name: '复制提示词' })).toBeEnabled();
 
   const other = await context.newPage();

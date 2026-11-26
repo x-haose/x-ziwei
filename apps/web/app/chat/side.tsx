@@ -13,14 +13,13 @@ import { saveTab, selectConversation, serviceName, setDrawer, setSheet, useChatD
 import { SIDE_TABS, type SideTab } from './store';
 
 /**
- * 右栏的页签（设计规范 19.1）：首次打开时本机存有 Key 是「对话」，否则是「提示词」；之后记住上次选的（存在本机）。
- * 本机存不了数据时只记在这一页。
+ * 右栏的页签（设计规范 21.2）：首次打开是「看盘」，之后记住上次选的（存在本机）。本机存不了数据时只记在这一页。
  */
 export function useSideTab(t: Messages): { tab: SideTab; setTab: (tab: SideTab) => void } {
   const db = useChatDb();
   const toast = useToast();
   const [picked, setPicked] = useState<SideTab | null>(null);
-  const stored = db.status === 'ready' ? (db.tab ?? (db.settings ? 'chat' : 'prompt')) : 'prompt';
+  const stored = db.status === 'ready' ? (db.tab ?? 'read') : 'read';
   return {
     tab: picked ?? stored,
     setTab: (tab) => {
@@ -50,8 +49,9 @@ function ChatEntry({ t, chartHash, onOpen }: { t: Messages; chartHash: string | 
 }
 
 /**
- * 排盘页右栏：「对话 | 提示词」两个页签。≥1024 时对话就在右栏；更窄时右栏只有入口，对话在全屏面板里，
- * 手机上另有固定在底部的「对话 | 提示词」一条。窗口跨过 1024 时对话在右栏与面板之间移动，草稿与内容不丢（存在会话状态里）。
+ * 排盘页右栏：「看盘 | 对话 | 提示词」三个页签（设计规范 21.1、21.2）。≥1024 时对话就在右栏；更窄时右栏排在盘下，
+ * 对话页签只有入口，对话在全屏面板里，另有固定在屏幕底部的一条按钮。窗口跨过 1024 时对话在右栏与面板之间移动，
+ * 草稿与内容不丢（存在会话状态里）。释义标记在左栏，对话的全屏面板会盖住它，所以面板里另放一个（`mark`）。
  */
 export function SidePanel({
   t,
@@ -88,7 +88,7 @@ export function SidePanel({
   const section = useRef<HTMLElement>(null);
   const conv = useShownConversation(chart?.hash ?? null);
   const hasKey = db.status === 'ready' && db.settings !== null;
-  const labels: Record<SideTab, string> = { chat: t.chat.tabChat, prompt: t.chat.tabPrompt };
+  const labels: Record<SideTab, string> = { read: t.chat.tabRead, chat: t.chat.tabChat, prompt: t.chat.tabPrompt };
 
   useEffect(() => {
     if (wide) setSheet(false);
@@ -108,7 +108,7 @@ export function SidePanel({
       lang={lang}
       chart={chart}
       kernel={kernel}
-      mark={mark}
+      mark={inSheet ? mark : null}
       inSheet={inSheet}
       drawer={drawer}
       onDrawer={setDrawer}
@@ -139,25 +139,23 @@ export function SidePanel({
       </section>
       {birthLabel !== null && (
         <div className={css.mobileBar}>
-          {SIDE_TABS.map((id) =>
-            id === 'chat' ? (
-              <button key={id} type="button" className={`${controls.button} ${css.mobileBarButton}`} onClick={openSheet}>
-                {labels[id]}
-              </button>
-            ) : (
-              <button
-                key={id}
-                type="button"
-                className={`${controls.ghost} ${css.mobileBarButton}`}
-                onClick={() => {
-                  onTab(id);
-                  section.current?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
-                }}
-              >
-                {labels[id]}
-              </button>
-            ),
-          )}
+          {SIDE_TABS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              className={`${controls.ghost} ${css.mobileBarButton}`}
+              onClick={() => {
+                if (id === 'chat') {
+                  openSheet();
+                  return;
+                }
+                onTab(id);
+                section.current?.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+              }}
+            >
+              {labels[id]}
+            </button>
+          ))}
         </div>
       )}
       {sheet && !wide && (

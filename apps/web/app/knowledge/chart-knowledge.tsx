@@ -8,13 +8,14 @@ import { activePack, brokenPacks, builtinPack, defaultPackInfo } from './kernel-
 import { DEFAULT_USE, type Use, activeIds, withoutPacks } from './library';
 import { KnowledgeMark } from './mark';
 import * as css from './mark.css';
-import { activePacks, provenance } from './parts';
+import { activePacks, provenance, useLabel } from './parts';
 import { type LibraryState, updateUse } from './use-library';
 
-/** 排盘页释义用的包与提示词里的出处（「iztro-docs 2026-08-19 + my-notes 2026-11-20」）。 */
+/** 排盘页释义用的包、提示词里的出处（「iztro-docs 2026-08-19 + my-notes 2026-11-20」）与组合名（「iztro-docs + 我的笔记」）。 */
 export interface ActiveKnowledge {
   pack: KnowledgePack;
   source: string;
+  label: string;
 }
 
 /** 本机过不了内核校验的包（「需要改」）及其 error 级问题；内核或包库没就绪时为空。 */
@@ -61,9 +62,10 @@ export function useActiveKnowledge(kernel: Kernel | null, lib: LibraryState, bro
   return useMemo(() => {
     if (!kernel) return null;
     const def = defaultPackInfo(kernel);
-    if (lib.status !== 'ready') return { pack: builtinPack(kernel), source: provenance([def]) };
+    if (lib.status !== 'ready') return { pack: builtinPack(kernel), source: provenance([def]), label: useLabel([def]) };
     const use = withoutPacks(lib.use, broken.keys());
-    return { pack: activePack(kernel, use, lib.packs), source: provenance(activePacks(use, lib.packs, def)) };
+    const active = activePacks(use, lib.packs, def);
+    return { pack: activePack(kernel, use, lib.packs), source: provenance(active), label: useLabel(active) };
   }, [kernel, lib, broken]);
 }
 

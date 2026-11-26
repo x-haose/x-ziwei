@@ -14,7 +14,7 @@ import type { ChatSettings } from './providers';
  */
 
 /** 排盘页右栏的页签，按显示顺序。 */
-export const SIDE_TABS = ['chat', 'prompt'] as const;
+export const SIDE_TABS = ['read', 'chat', 'prompt'] as const;
 
 export type SideTab = (typeof SIDE_TABS)[number];
 

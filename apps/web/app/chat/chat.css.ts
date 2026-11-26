@@ -610,7 +610,7 @@ export const ctaButton = style({ width: '100%' });
 export const mobileBar = style({
   display: 'none',
   '@media': {
-    [media.s]: {
+    [media.mDown]: {
       display: 'grid',
       gridAutoFlow: 'column',
       gridAutoColumns: '1fr',

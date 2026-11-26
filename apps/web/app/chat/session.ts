@@ -126,6 +126,13 @@ export function setEditing(id: string | null): void {
   setSession({ editing: id });
 }
 
+/** 把一句问题填进这张盘当前对话的输入框（不发送）：看盘里的「在对话里问…」用。 */
+export function prefillQuestion(chart: string, text: string): void {
+  const now = db.current();
+  const conv = shownConversation(session, now.status === 'ready' ? now.conversations : [], chart);
+  setDraft(draftKey(conv?.id ?? null, chart), text);
+}
+
 export function selectConversation(id: string | null): void {
   setSession({ currentId: id });
 }

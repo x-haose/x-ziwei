@@ -29,7 +29,8 @@ test('统计上报只有路径：生辰在 # 之后，首次载入、换候选�
   await page.goBack();
   await expect(page).toHaveURL(/#cal=solar&d=2000-8-16&p=night&h=2&g=f$/);
   await expect.poll(() => reports.length, { message: '统计脚本没有发出上报（脚本行为变了？）' }).toBeGreaterThanOrEqual(3);
-  for (const r of reports) expect(r, '上报里带了 # 之后的内容（生辰）').not.toMatch(/2000-8-16|cal=|#/);
+  // 生辰的任何一段都不能出现；「#」本身会出现在统计脚本记下的页面元素选择器里（如 `#react-aria-…`），地址里有没有 # 由下面逐条核对。
+  for (const r of reports) expect(r, '上报里带了 # 之后的内容（生辰）').not.toMatch(/2000-8-16|cal=|p=night|&g=f/);
   const locations = reports.flatMap((r) => [...r.matchAll(/"(?:location|referrer|path)":"([^"]*)"/g)].map((m) => m[1]));
   expect(locations.length).toBeGreaterThan(0);
   for (const l of locations) expect(l, '上报的地址不只是路径').toMatch(/^(http:\/\/localhost:4173)?\/zh\/(chart|install)$/);

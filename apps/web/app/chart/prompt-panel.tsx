@@ -1,13 +1,13 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Checkbox, TextArea } from 'react-aria-components';
 import * as controls from '../components/controls.css';
 import { CheckIcon } from '../components/icons';
-import { Segmented } from '../components/segmented';
 import type { Lang } from '../i18n/lang';
 import { fmt, type Messages } from '../i18n/messages';
-import { Markdown } from '../markdown/markdown';
 import type { PromptChoice } from '../prompt/sections';
 import * as css from './chart-page.css';
+import { PromptFull } from './prompt-full';
+import { useCopy } from './use-copy';
 
 /** 提示词可以粘贴到的聊天 AI。 */
 const CHAT_AIS = [
@@ -18,33 +18,11 @@ const CHAT_AIS = [
   { href: 'https://claude.ai/new', zh: 'Claude', en: 'Claude' },
 ] as const;
 
-/** 复制成功后按钮变色与说明的停留时长（毫秒）。 */
-const COPIED_MS = 2400;
-
-/** 原文视图：保留换行，标题行用主色，「我的问题」一节用强调色。 */
-function RawView({ text, questionHeading }: { text: string; questionHeading: string }) {
-  const at = text.lastIndexOf(questionHeading);
-  const body = at >= 0 ? text.slice(0, at) : text;
-  const question = at >= 0 ? text.slice(at) : '';
-  return (
-    <>
-      {body.split('\n').map((line, i) => (
-        // 行号即行在原文里的位置，原文不变时稳定。
-        <span key={i} className={line.startsWith('#') ? css.rawHeading : undefined}>
-          {line}
-          {'\n'}
-        </span>
-      ))}
-      {question && <span className={css.rawQuestion}>{question}</span>}
-    </>
-  );
-}
-
-type CopyState = { kind: 'idle' } | { kind: 'ok'; which: 'prompt' | 'link' } | { kind: 'failed' };
+const len = (text: string, lang: Lang) => [...text].length.toLocaleString(lang === 'zh' ? 'zh-CN' : 'en');
 
 /**
- * 提示词页签（设计规范第 13 节、19.1）：勾选盘面各段、写问题、预览（渲染或原文）、复制原文、复制链接、
- * 常用聊天 AI 的入口。`text` 为 null 时（还没有盘）整块禁用，预览写 `emptyText`。
+ * 提示词页签（设计规范 21.5）：勾选盘面各段、写问题；一行写会发送哪些段与释义按哪套；「查看全文」打开全屏阅读视图，
+ * 「复制提示词」复制原文；复制这张盘的链接；常用聊天 AI 的入口。`text` 为 null 时（还没有盘）整块不可用，概要行写 `emptyText`。
  */
 export function PromptPanel({
   t,
@@ -58,7 +36,7 @@ export function PromptPanel({
   question,
   onQuestion,
   questionHeading,
-  mark,
+  knowLabel,
 }: {
   t: Messages;
   lang: Lang;
@@ -68,32 +46,19 @@ export function PromptPanel({
   onChoice: (next: PromptChoice) => void;
   /** 「2026 年运限」：年份在浏览器里求得。 */
   yearLabel: string;
-  /** 「2022–2031 流年一览」。 */
+  /** 「2022–2031 流年」。 */
   yearsLabel: string;
   question: string;
   onQuestion: (q: string) => void;
   /** 原文里「我的问题」一节的标题行，用于原文视图着色。 */
   questionHeading: string;
-  /** 勾选项下方的释义标记（知识包组合与更换）。 */
-  mark?: ReactNode;
+  /** 释义所按的组合名；还没有盘时为 null。 */
+  knowLabel: string | null;
 }) {
-  const [mode, setMode] = useState<'md' | 'raw'>('md');
-  const [copy, setCopy] = useState<CopyState>({ kind: 'idle' });
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
+  const { copy, run } = useCopy();
+  const [full, setFull] = useState(false);
+  const fullButton = useRef<HTMLButtonElement>(null);
   const on = text !== null;
-
-  const doCopy = async (which: 'prompt' | 'link', value: string) => {
-    clearTimeout(timer.current);
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopy({ kind: 'ok', which });
-      timer.current = setTimeout(() => setCopy({ kind: 'idle' }), COPIED_MS);
-    } catch (err) {
-      console.error(err);
-      setCopy({ kind: 'failed' });
-    }
-  };
 
   const checks: { key: keyof PromptChoice; label: string }[] = [
     { key: 'natal', label: t.chart.checks.natal },
@@ -102,24 +67,23 @@ export function PromptPanel({
     { key: 'decades', label: t.chart.checks.decades },
     { key: 'years', label: yearsLabel },
   ];
-  const count = text === null ? '' : fmt(t.chart.count, { n: [...text].length.toLocaleString(lang === 'zh' ? 'zh-CN' : 'en') });
+  const parts = [
+    t.chart.sendsMethod,
+    ...checks.filter((c) => c.key !== 'know' && choice[c.key]).map((c) => c.label),
+    t.chart.sendsQuestion,
+  ];
+  const sends = on
+    ? fmt(t.chart.sends, { parts: parts.join(t.read.starsSep), know: choice.know && knowLabel ? fmt(t.chart.sendsKnow, { label: knowLabel }) : '' })
+    : emptyText;
   const message =
     copy.kind === 'failed'
       ? t.chart.copyFailed
       : copy.kind === 'ok'
         ? copy.which === 'prompt'
-          ? fmt(t.chart.promptCopied, { n: [...(text ?? '')].length.toLocaleString(lang === 'zh' ? 'zh-CN' : 'en') })
+          ? fmt(t.chart.promptCopied, { n: len(text ?? '', lang) })
           : t.chart.linkCopied
         : '';
-  const okButton = (which: 'prompt' | 'link', label: string) =>
-    copy.kind === 'ok' && copy.which === which ? (
-      <>
-        <CheckIcon />
-        {t.chart.copied}
-      </>
-    ) : (
-      label
-    );
+  const copied = copy.kind === 'ok' && copy.which === 'prompt';
 
   return (
     <div className={css.prompt}>
@@ -138,7 +102,6 @@ export function PromptPanel({
           </Checkbox>
         ))}
       </div>
-      {mark}
       <div className={css.ask}>
         <TextArea
           className={css.textarea}
@@ -149,51 +112,35 @@ export function PromptPanel({
           onChange={(e) => onQuestion(e.target.value)}
         />
       </div>
-      <div className={css.previewHead}>
-        <span>{t.chart.preview}</span>
-        <Segmented
-          label={t.chart.previewMode}
-          className={css.previewMode}
-          value={mode}
-          options={[
-            { value: 'md', label: t.chart.rendered },
-            { value: 'raw', label: t.chart.raw },
-          ]}
-          onChange={setMode}
-        />
-        <span>{count}</span>
-      </div>
-      <div
-        className={!on ? `${css.preview} ${css.previewOff}` : mode === 'raw' ? `${css.preview} ${css.previewRaw}` : css.preview}
-        role="region"
-        aria-label={t.chart.previewRegion}
-        tabIndex={on ? 0 : undefined}
-      >
-        {text === null ? emptyText : mode === 'md' ? <Markdown source={text} variant="preview" /> : <RawView text={text} questionHeading={questionHeading} />}
-      </div>
+      <p className={css.sends}>{sends}</p>
       <div className={css.actions}>
-        <button
-          type="button"
-          className={controls.button}
-          disabled={!on}
-          data-ok={copy.kind === 'ok' && copy.which === 'prompt' ? '' : undefined}
-          onClick={() => text !== null && doCopy('prompt', text)}
-        >
-          {okButton('prompt', t.chart.copyPrompt)}
+        <button ref={fullButton} type="button" className={controls.ghost} disabled={!on} onClick={() => setFull(true)}>
+          {t.chart.viewFull}
+          {on && <span className={css.count}>{fmt(t.chart.count, { n: len(text, lang) })}</span>}
         </button>
-        <button
-          type="button"
-          className={controls.ghost}
-          disabled={!on}
-          data-ok={copy.kind === 'ok' && copy.which === 'link' ? '' : undefined}
-          onClick={() => doCopy('link', location.href)}
-        >
-          {okButton('link', t.chart.copyLink)}
+        <button type="button" className={controls.button} disabled={!on} data-ok={copied ? '' : undefined} onClick={() => text !== null && run('prompt', text)}>
+          {copied ? (
+            <>
+              <CheckIcon />
+              {t.chart.copied}
+            </>
+          ) : (
+            t.chart.copyPrompt
+          )}
         </button>
       </div>
       <div className={css.message} role="status">
         {message}
       </div>
+      <button
+        type="button"
+        className={css.linkButton}
+        disabled={!on}
+        data-ok={copy.kind === 'ok' && copy.which === 'link' ? '' : undefined}
+        onClick={() => run('link', location.href)}
+      >
+        {copy.kind === 'ok' && copy.which === 'link' ? t.chart.copied : t.chart.copyLinkText}
+      </button>
       <nav className={css.ai} aria-label={t.chart.openAi}>
         {CHAT_AIS.map((a) => (
           <a key={a.href} className={css.aiLink} href={a.href} target="_blank" rel="noopener noreferrer">
@@ -201,6 +148,18 @@ export function PromptPanel({
           </a>
         ))}
       </nav>
+      {full && text !== null && (
+        <PromptFull
+          t={t}
+          lang={lang}
+          text={text}
+          questionHeading={questionHeading}
+          onClose={() => {
+            setFull(false);
+            fullButton.current?.focus();
+          }}
+        />
+      )}
     </div>
   );
 }
