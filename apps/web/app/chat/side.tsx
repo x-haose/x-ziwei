@@ -23,6 +23,7 @@ export function ChatHost({
   reading,
   className,
   onUsePrompt,
+  onBack,
   onOpenChart,
 }: {
   t: Messages;
@@ -38,6 +39,8 @@ export function ChatHost({
   className: string;
   /** 对话里「复制给别的 AI」：关掉对话，回到问 AI。 */
   onUsePrompt: () => void;
+  /** 右栏里「回到…」关掉对话之后：把焦点还给打开对话的按钮。 */
+  onBack: () => void;
   onOpenChart: (hash: string) => void;
 }) {
   const wide = useMediaQuery('(min-width: 1024px)');
@@ -66,7 +69,14 @@ export function ChatHost({
       <section className={className} aria-label={t.chat.tabsLabel}>
         {inColumn ? (
           <div className={css.panel}>
-            <button type="button" className={css.backButton} onClick={() => setSheet(false)}>
+            <button
+              type="button"
+              className={css.backButton}
+              onClick={() => {
+                setSheet(false);
+                onBack();
+              }}
+            >
               {back}
             </button>
             {column(false)}

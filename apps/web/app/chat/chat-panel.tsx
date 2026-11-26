@@ -568,11 +568,11 @@ export function ChatColumn({
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [conv?.id]);
-  // 全屏面板打开时焦点在输入框（未设 Key 时在 Key 输入框，见 SetupForm 的 autoFocus）。
+  // 对话打开（右栏或全屏面板挂上）时焦点在输入框（未设 Key 时在 Key 输入框，见 SetupForm 的 autoFocus）。
   const hasSettings = db.status === 'ready' && db.settings !== null;
   useEffect(() => {
-    if (inSheet && hasSettings) input.current?.focus();
-  }, [inSheet, hasSettings]);
+    if (hasSettings) input.current?.focus();
+  }, [hasSettings]);
 
   if (db.status !== 'ready') {
     if (db.status === 'loading') return <div className={css.chat} />;
@@ -603,7 +603,7 @@ export function ChatColumn({
   if (!settings) {
     return (
       <div className={css.chat}>
-        <SetupForm t={t} settings={null} intro autoFocus={inSheet} onUsePrompt={onUsePrompt} />
+        <SetupForm t={t} settings={null} intro autoFocus onUsePrompt={onUsePrompt} />
       </div>
     );
   }

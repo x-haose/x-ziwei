@@ -247,7 +247,7 @@ export function chartEntries(kernel: Kernel, chart: Astrolabe, only?: readonly n
     .map((k) => ({ section: 'mutagens', key: k, name: kernel.i18n.translate(k, 'zh-CN') ?? k, where: '' }));
   const patterns: ListedEntry[] = [];
   for (const h of chart.patterns()) {
-    if (only && !only.includes(h.palaceIndex) && !h.stars.some((s) => only.includes(s.palaceIndex))) continue;
+    if (only && !only.includes(h.palaceIndex)) continue;
     if (!patterns.some((x) => x.key === h.key)) patterns.push({ section: 'patterns', key: h.key, name: h.name, where: chart.palaces[h.palaceIndex]!.name });
   }
   const palaces: ListedEntry[] = order.map((i) => ({ section: 'palaces', key: chart.palaces[i]!.nameKey, name: chart.palaces[i]!.name, where: chart.palaces[i]!.earthlyBranch }));
@@ -261,7 +261,7 @@ export function chartEntries(kernel: Kernel, chart: Astrolabe, only?: readonly n
   ].filter((g) => g.entries.length > 0) as EntryGroup[];
 }
 
-/** 读一个主题时用到的条目：主题本身、它选的宫位、这几宫的星，以及落在这几宫的格局与四化。 */
+/** 读一个主题时用到的条目：主题本身、它选的宫位、这几宫的星，以及本宫在这几宫的格局与落在这几宫的四化。 */
 export function topicEntries(kernel: Kernel, chart: Astrolabe, topic: TopicEntry, palaces: readonly number[]): EntryGroup[] {
   const groups = chartEntries(kernel, chart, palaces);
   return [{ id: 'topic', kind: 'topic', entries: [{ section: 'topics', key: topic.slug, name: topic.title ?? topic.slug, where: '' }] }, ...groups];

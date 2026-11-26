@@ -23,7 +23,10 @@ export const writeInto = style({ display: 'flex', alignItems: 'center', flexWrap
 
 export const writeIntoLabel = style({ fontSize: size.label, color: color.fg3 });
 
-export const writeIntoPicker = style({ minWidth: 280, maxWidth: '100%' });
+export const writeIntoPicker = style({});
+
+/* 「写进」与标签排在同一行：触发钮按内容宽，不铺满。 */
+globalStyle(`${writeInto} ${writeIntoPicker}`, { width: 'auto', minWidth: 280, maxWidth: '100%' });
 
 export const hint = style({ fontSize: size.small, color: color.fg2, marginTop: 8, lineHeight: 1.6 });
 

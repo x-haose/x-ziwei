@@ -109,7 +109,7 @@ function RichText({ t, pack, parts }: { t: Messages; pack: KnowledgePack; parts:
         ) : 'term' in p ? (
           <Term key={i} t={t} pack={pack} slug={TERM_SLUGS[p.term]} text={p.text} />
         ) : (
-          <Term key={i} t={t} pack={pack} slug={brightnessConcept(pack, p.brightness)} text={p.brightness} />
+          <Term key={i} t={t} pack={pack} slug={brightnessConcept(pack)} text={p.brightness} />
         ),
       )}
     </>
@@ -350,6 +350,8 @@ export interface AskInfo {
   onCopy: (site: string) => void;
   onViewFull: () => void;
   onAskHere: () => void;
+  /** 「在这页问」按钮：对话关掉后焦点回到这里。 */
+  hereRef: RefObject<HTMLButtonElement | null>;
 }
 
 /** 聊天网站：复制材料后在新标签页打开。 */
@@ -492,7 +494,7 @@ export function Reading(p: ReadingProps) {
             className={css.askInput}
             rows={3}
             value={ask.question}
-            placeholder={t.read.askPlaceholders[topic.slug] ?? fmt(t.read.askPlaceholder, { topic: name })}
+            placeholder={fmt(t.read.askPlaceholder, { topic: name })}
             onChange={(e) => ask.onQuestion(e.target.value)}
           />
         </label>
@@ -516,7 +518,7 @@ export function Reading(p: ReadingProps) {
         </div>
         <div className={css.inPage}>
           <p className={css.inPageText}>{ask.key ? fmt(t.read.inPageKey, { service: ask.key.service }) : t.read.inPageNoKey}</p>
-          <button type="button" className={`${controls.ghost} ${css.actButton}`} onClick={ask.onAskHere}>
+          <button ref={ask.hereRef} type="button" className={`${controls.ghost} ${css.actButton}`} onClick={ask.onAskHere}>
             {ask.key ? fmt(t.read.askHereModel, { model: ask.key.model }) : t.read.askHere}
           </button>
         </div>

@@ -103,9 +103,10 @@ export function Preview({
   } else if (entry.section === 'palaces' || entry.section === 'concepts') content = <p className={css.previewNote}>{e.previewUseFull}</p>;
   else if (entry.section === 'topics' && c) {
     const topic = merged.topic(entry.key);
+    const tp = topic && topicPalaces(c, topic);
     if (!topic) content = <p className={css.missing}>{e.previewMissing}</p>;
+    else if (!tp) content = <p className={css.previewNote}>{t.read.noPalacesTitle}</p>;
     else {
-      const tp = topicPalaces(c, topic);
       const kind = (i: number) => {
         const g = tp.groups.find((x) => x.target === i);
         if (g?.kind === 'surround') return 'main';

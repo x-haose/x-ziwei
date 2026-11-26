@@ -245,7 +245,7 @@ function WriteBody({ kernel, lib }: { kernel: Kernel; lib: Extract<LibraryState,
           <div className={css.topicGrid}>
             {chart &&
               topics.map((tp) => {
-                const g = topicEntries(kernel, chart, tp, topicPalaces(chart, tp).set);
+                const g = topicEntries(kernel, chart, tp, topicPalaces(chart, tp)?.set ?? []);
                 const c = tally(g, intoRaw, compare !== null, compare);
                 return (
                   <button key={tp.slug} type="button" className={css.topicCell} onClick={() => open({ scope: { topic: tp.slug } })}>

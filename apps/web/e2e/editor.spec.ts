@@ -17,6 +17,10 @@ test('从看盘「改写这一条」直达：写进叠在默认包上的新包�
   expect(new URL(page.url()).search).not.toMatch(/2000|8-16|cal=|d=/);
   await expect(page.getByText(/^写进新包「我的释义」（my-pack）：叠在 iztro-docs 上面/)).toBeVisible();
   await expect(page.getByText('沿用 iztro-docs', { exact: true })).toBeVisible();
+  // 左栏：宫位行写地支加「宫」，四化行写段名。
+  const list = page.getByRole('complementary', { name: '条目' });
+  await expect(list.getByRole('button', { name: /^命宫\s*午宫/ })).toBeVisible();
+  await expect(list.getByRole('button', { name: /^禄\s*四化/ })).toBeVisible();
   await page.getByRole('button', { name: '改写' }).first().click();
   const body = page.getByRole('textbox', { name: '正文' });
   await expect(body).toBeFocused();
@@ -52,7 +56,10 @@ test('校验沿用内核：正文里的 HTML 标签必须改，保存不可用�
   await expect(page.getByText(/^还有 \d+ 处必须改，改好才能保存到包库；草稿已自动存在本机。$/)).toBeVisible();
   await page.getByRole('tab', { name: /^问题/ }).click();
   await page.locator('button[data-level="error"]').first().click();
-  await expect(page.getByRole('textbox', { name: '正文' })).toBeFocused();
+  const body = page.getByRole('textbox', { name: '正文' });
+  await expect(body).toBeFocused();
+  // 选中正文里出问题的那一段。
+  expect(await body.evaluate((el: HTMLTextAreaElement) => el.value.slice(el.selectionStart, el.selectionEnd))).toBe('<b>');
   await page.getByRole('textbox', { name: '正文' }).fill('紫微帝王。');
   await expect(save).toBeEnabled();
 });
@@ -119,4 +126,18 @@ test('知识包页：「写自己的释义」入口；用户包可编辑，没�
   await expect(confirm.getByRole('button', { name: '取消' })).toBeFocused();
   await confirm.getByRole('button', { name: '丢弃' }).click();
   await expect(drafts).toHaveCount(0);
+});
+
+test('内核没装好：编辑器左栏只有包信息，中栏写明在加载并有进度条，装好后照常编辑', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await rewriteZiwei(page);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Network.enable');
+  await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
+  await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 20, downloadThroughput: 300 * 1024, uploadThroughput: -1 });
+  await page.reload();
+  await expect(page.getByRole('progressbar', { name: '排盘内核加载中' })).toBeVisible();
+  await expect(page.getByRole('complementary', { name: '条目' }).getByRole('button')).toHaveText([/^包信息/]);
+  await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+  await expect(page.getByRole('heading', { level: 2, name: /^紫微/ })).toBeVisible({ timeout: 20000 });
 });

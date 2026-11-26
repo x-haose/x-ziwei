@@ -750,6 +750,7 @@ export function EntryEditor({
           </h2>
           <p className={css.entrySub}>
             {cat && <span>{e.categories[cat]}</span>}
+            {typeof (own?.group ?? base?.group) === 'string' && <span>{String(own?.group ?? base?.group)}</span>}
             <span>{statusText}</span>
           </p>
         </div>

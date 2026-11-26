@@ -87,9 +87,10 @@ export interface TopicPalaces {
 
 /**
  * 主题选哪几宫（与内核 `topicToText` 同一规则）：`surround` 的各宫连同三方四正，`palaces` 的各宫只取本宫
- * （可含身宫、来因宫）。宫位标识定位不到说明主题定义有误（知识包校验本应拒绝），直接失败。
+ * （可含身宫、来因宫）。主题一个宫都不选时为 null（知识包校验对此只给提醒，用户包里会有）；
+ * 宫位标识定位不到说明主题定义有误（知识包校验会拒绝这样的包），直接失败。
  */
-export function topicPalaces(chart: Astrolabe, topic: TopicEntry): TopicPalaces {
+export function topicPalaces(chart: Astrolabe, topic: TopicEntry): TopicPalaces | null {
   const groups: TopicGroup[] = [];
   for (const key of topic.surround ?? []) {
     const s = chart.surroundedPalaces(key);
@@ -102,13 +103,16 @@ export function topicPalaces(chart: Astrolabe, topic: TopicEntry): TopicPalaces 
     groups.push({ kind: 'only', key, target: p.index });
   }
   const first = groups[0];
-  if (!first) throw new Error(`主题 ${topic.slug} 没有选任何宫`);
+  if (!first) return null;
   const set: number[] = [];
   for (const g of groups) for (const i of g.kind === 'surround' ? [g.target, g.opposite, g.wealth, g.career] : [g.target]) if (!set.includes(i)) set.push(i);
   return { groups, set, main: (groups.find((g) => g.kind === 'surround') ?? first).target };
 }
 
-/** 默认包 13 个主题的先后（设计规范 21.2）；用户包新增的主题排在后面，按包里的先后。 */
+/**
+ * 主题按钮的先后：默认包 13 个主题按设计规范 21.2 排，其余主题排在后面、按包里的先后。只决定按钮顺序，不参与选宫与取材；
+ * 知识包格式本身没有主题顺序，所以先后列在这里。
+ */
 const TOPIC_ORDER = ['overall', 'personality', 'career', 'wealth', 'romance', 'health', 'parents', 'children', 'siblings', 'friends', 'property', 'travel', 'spirit'];
 
 export function orderedTopics(pack: KnowledgePack): TopicEntry[] {
@@ -377,29 +381,30 @@ export function topicSteps(input: StepInput): Step[] {
     when: null,
   });
 
-  /* 4 格局：同一条命中只列一次，标出在哪几层成立 */
-  const pats = new Map<string, { hit: PatternHit; scopes: string[] }>();
-  const add = (list: readonly PatternHit[], scope: string) => {
+  /* 4 格局：本宫在这几宫的格局（与内核 topicToText 同一规则）；同一条命中只列一次，标出在哪几层成立 */
+  const pats = new Map<string, { hit: PatternHit; scopes: string[]; natal: boolean }>();
+  const add = (list: readonly PatternHit[], scope: string, natal: boolean) => {
     for (const h of list) {
-      if (!set.includes(h.palaceIndex) && !h.stars.some((s) => set.includes(s.palaceIndex))) continue;
+      if (!set.includes(h.palaceIndex)) continue;
       const id = hitId(h);
       const same = pats.get(id);
       if (same) {
         if (!same.scopes.includes(scope)) same.scopes.push(scope);
-      } else pats.set(id, { hit: h, scopes: [scope] });
+      } else pats.set(id, { hit: h, scopes: [scope], natal });
     }
   };
-  add(natalPatterns, t.layer.natal);
-  if (layer) add(layer.patterns, t.layer[layer.view.kind]);
+  add(natalPatterns, t.layer.natal, true);
+  if (layer) add(layer.patterns, t.layer[layer.view.kind], false);
   const pl4 = [...pats.values()];
   const f4: Rich[] = pl4.length
-    ? pl4.map(({ hit, scopes }) => {
+    ? pl4.map(({ hit, scopes, natal }) => {
         const stars = hit.stars.filter((s, k, a) => a.findIndex((y) => y.name === s.name && y.palaceIndex === s.palaceIndex) === k);
         return rich(f.pattern, {
           name: hit.name,
           broken: hit.broken ? f.broken : '',
           benGong: term('benGong'),
-          palace: pl(hit.palaceIndex),
+          // 运限层上成格的本宫按那一层的宫名写（「大限命宫」），括号注明它在本命的位置。
+          palace: natal || !layer ? pl(hit.palaceIndex) : rich(f.layerPalace, { layer: t.layer[layer.view.kind], name: palaceFull(hit.palaceName, t), natal: pl(hit.palaceIndex) }),
           stars: stars.map((s) => f.patternStar.replace('{palace}', pl(s.palaceIndex)).replace('{star}', s.name)).join(t.read.sep),
           scopes: scopes.join(t.read.sep),
         });
@@ -460,20 +465,17 @@ export function topicSteps(input: StepInput): Step[] {
 const conceptTitles = new WeakMap<KnowledgePack, [slug: string, title: string][]>();
 
 /**
- * 亮度字（庙、旺……）对应的术语条目：生效组合 `concepts` 里标题以「亮度」开头，或标题按顿号拆开后含这个字的条目。
+ * 亮度字（庙、旺……）对应的术语条目：生效组合 `concepts` 里标题以「亮度」开头的那一条，各亮度字共用。
  * 没有为 null（照常显示文字）。
  */
-export function brightnessConcept(pack: KnowledgePack, word: string): string | null {
+export function brightnessConcept(pack: KnowledgePack): string | null {
   let list = conceptTitles.get(pack);
   if (!list) {
     const concepts = (pack.toJSON() as { concepts?: Record<string, { title?: string }> }).concepts ?? {};
     list = Object.entries(concepts).map(([slug, c]) => [slug, c.title ?? '']);
     conceptTitles.set(pack, list);
   }
-  for (const [slug, title] of list) {
-    if (title.startsWith('亮度') || title.split(/[、，,/／]/).map((x) => x.trim()).includes(word)) return slug;
-  }
-  return null;
+  return list.find(([, title]) => title.startsWith('亮度'))?.[0] ?? null;
 }
 
 /** 选宫句：「看命宫连同它的三方四正，另看身宫、福德宫。」只取本宫的主题写「只看……这几宫本身。」 */

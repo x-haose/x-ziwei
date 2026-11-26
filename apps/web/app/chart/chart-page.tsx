@@ -218,7 +218,6 @@ function ChartBody({
   const method = METHOD_STEPS[lang];
 
   const topics = useMemo(() => orderedTopics(pack), [pack]);
-  // 换了一套释义后原来的主题可能不在了：回到第一个主题。
   // 换了一套释义后原来的主题可能不在了：回到第一个主题。生效组合里一个主题都没有时（用户包可以不带主题）没有阅读。
   const topic = topics.find((x) => x.slug === input.topic) ?? topics[0] ?? null;
   const name = topic ? (topic.title ?? topic.slug) : '';
@@ -287,6 +286,7 @@ function ChartBody({
   const boardRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const askRef = useRef<HTMLTextAreaElement>(null);
+  const hereRef = useRef<HTMLButtonElement>(null);
   const stepRefs = useRef<(HTMLLIElement | null)[]>([]);
   const readingRef = useRef<HTMLDivElement>(null);
   /**
@@ -307,10 +307,15 @@ function ChartBody({
   const focusLater = (el: () => HTMLElement | null | undefined) => requestAnimationFrame(() => el()?.focus({ preventScroll: true }));
 
   /** 把阅读里的一个元素滚到可见：≥1024 在右栏内滚，更窄时滚整页。 */
+  /** 程序滚动右栏后紧接着的那一次滚动事件不换步（步已由调用方定好）。 */
+  const quiet = useRef(false);
   const reveal = (el: HTMLElement | null, top = false) => {
     if (!el) return;
     if (isWide() && scroller.current) {
-      scroller.current.scrollTo({ top: top ? 0 : el.offsetTop - 8, behavior: 'auto' });
+      const host = scroller.current;
+      const to = Math.min(top ? 0 : el.offsetTop - 8, host.scrollHeight - host.clientHeight);
+      if (Math.abs(host.scrollTop - to) >= 1) quiet.current = true;
+      host.scrollTo({ top: to, behavior: 'auto' });
     } else {
       window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 8, behavior: smooth() });
     }
@@ -347,15 +352,22 @@ function ChartBody({
     });
   };
 
-  /** ≥1024：右栏滚到哪一步，盘就换成哪一步（越过右栏上部 35% 处的最后一步）。 */
+  /**
+   * ≥1024：右栏滚到哪一步，盘就换成哪一步（越过右栏上部 35% 处的最后一步）；滚到底时取最后一步（同全文视图的目录）。
+   */
   const onScroll = () => {
     const host = scroller.current;
     if (!host || !isWide()) return;
+    if (quiet.current) {
+      quiet.current = false;
+      return;
+    }
     const line = host.getBoundingClientRect().top + host.clientHeight * 0.35;
     let k = 0;
     stepRefs.current.forEach((el, i) => {
       if (el && el.getBoundingClientRect().top <= line) k = i;
     });
+    if (host.scrollTop + host.clientHeight >= host.scrollHeight - 2) k = stepRefs.current.length - 1;
     if (k !== step) setStep(k);
   };
 
@@ -375,7 +387,7 @@ function ChartBody({
   const note = approxNote(t, birth);
   const source = fmt(t.chart.knowSource, { packs: knowledge.source });
   const topicPrompt = useMemo(() => {
-    if (!topic) return '';
+    if (!topic || !tp) return '';
     const extra =
       sel.layer === 'natal'
         ? []
@@ -390,12 +402,15 @@ function ChartBody({
       sections: [note, source, chart.topicToText(topic.slug, opts), ...extra].filter((x) => x !== null),
       question: input.question.trim() || fmt(t.read.defaultQuestion, { topic: name }),
     });
-  }, [chart, lunar, sel, pack, lang, note, source, topic, input.question, t, name]);
+  }, [chart, lunar, sel, pack, lang, note, source, topic, tp, input.question, t, name]);
   const chartPrompt = () =>
     buildPrompt({
       lang,
       method: READING_METHOD[lang],
-      sections: [note, source, ...chartSections({ chart, sel: { ...initialSelection(chart, today), layer: 'yearly' }, choice: CHART_CHOICE, knowledge: pack, lunar })].filter((x) => x !== null),
+      // 今年的运限：今年不在大限范围里（童限）时内核照样算得出流年。
+      sections: [note, source, ...chartSections({ chart, sel: { ...initialSelection(chart, today), layer: 'yearly', year: today.year }, choice: CHART_CHOICE, knowledge: pack, lunar })].filter(
+        (x) => x !== null,
+      ),
       question: input.question,
     });
   const [full, setFull] = useState<{ title: string; text: string; back: HTMLElement | null } | null>(null);
@@ -536,7 +551,10 @@ function ChartBody({
             }
             onWhen={(k) => pickWhen(k, true)}
             onAskStep={(k) => {
-              onInput({ ...input, question: fmt(t.read.askStepText, { step: method[k]!.title, topic: name }) });
+              // 已经写好的问题不覆盖：接在后面另起一行（同「在这页问」的预填）。
+              const text = fmt(t.read.askStepText, { step: method[k]!.title, topic: name });
+              const q = input.question.trimEnd();
+              onInput({ ...input, question: !q.trim() ? text : q.endsWith(text) ? q : `${q}\n${text}` });
               jumpAsk();
             }}
             ask={{
@@ -548,6 +566,7 @@ function ChartBody({
               onCopy: copy,
               onViewFull: () => openFull(fmt(t.read.topicPromptTitle, { topic: name }), topicPrompt),
               onAskHere: askHere,
+              hereRef,
             }}
             footer={footer}
             titleRef={titleRef}
@@ -557,7 +576,7 @@ function ChartBody({
           />
         ) : (
           <>
-            <ReadingEmpty title={t.read.noTopicsTitle} body={t.read.noTopicsBody} />
+            <ReadingEmpty title={topic ? t.read.noPalacesTitle : t.read.noTopicsTitle} body={topic ? fmt(t.read.noPalacesBody, { topic: name }) : t.read.noTopicsBody} />
             {footer}
           </>
         )}
@@ -628,6 +647,7 @@ function ChartBody({
           setSheet(false);
           jumpAsk();
         }}
+        onBack={() => later(() => focusLater(() => hereRef.current))}
         onOpenChart={onOpenChart}
       />
       {topic && <ReadingBar t={t} topics={topics} topic={topic} onTopic={(slug) => pickTopic(slug, true)} onAsk={jumpAsk} />}
@@ -668,7 +688,8 @@ export function ChartPage() {
   const hour = birth ? chartHour(birth) : null;
   const summaryRef = useRef<HTMLButtonElement>(null);
   const focusSummary = useRef(false);
-  const [readingInput, setReadingInput] = useState<ReadingInput>({ topic: 'overall', question: '' });
+  // 主题为空即排序后的第一个主题。
+  const [readingInput, setReadingInput] = useState<ReadingInput>({ topic: '', question: '' });
   const lib = useLibrary();
   useRepairNotice(lib, t);
   const broken = useBrokenPacks(kernel, lib);

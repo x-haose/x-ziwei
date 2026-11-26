@@ -66,6 +66,20 @@ test('切时间：这十年、今年只叠那一层并停在第 5 步；一生�
   await expect(cell(page, 2)).toContainText('大命');
 });
 
+test('高视口：切到今年、这十年停在第 5 步，滚到底也是第 5 步', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1300 });
+  await page.goto(SAMPLE);
+  const when = page.getByRole('group', { name: '时间' });
+  await when.getByRole('button', { name: /^今年/ }).click();
+  await expect(step(page, 5)).toHaveAttribute('data-on', '');
+  await page.mouse.move(1150, 700);
+  await page.mouse.wheel(0, 4000);
+  await expect(step(page, 5)).toHaveAttribute('data-on', '');
+  await when.getByRole('button', { name: /^这十年/ }).click();
+  await expect(step(page, 5)).toHaveAttribute('data-on', '');
+  await expect(side(page)).toContainText('23–32 岁这十年（现在）');
+});
+
 test('步骤高亮：「盘上看」切换焦点宫与高亮宫；右栏滚到哪一步，盘就跟到哪一步', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(SAMPLE);
@@ -122,9 +136,10 @@ test('问 AI：复制的材料含内核按主题取材的原文，五个网站�
   expect(copied).toContain(topicText);
   expect(copied).toMatch(/# 我的问题\n\n请按解读方法，从「事业」看看这张盘。$/);
 
-  await step(page, 2).getByRole('button', { name: '就这一步问 AI' }).click();
   const q = read.getByRole('textbox', { name: '你想问什么' });
-  await expect(q).toHaveValue('从「三方四正」这一步看我的事业，该怎么理解？');
+  await q.fill('我先写的问题');
+  await step(page, 2).getByRole('button', { name: '就这一步问 AI' }).click();
+  await expect(q).toHaveValue('我先写的问题\n从「三方四正」这一步看我的事业，该怎么理解？');
   await expect(q).toBeFocused();
 });
 
@@ -151,8 +166,10 @@ test('在这页问：有 Key 时右栏换成对话、预填问题，「回到…
   await expect(read).toContainText('你填过 DeepSeek 的 Key，可以直接在这页问。');
   await read.getByRole('button', { name: '在这页问 deepseek-flash' }).click();
   await expect(read.getByRole('textbox', { name: '问这张盘' })).toHaveValue('从「总论」看，这张盘怎么样？');
+  await expect(read.getByRole('textbox', { name: '问这张盘' })).toBeFocused();
   await read.getByRole('button', { name: '‹ 回到「总论」' }).click();
   await expect(read.getByRole('heading', { level: 2 })).toHaveText('总论');
+  await expect(read.getByRole('button', { name: '在这页问 deepseek-flash' })).toBeFocused();
   // 点盘上的宫：对话开着时先回到阅读。
   await read.getByRole('button', { name: /^在这页问/ }).click();
   await page.getByRole('button', { name: /^官禄，/ }).click();

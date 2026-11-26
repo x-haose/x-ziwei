@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Dialog, Heading, Modal, ModalOverlay } from 'react-aria-components';
 import { Link as RouterLink, useBlocker, useLocation, useNavigate, useSearchParams } from 'react-router';
 import type { TopicEntry } from 'x-iztro';
+import { LoadingBar } from '../chart/centre';
 import { orderedTopics, topicPalaces } from '../chart/topic';
 import * as controls from '../components/controls.css';
 import { CaretIcon, CloseIcon } from '../components/icons';
@@ -69,11 +70,24 @@ export function EditorPage() {
   const id = params.get('draft');
   const kernel = kstate.status === 'ready' ? kstate.kernel : null;
   if (!kernel || lib.status !== 'ready') {
+    // 内核没装好（设计规范 20.14）：左栏只有包信息，中栏写明在加载并给进度条；草稿在本机，不会丢。
+    const waiting = lib.status === 'ready' ? lib.drafts.find((d) => d.id === id) : undefined;
     return (
       <main className={css.page}>
-        <div className={css.empty}>
-          <h1 className={css.emptyTitle}>{kstate.status === 'error' ? fmt(t.knowledge.kernelFailed, { reason: kstate.message }) : t.knowledge.kernelLoading}</h1>
-          <p className={css.emptyBody}>{t.editor.kernelBody}</p>
+        <div className={css.body}>
+          <aside className={css.side} aria-label={t.editor.entries}>
+            {waiting && (
+              <button type="button" className={css.info} disabled>
+                <span className={css.infoName}>{t.editor.packInfo}</span>
+                <span className={css.infoSub}>{`${String(waiting.raw.id ?? '')}　${String(waiting.raw.version ?? '')}`}</span>
+              </button>
+            )}
+          </aside>
+          <div className={css.empty}>
+            <h1 className={css.emptyTitle}>{kstate.status === 'error' ? fmt(t.knowledge.kernelFailed, { reason: kstate.message }) : t.knowledge.kernelLoading}</h1>
+            <p className={css.emptyBody}>{t.editor.kernelBody}</p>
+            {kstate.status === 'loading' && <LoadingBar progress={kstate.loaded / kstate.total} loaded={kstate.loaded} total={kstate.total} t={t} />}
+          </div>
         </div>
       </main>
     );
@@ -236,7 +250,7 @@ function Editor({ kernel, lib, stored }: { kernel: Kernel; lib: Ready; stored: D
   /* 左栏的条目。 */
   const listGroups = useMemo(() => {
     if (!chart || scope === 'all') return [];
-    return topic ? topicEntries(kernel, chart.chart, topic, topicPalaces(chart.chart, topic).set) : chartEntries(kernel, chart.chart);
+    return topic ? topicEntries(kernel, chart.chart, topic, topicPalaces(chart.chart, topic)?.set ?? []) : chartEntries(kernel, chart.chart);
   }, [kernel, chart, scope, topic]);
 
   const problemOf = (x: EntryRef) => {
@@ -308,7 +322,16 @@ function Editor({ kernel, lib, stored }: { kernel: Kernel; lib: Ready; stored: D
         if (p.at.entry) select(p.at.entry);
         else select('info');
         setDrawer(false);
-        requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-field="${p.at.field ?? ''}"] textarea, [data-field="${p.at.field ?? ''}"] input`)?.focus());
+        requestAnimationFrame(() => {
+          const el = document.querySelector<HTMLTextAreaElement | HTMLInputElement>(`[data-field="${p.at.field ?? ''}"] textarea, [data-field="${p.at.field ?? ''}"] input`);
+          if (!el) return;
+          el.focus();
+          // HTML 标签、站外链接这类问题：选中正文里出问题的那一段（内核在 params 里给出原文片段或地址）。
+          const params = (p.issue?.params ?? {}) as Record<string, unknown>;
+          const piece = typeof params.snippet === 'string' ? params.snippet : typeof params.url === 'string' ? params.url : null;
+          const at = piece ? el.value.indexOf(piece) : -1;
+          if (piece && at >= 0) el.setSelectionRange(at, at + piece.length);
+        });
       }}
     />
   );
@@ -624,7 +647,16 @@ function ChartList({
             }
           >
             {items.map((x) => (
-              <EntryRow key={entryId(x)} t={t} item={x} raw={raw} compare={compare} current={current} problem={problemOf(x)} onSelect={onSelect} />
+              <EntryRow
+                key={entryId(x)}
+                t={t}
+                item={{ ...x, where: x.section === 'palaces' ? fmt(e.palaceWhere, { branch: x.where }) : x.section === 'mutagens' ? t.knowledge.sections.mutagens : x.where }}
+                raw={raw}
+                compare={compare}
+                current={current}
+                problem={problemOf(x)}
+                onSelect={onSelect}
+              />
             ))}
           </Group>
         );
@@ -695,7 +727,8 @@ function AllEntries({
   const counts = (s: Section) => {
     const list = sectionItems(kernel, raw, compare, s);
     const d = list.filter(done).length;
-    return compare ? fmt(e.sectionCount, { n: d }) : s === 'concepts' || s === 'topics' ? fmt(e.sectionWrittenOnly, { n: d }) : fmt(e.sectionWritten, { n: d, total: list.length });
+    if (compare) return d ? fmt(e.sectionCount, { n: d }) : fmt(e.sectionBase, { n: Object.keys((compare.pack.toJSON()[s] ?? {}) as object).length });
+    return s === 'concepts' || s === 'topics' ? fmt(e.sectionWrittenOnly, { n: d }) : fmt(e.sectionWritten, { n: d, total: list.length });
   };
   return (
     <>

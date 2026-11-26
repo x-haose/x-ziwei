@@ -505,3 +505,19 @@ test('生效卡片写合并后的覆盖度：只有一个小包时列出缺释�
   await expect(use).toContainText(/缺释义：星曜 \d+ 条（天机、/);
   await expect(use).toContainText('宫位 12 条');
 });
+
+test('生效组合里有一个不选宫的主题：照常列出，阅读写明没有选宫，不报错', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await openPage(page);
+  await paste(page, { schema: 1, id: 'notopic', version: '2026-11-20', language: 'zh-CN', extends: 'iztro-docs', source: { name: '空主题' }, topics: { aaa: { title: '空主题' } } });
+  await page.getByRole('button', { name: '加入生效组合', exact: true }).click();
+  await page.goto(SAMPLE);
+  await page.getByRole('group', { name: '主题' }).getByRole('button', { name: '空主题' }).click();
+  const read = page.getByRole('region', { name: '用这张盘' });
+  await expect(read.getByRole('heading', { name: '这个主题没有选宫' })).toBeVisible();
+  await expect(read).toContainText('「空主题」在你用的释义里一个宫都没选');
+  await page.getByRole('group', { name: '主题' }).getByRole('button', { name: '总论' }).click();
+  await expect(read.getByRole('heading', { level: 2 })).toHaveText('总论');
+  expect(errors).toEqual([]);
+});
