@@ -1,12 +1,12 @@
-import type { Astrolabe, KnowledgePack, PatternHit, Star, TopicEntry } from 'x-iztro';
-import type { Messages } from '../i18n/messages';
+import type { Astrolabe, KnowledgePack, MutagenLanding, PatternHit, Star, TopicEntry, TopicGroup, TopicSelection } from 'x-iztro';
+import { type Messages, fmt } from '../i18n/messages';
 import type { LayerView } from './model';
 
 /**
  * 看盘第二版（设计规范第 21 节）的取材：一个主题看哪几宫、五步里每一步盘上有什么、列哪些释义。
- * 宫位、星曜、四化、格局全部取自内核的结构化结果；主题选哪几宫取自生效组合的主题定义，经内核定位
- * （`surroundedPalaces`、`palace`）。这里只编组、拼事实句，不下判断（事实句只有宫名、地支、星名、亮度、四化、
- * 格局名、岁数与年份）。
+ * 宫位、星曜、四化、格局全部取自内核的结构化结果；主题选哪几宫、落在这几宫的生年四化与运限四化取自内核的
+ * `topicPalaces`（按生效组合的主题定义，本命或所选运限层）。这里只编组、拼事实句，不下判断（事实句只有宫名、地支、
+ * 星名、亮度、四化、格局名、岁数与年份）。
  */
 
 /** 事实句里可点开的术语：标识对应生效组合 `concepts` 的条目 slug。 */
@@ -72,63 +72,14 @@ function joinSep(items: readonly Rich[], sep: string): RichPart[] {
   return out;
 }
 
-/** 主题里的一组宫：`surround` 的宫连同三方四正，或 `palaces` 的宫只取本宫。 */
-export type TopicGroup =
-  | { kind: 'surround'; key: string; target: number; opposite: number; wealth: number; career: number }
-  | { kind: 'only'; key: string; target: number };
-
-export interface TopicPalaces {
-  groups: TopicGroup[];
-  /** 选中的全部宫位索引，按出现先后、不重复。 */
-  set: number[];
-  /** 主题的本宫：第一个 surround 宫；只取本宫的主题为第一宫。 */
-  main: number;
-}
-
 /**
- * 主题选哪几宫（与内核 `topicToText` 同一规则）：`surround` 的各宫连同三方四正，`palaces` 的各宫只取本宫
- * （可含身宫、来因宫）。主题一个宫都不选时为 null（知识包校验对此只给提醒，用户包里会有）；
- * 宫位标识定位不到说明主题定义有误（知识包校验会拒绝这样的包），直接失败。
+ * 点盘上的宫读哪个主题：在所选层（`select` 给出该层的选宫结果）以它为本宫（第一组是 `surround` 且落在这一宫）的
+ * 第一个主题；没有为 null。
  */
-export function topicPalaces(chart: Astrolabe, topic: TopicEntry): TopicPalaces | null {
-  const groups: TopicGroup[] = [];
-  for (const key of topic.surround ?? []) {
-    const s = chart.surroundedPalaces(key);
-    if (!s) throw new Error(`主题 ${topic.slug} 的宫位 ${key} 在盘上定位不到`);
-    groups.push({ kind: 'surround', key, target: s.target.index, opposite: s.opposite.index, wealth: s.wealth.index, career: s.career.index });
-  }
-  for (const key of topic.palaces ?? []) {
-    const p = chart.palace(key);
-    if (!p) throw new Error(`主题 ${topic.slug} 的宫位 ${key} 在盘上定位不到`);
-    groups.push({ kind: 'only', key, target: p.index });
-  }
-  const first = groups[0];
-  if (!first) return null;
-  const set: number[] = [];
-  for (const g of groups) for (const i of g.kind === 'surround' ? [g.target, g.opposite, g.wealth, g.career] : [g.target]) if (!set.includes(i)) set.push(i);
-  return { groups, set, main: (groups.find((g) => g.kind === 'surround') ?? first).target };
-}
-
-/**
- * 主题按钮的先后：默认包 13 个主题按设计规范 21.2 排，其余主题排在后面、按包里的先后。只决定按钮顺序，不参与选宫与取材；
- * 知识包格式本身没有主题顺序，所以先后列在这里。
- */
-const TOPIC_ORDER = ['overall', 'personality', 'career', 'wealth', 'romance', 'health', 'parents', 'children', 'siblings', 'friends', 'property', 'travel', 'spirit'];
-
-export function orderedTopics(pack: KnowledgePack): TopicEntry[] {
-  const all = pack.topics();
-  const rank = (s: string) => {
-    const i = TOPIC_ORDER.indexOf(s);
-    return i < 0 ? TOPIC_ORDER.length : i;
-  };
-  return all.map((x, i) => ({ x, i })).sort((a, b) => rank(a.x.slug) - rank(b.x.slug) || a.i - b.i).map(({ x }) => x);
-}
-
-/** 点盘上的宫读哪个主题：以它为本宫（第一个 surround 宫）的第一个主题；没有为 null。 */
-export function topicOfPalace(chart: Astrolabe, topics: readonly TopicEntry[], index: number): string | null {
+export function topicOfPalace(select: (slug: string) => TopicSelection, topics: readonly TopicEntry[], index: number): string | null {
   for (const t of topics) {
-    const key = t.surround?.[0];
-    if (key && chart.palace(key)?.index === index) return t.slug;
+    const g = select(t.slug).groups[0];
+    if (g?.kind === 'surround' && g.target === index) return t.slug;
   }
   return null;
 }
@@ -192,7 +143,8 @@ export interface StepNow {
 export interface StepInput {
   chart: Astrolabe;
   topic: TopicEntry;
-  palaces: TopicPalaces;
+  /** 主题在所选层的选宫结果（内核 `topicPalaces`）：本命层或 `layer` 那一层，至少一组。 */
+  palaces: TopicSelection;
   layer: StepLayer | null;
   now: StepNow;
   /** 四化文字 [禄, 权, 科, 忌]（内核译文）。 */
@@ -208,28 +160,57 @@ export function palaceFull(name: string, t: Messages): string {
   return t.read.palaceName.replace('{name}', name).replace(/宫宫$/, '宫');
 }
 
+/**
+ * 事实句里宫名的三种写法，按宫位索引：`natal` 本命宫名；`short` 所选层的宫名（「流月兄弟宫」）；
+ * `full` 所选层的宫名并注明本命（「流月兄弟宫（本命官禄宫）」）。看本命时三者相同。
+ */
+function palaceNames(chart: Astrolabe, layer: LayerView | null, t: Messages) {
+  const natal = (i: number) => palaceFull(chart.palaces[i]!.name, t);
+  if (!layer) return { natal, short: natal, full: natal };
+  const f = t.read.facts;
+  const name = (i: number) => palaceFull(layer.names[i]!, t);
+  const lname = t.layer[layer.kind];
+  return {
+    natal,
+    short: (i: number) => fmt(f.layerName, { layer: lname, name: name(i) }),
+    full: (i: number) => fmt(f.layerPalace, { layer: lname, name: name(i), natal: natal(i) }),
+  };
+}
+
+/** 选宫结果的全部宫位索引（每宫一次，按内核的成段顺序）与本宫（第一组的宫：有 `surround` 时是第一个 `surround` 宫）。 */
+function setAndMain(tp: TopicSelection): { set: number[]; main: number } {
+  const first = tp.groups[0];
+  if (!first) throw new Error(`主题 ${tp.topic} 一个宫都没有选，不该进入逐步阅读`);
+  return { set: tp.palaces.map((p) => p.index), main: first.target };
+}
+
 /** 读一个主题的五步：本宫主星、三方四正、四化、格局、运限（设计规范 21.4）。 */
 export function topicSteps(input: StepInput): Step[] {
   const { chart, topic, palaces: tp, layer, now, hua, mutagenKeys, natalPatterns, t } = input;
+  if (tp.scope !== (layer?.view.kind ?? 'origin')) throw new Error(`选宫结果的层（${tp.scope}）与所选运限层（${layer?.view.kind ?? 'origin'}）不一致`);
   const f = t.read.facts;
   const P = chart.palaces;
-  const pl = (i: number) => palaceFull(P[i]!.name, t);
+  const N = palaceNames(chart, layer?.view ?? null, t);
+  const pl = N.full;
   const term = (id: TermId): Rich => [{ term: id, text: t.read.terms[id] }];
   const starText = (s: Star): Rich => (s.brightness ? rich(f.starBright, { star: s.name, brightness: [{ brightness: s.brightness }] }) : [s.name]);
   const majors = (i: number) => P[i]!.majorStars;
   const minors = (i: number) => P[i]!.minorStars;
   const brief = (i: number): Rich =>
     rich(f.brief, { branch: P[i]!.earthlyBranch, stars: majors(i).length ? majors(i).map((s) => s.name).join(t.read.sep) : f.noMajor });
+  /** 宫名加地支与主星：「夫妻宫（申，天机）」；运限层「流月交友宫（本命夫妻宫，申，天机）」。 */
+  const withBrief = (i: number): Rich =>
+    layer ? [N.short(i), ...rich(f.paren, { x: rich(f.natalBrief, { natal: N.natal(i), brief: brief(i) }) })] : [N.natal(i), ...rich(f.paren, { x: brief(i) })];
   const opp = (i: number) => {
     const s = chart.surroundedPalaces(i);
     if (!s) throw new Error(`宫位索引越界：${i}`);
     return s.opposite.index;
   };
+  const { set, main } = setAndMain(tp);
   const sur = tp.groups.filter((g) => g.kind === 'surround');
   const only = tp.groups.filter((g) => g.kind === 'only');
   const baseGroups = sur.length ? sur : only;
   const bases = [...new Set(baseGroups.map((g) => g.target))];
-  const set = tp.set;
   const steps: Step[] = [];
   const seen = new Set<string>();
   const fresh = (s: Star) => !seen.has(s.key) && (seen.add(s.key), true);
@@ -237,13 +218,14 @@ export function topicSteps(input: StepInput): Step[] {
     const m = majors(i);
     return m.length === 2 ? [{ kind: 'combo', a: { key: m[0]!.key, name: m[0]!.name }, b: { key: m[1]!.key, name: m[1]!.name } }] : [];
   };
+  const starIn = (s: Star, i: number) => f.starIn.replace('{star}', s.name).replace('{palace}', N.short(i));
 
   /* 1 本宫主星 */
   const headOf = (g: TopicGroup): Rich =>
     g.key === 'bodyPalace'
-      ? rich(f.bodyAt, { body: term('shenGong'), palace: pl(g.target), branch: P[g.target]!.earthlyBranch })
+      ? rich(f.bodyAt, { body: term('shenGong'), palace: N.short(g.target), branch: P[g.target]!.earthlyBranch })
       : g.key === 'originalPalace'
-        ? rich(f.bodyAt, { body: term('laiYin'), palace: pl(g.target), branch: P[g.target]!.earthlyBranch })
+        ? rich(f.bodyAt, { body: term('laiYin'), palace: N.short(g.target), branch: P[g.target]!.earthlyBranch })
         : rich(f.palaceAt, { palace: pl(g.target), branch: P[g.target]!.earthlyBranch });
   const seenBase = new Set<number>();
   const f1: Rich[] = [];
@@ -266,7 +248,7 @@ export function topicSteps(input: StepInput): Step[] {
   const notes1: NoteRef[] = [];
   for (const i of bases) {
     const src = majors(i).length ? i : opp(i);
-    for (const s of majors(src).filter(fresh)) notes1.push({ kind: 'star', key: s.key, label: src === i ? s.name : f.starIn.replace('{star}', s.name).replace('{palace}', pl(src)) });
+    for (const s of majors(src).filter(fresh)) notes1.push({ kind: 'star', key: s.key, label: src === i ? s.name : starIn(s, src) });
     notes1.push(...combo(src));
   }
   const minorNotes = bases.flatMap((i) => minors(i)).filter(fresh);
@@ -287,12 +269,12 @@ export function topicSteps(input: StepInput): Step[] {
     for (const g of sur) {
       f2.push(
         rich(f.surround, {
-          palace: pl(g.target),
+          palace: N.short(g.target),
           dui: term('duiGong'),
-          opp: [pl(g.opposite), ...rich(f.paren, { x: brief(g.opposite) })],
+          opp: withBrief(g.opposite),
           sanhe: term('sanHe'),
-          a: [pl(g.wealth), ...rich(f.paren, { x: brief(g.wealth) })],
-          b: [pl(g.career), ...rich(f.paren, { x: brief(g.career) })],
+          a: withBrief(g.wealth),
+          b: withBrief(g.career),
         }),
       );
     }
@@ -300,16 +282,20 @@ export function topicSteps(input: StepInput): Step[] {
     if (extra.length) {
       const items = extra.map((g): Rich =>
         g.key === 'bodyPalace'
-          ? rich(f.bodyIn, { body: term('shenGong'), palace: pl(g.target) })
+          ? rich(f.bodyIn, { body: term('shenGong'), palace: N.short(g.target) })
           : g.key === 'originalPalace'
-            ? rich(f.bodyIn, { body: term('laiYin'), palace: pl(g.target) })
-            : [pl(g.target), ...rich(f.paren, { x: brief(g.target) })],
+            ? rich(f.bodyIn, { body: term('laiYin'), palace: N.short(g.target) })
+            : withBrief(g.target),
       );
       f2.push(rich(f.alsoSee, { list: joinSep(items, t.read.sep) }));
     }
   } else {
     const items = only.map((g): Rich =>
-      g.key === 'bodyPalace' ? rich(f.bodyIn, { body: term('shenGong'), palace: pl(g.target) }) : g.key === 'originalPalace' ? rich(f.bodyIn, { body: term('laiYin'), palace: pl(g.target) }) : [pl(g.target)],
+      g.key === 'bodyPalace'
+        ? rich(f.bodyIn, { body: term('shenGong'), palace: N.short(g.target) })
+        : g.key === 'originalPalace'
+          ? rich(f.bodyIn, { body: term('laiYin'), palace: N.short(g.target) })
+          : [pl(g.target)],
     );
     f2.push(rich(f.onlySelf, { topic: topic.title ?? topic.slug, list: joinAnd(items, t), sanfang: term('sanFang') }));
   }
@@ -319,7 +305,7 @@ export function topicSteps(input: StepInput): Step[] {
   for (const i of others) {
     const fs = majors(i).filter(fresh);
     for (const s of fs) {
-      notes2.push({ kind: 'star', key: s.key, label: f.starIn.replace('{star}', s.name).replace('{palace}', pl(i)) });
+      notes2.push({ kind: 'star', key: s.key, label: starIn(s, i) });
       names2.push(s.name);
     }
     if (fs.length) notes2.push(...combo(i));
@@ -327,19 +313,25 @@ export function topicSteps(input: StepInput): Step[] {
   steps.push({
     facts: f2,
     hl: set,
-    focus: tp.main,
+    focus: main,
     notes: [],
     groups: names2.length ? [{ id: 'g2', title: f.othersNotes.replace('{names}', names2.join(t.read.sep)), notes: notes2 }] : [],
     when: null,
   });
 
-  /* 3 四化 */
-  const where = (key: string): number => {
-    const i = P.findIndex((p) => [...p.majorStars, ...p.minorStars].some((s) => s.key === key));
-    if (i < 0) throw new Error(`四化星 ${key} 不在盘上`);
-    return i;
+  /* 3 四化：落在这几宫的生年四化与所选层四化取自选宫结果；落在别处的生年四化、该层四化的全部落宫取自盘面 */
+  type Hua = { h: number; star: string; at: number };
+  const starAt = (key: string, at: number): string => {
+    const s = [...P[at]!.majorStars, ...P[at]!.minorStars].find((x) => x.key === key);
+    if (!s) throw new Error(`四化星 ${key} 不在宫位 ${at}`);
+    return s.name;
   };
-  const natalHua: { h: number; star: string; at: number }[] = [];
+  const huaOf = (m: MutagenLanding): Hua => {
+    const h = mutagenKeys.indexOf(m.mutagenKey);
+    if (h < 0) throw new Error(`内核给的四化不是禄权科忌：${m.mutagenKey}`);
+    return { h, star: starAt(m.starKey, m.palaceIndex), at: m.palaceIndex };
+  };
+  const natalHua: Hua[] = [];
   P.forEach((p, i) =>
     [...p.majorStars, ...p.minorStars].forEach((s) => {
       if (!s.mutagen) return;
@@ -349,19 +341,20 @@ export function topicSteps(input: StepInput): Step[] {
     }),
   );
   natalHua.sort((a, b) => a.h - b.h);
-  const huaText = (x: { h: number; star: string; at: number }): Rich => rich(f.huaAt, { star: x.star, hua: hua[x.h]!, palace: pl(x.at) });
-  const inN = natalHua.filter((x) => set.includes(x.at));
+  const huaText = (x: Hua): Rich => rich(f.huaAt, { star: x.star, hua: hua[x.h]!, palace: pl(x.at) });
+  const inN = tp.birthMutagens.map(huaOf);
   const outN = natalHua.filter((x) => !set.includes(x.at));
   const f3: Rich[] = [inN.length ? rich(f.natalHuaIn, { sihua: term('siHua'), list: joinSep(inN.map(huaText), t.read.comma) }) : rich(f.natalHuaNone, { sihua: term('siHua') })];
   if (outN.length) f3.push(rich(f.natalHuaOut, { list: joinSep(outN.map(huaText), t.read.comma) }));
-  let inL: { h: number; star: string; at: number }[] = [];
+  let inL: Hua[] = [];
   if (layer) {
-    const lh = layer.view.mutagenStarKeys.map((key, h) => {
-      const at = where(key);
-      const star = [...P[at]!.majorStars, ...P[at]!.minorStars].find((s) => s.key === key)!;
-      return { h, star: star.name, at };
+    const lh = layer.view.mutagenStarKeys.map((key, h): Hua => {
+      const at = P.findIndex((p) => [...p.majorStars, ...p.minorStars].some((s) => s.key === key));
+      if (at < 0) throw new Error(`四化星 ${key} 不在盘上`);
+      return { h, star: starAt(key, at), at };
     });
-    inL = lh.filter((x) => set.includes(x.at));
+    // 选宫结果含大限至所选层的各层四化；盘上只叠所选这一层，这里也只写这一层。
+    inL = tp.scopeMutagens.filter((m) => m.scope === layer.view.kind).map(huaOf);
     f3.push(
       rich(f.layerHua, {
         layer: t.layer[layer.view.kind],
@@ -375,37 +368,36 @@ export function topicSteps(input: StepInput): Step[] {
   steps.push({
     facts: f3,
     hl: [...new Set([...inN, ...inL].map((x) => x.at))],
-    focus: tp.main,
+    focus: main,
     notes: huaShown.map((h) => ({ kind: 'mutagen' as const, key: mutagenKeys[h]!, label: `${f.huaWord}${hua[h]}` })),
     groups: [],
     when: null,
   });
 
   /* 4 格局：本宫在这几宫的格局（与内核 topicToText 同一规则）；同一条命中只列一次，标出在哪几层成立 */
-  const pats = new Map<string, { hit: PatternHit; scopes: string[]; natal: boolean }>();
-  const add = (list: readonly PatternHit[], scope: string, natal: boolean) => {
+  const pats = new Map<string, { hit: PatternHit; scopes: string[] }>();
+  const add = (list: readonly PatternHit[], scope: string) => {
     for (const h of list) {
       if (!set.includes(h.palaceIndex)) continue;
       const id = hitId(h);
       const same = pats.get(id);
       if (same) {
         if (!same.scopes.includes(scope)) same.scopes.push(scope);
-      } else pats.set(id, { hit: h, scopes: [scope], natal });
+      } else pats.set(id, { hit: h, scopes: [scope] });
     }
   };
-  add(natalPatterns, t.layer.natal, true);
-  if (layer) add(layer.patterns, t.layer[layer.view.kind], false);
+  add(natalPatterns, t.layer.natal);
+  if (layer) add(layer.patterns, t.layer[layer.view.kind]);
   const pl4 = [...pats.values()];
   const f4: Rich[] = pl4.length
-    ? pl4.map(({ hit, scopes, natal }) => {
+    ? pl4.map(({ hit, scopes }) => {
         const stars = hit.stars.filter((s, k, a) => a.findIndex((y) => y.name === s.name && y.palaceIndex === s.palaceIndex) === k);
         return rich(f.pattern, {
           name: hit.name,
           broken: hit.broken ? f.broken : '',
           benGong: term('benGong'),
-          // 运限层上成格的本宫按那一层的宫名写（「大限命宫」），括号注明它在本命的位置。
-          palace: natal || !layer ? pl(hit.palaceIndex) : rich(f.layerPalace, { layer: t.layer[layer.view.kind], name: palaceFull(hit.palaceName, t), natal: pl(hit.palaceIndex) }),
-          stars: stars.map((s) => f.patternStar.replace('{palace}', pl(s.palaceIndex)).replace('{star}', s.name)).join(t.read.sep),
+          palace: pl(hit.palaceIndex),
+          stars: stars.map((s) => f.patternStar.replace('{palace}', N.short(s.palaceIndex)).replace('{star}', s.name)).join(t.read.sep),
           scopes: scopes.join(t.read.sep),
         });
       })
@@ -414,7 +406,7 @@ export function topicSteps(input: StepInput): Step[] {
   steps.push({
     facts: f4,
     hl: [...new Set(pl4.flatMap(({ hit }) => [hit.palaceIndex, ...hit.stars.map((s) => s.palaceIndex)]))],
-    focus: pl4[0]?.hit.palaceIndex ?? tp.main,
+    focus: pl4[0]?.hit.palaceIndex ?? main,
     notes: pl4.filter(({ hit }) => !patternKeys.has(hit.key) && (patternKeys.add(hit.key), true)).map(({ hit }) => ({ kind: 'pattern' as const, key: hit.key, label: hit.name })),
     groups: [],
     when: null,
@@ -425,39 +417,26 @@ export function topicSteps(input: StepInput): Step[] {
     const f5: Rich[] = [];
     const hl: number[] = [];
     if (now.decadal) {
-      f5.push(rich(f.nowDecadal, { y: now.year, age: now.age, a: now.decadal.ages[0], b: now.decadal.ages[1], daxian: term('daXian'), branch: P[now.decadal.soul]!.earthlyBranch, palace: pl(now.decadal.soul) }));
+      f5.push(rich(f.nowDecadal, { y: now.year, age: now.age, a: now.decadal.ages[0], b: now.decadal.ages[1], daxian: term('daXian'), branch: P[now.decadal.soul]!.earthlyBranch, palace: N.natal(now.decadal.soul) }));
       hl.push(now.decadal.soul);
     } else f5.push(rich(f.nowNoDecadal, { y: now.year, age: now.age }));
     if (now.yearlySoul !== null) {
-      f5.push(rich(f.nowYearly, { y: now.year, liunian: term('liuNian'), branch: P[now.yearlySoul]!.earthlyBranch, palace: pl(now.yearlySoul) }));
+      f5.push(rich(f.nowYearly, { y: now.year, liunian: term('liuNian'), branch: P[now.yearlySoul]!.earthlyBranch, palace: N.natal(now.yearlySoul) }));
       if (!hl.includes(now.yearlySoul)) hl.push(now.yearlySoul);
     }
-    steps.push({ facts: f5, hl, focus: hl[0] ?? tp.main, notes: [], groups: [], when: { decade: now.decadal !== null, year: now.yearlySoul !== null } });
+    steps.push({ facts: f5, hl, focus: hl[0] ?? main, notes: [], groups: [], when: { decade: now.decadal !== null, year: now.yearlySoul !== null } });
   } else {
     const L = layer.view;
     const h = layer.head;
     const f5: Rich[] = [
       h.kind === 'decadal'
-        ? rich(f.layerDecadal, { a: h.ages[0], b: h.ages[1], daxian: term('daXian'), y0: h.years[0], y1: h.years[1], branch: P[L.soul]!.earthlyBranch, palace: pl(L.soul) })
+        ? rich(f.layerDecadal, { a: h.ages[0], b: h.ages[1], daxian: term('daXian'), y0: h.years[0], y1: h.years[1], branch: P[L.soul]!.earthlyBranch, palace: N.natal(L.soul) })
         : h.kind === 'yearly'
-          ? rich(f.layerYearly, { y: h.year, gz: `${L.stem}${L.branch}`, age: h.age, liunian: term('liuNian'), branch: P[L.soul]!.earthlyBranch, palace: pl(L.soul) })
-          : rich(f.layerMonthly, { y: h.year, month: h.month, gz: `${L.stem}${L.branch}`, branch: P[L.soul]!.earthlyBranch, palace: pl(L.soul) }),
+          ? rich(f.layerYearly, { y: h.year, gz: `${L.stem}${L.branch}`, age: h.age, liunian: term('liuNian'), branch: P[L.soul]!.earthlyBranch, palace: N.natal(L.soul) })
+          : rich(f.layerMonthly, { y: h.year, month: h.month, gz: `${L.stem}${L.branch}`, branch: P[L.soul]!.earthlyBranch, palace: N.natal(L.soul) }),
     ];
-    const mainName = P[tp.main]!.name;
-    const k = L.names.indexOf(mainName);
-    if (k < 0) throw new Error(`运限层的宫名里没有 ${mainName}`);
-    if (k !== L.soul) {
-      f5.push(
-        rich(f.layerTopic, {
-          palace: pl(tp.main),
-          branch: P[k]!.earthlyBranch,
-          natal: pl(k),
-          stars: majors(k).length ? joinSep(majors(k).map(starText), t.read.sep) : [f.noMajor],
-          topic: topic.title ?? topic.slug,
-        }),
-      );
-    }
-    steps.push({ facts: f5, hl: [...new Set([L.soul, k])], focus: k, notes: [], groups: [], when: null });
+    if (main !== L.soul) f5.push(rich(f.layerTopic, { palace: palaceFull(L.names[main]!, t), branch: P[main]!.earthlyBranch, natal: N.natal(main) }));
+    steps.push({ facts: f5, hl: [...new Set([L.soul, main])], focus: main, notes: [], groups: [], when: null });
   }
   return steps;
 }
@@ -478,10 +457,13 @@ export function brightnessConcept(pack: KnowledgePack): string | null {
   return list.find(([, title]) => title.startsWith('亮度'))?.[0] ?? null;
 }
 
-/** 选宫句：「看命宫连同它的三方四正，另看身宫、福德宫。」只取本宫的主题写「只看……这几宫本身。」 */
-export function selectionText(chart: Astrolabe, tp: TopicPalaces, t: Messages): RichPart[] {
+/**
+ * 选宫句：「看命宫连同它的三方四正，另看身宫、福德宫。」只取本宫的主题写「只看……这几宫本身。」
+ * 选了运限层时宫名按那一层写（「看流月兄弟宫连同它的三方四正」）。
+ */
+export function selectionText(chart: Astrolabe, layer: LayerView | null, tp: TopicSelection, t: Messages): RichPart[] {
   const r = t.read;
-  const pl = (i: number) => palaceFull(chart.palaces[i]!.name, t);
+  const pl = palaceNames(chart, layer, t).short;
   const term = (id: TermId): Rich => [{ term: id, text: r.terms[id] }];
   const a = tp.groups.filter((g) => g.kind === 'surround').map((g) => rich(r.selSurround, { palace: pl(g.target), sanfang: term('sanFang') }));
   const b = tp.groups

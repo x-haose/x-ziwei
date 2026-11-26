@@ -3,7 +3,6 @@ import { Button, Dialog, Heading, Modal, ModalOverlay } from 'react-aria-compone
 import { Link as RouterLink, useBlocker, useLocation, useNavigate, useSearchParams } from 'react-router';
 import type { TopicEntry } from 'x-iztro';
 import { LoadingBar } from '../chart/centre';
-import { orderedTopics, topicPalaces } from '../chart/topic';
 import * as controls from '../components/controls.css';
 import { CaretIcon, CloseIcon } from '../components/icons';
 import { Segmented } from '../components/segmented';
@@ -268,7 +267,8 @@ function Editor({ kernel, lib, stored, libNote }: { kernel: Kernel; lib: Ready; 
   const broken = useBrokenPacks(kernel, lib);
   const active = useActiveKnowledge(kernel, lib, broken);
   const layers = withoutPacks(lib.use, broken.keys()).layers;
-  const topics = active ? orderedTopics(active.pack) : orderedTopics(builtinPack(kernel));
+  const topicPack = active?.pack ?? builtinPack(kernel);
+  const topics = topicPack.topics();
   const initialScope: Scope =
     scopeParam === 'all' ? 'all' : topicParam !== null && topics.some((x) => x.slug === topicParam) ? { topic: topicParam } : 'chart';
   const [scope, setScope] = useState<Scope>(initialScope);
@@ -381,8 +381,8 @@ function Editor({ kernel, lib, stored, libNote }: { kernel: Kernel; lib: Ready; 
   /* 左栏的条目。 */
   const listGroups = useMemo(() => {
     if (!chart || scope === 'all') return [];
-    return topic ? topicEntries(kernel, chart.chart, topic, topicPalaces(chart.chart, topic)?.set ?? []) : chartEntries(kernel, chart.chart);
-  }, [kernel, chart, scope, topic]);
+    return topic ? topicEntries(kernel, chart.chart, topic, chart.chart.topicPalaces(topic.slug, { knowledge: topicPack }).palaces.map((p) => p.index)) : chartEntries(kernel, chart.chart);
+  }, [kernel, chart, scope, topic, topicPack]);
 
   const problemOf = (x: EntryRef) => {
     const ps = problems.filter((p) => p.at.entry?.section === x.section && p.at.entry.key === x.key);

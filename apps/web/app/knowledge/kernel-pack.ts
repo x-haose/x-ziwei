@@ -14,7 +14,7 @@ import {
 } from './library';
 
 /**
- * 交给排盘内核的部分：默认包、包格式的校验（x-iztro 0.9 的 `KnowledgePack.check`）、按生效组合合并出释义用的包。
+ * 交给排盘内核的部分：默认包、包格式的校验（x-iztro 0.10 的 `KnowledgePack.check`）、按生效组合合并出释义用的包。
  * 包格式的规则只在内核里，这里不另写一份。
  */
 

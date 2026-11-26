@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Astrolabe, KnowledgePack } from 'x-iztro';
 import { BRANCH_CELL, isBranch } from '../chart/layout';
-import { topicPalaces } from '../chart/topic';
 import { Segmented } from '../components/segmented';
 import { fmt, type Messages } from '../i18n/messages';
 import type { Kernel } from '../kernel/kernel';
@@ -109,9 +108,9 @@ export function Preview({
   } else if (entry.section === 'palaces' || entry.section === 'concepts') content = <p className={css.previewNote}>{e.previewUseFull}</p>;
   else if (entry.section === 'topics' && c) {
     const topic = merged.topic(entry.key);
-    const tp = topic && topicPalaces(c, topic);
+    const tp = topic && c.topicPalaces(topic.slug, { knowledge: merged });
     if (!topic) content = <p className={css.missing}>{e.previewMissing}</p>;
-    else if (!tp) content = <p className={css.previewNote}>{t.read.noPalacesTitle}</p>;
+    else if (!tp?.groups.length) content = <p className={css.previewNote}>{t.read.noPalacesTitle}</p>;
     else {
       const kind = (i: number) => {
         const g = tp.groups.find((x) => x.target === i);

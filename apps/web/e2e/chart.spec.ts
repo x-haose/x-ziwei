@@ -167,13 +167,23 @@ test('只知道大概时间：夜里有四个候选，所选候选写进地址�
   await closePrompt(page);
 });
 
-test('问 AI：选在流月层时材料附那一段流月的运限', async ({ page }) => {
+test('选在流月层：主题按流月宫名选宫，点流月兄弟宫读兄弟；材料是这一层的主题原文与那一段流月的运限', async ({ page }) => {
   await page.goto(SAMPLE);
   await expect(page.getByRole('button', { name: /^命宫，/ })).toBeVisible();
+  await (await layerTab(page, '流年')).click();
+  await page.getByRole('button', { name: /^选流年/ }).click();
+  await page.getByRole('dialog', { name: '流年' }).getByRole('option', { name: '2026 年，虚岁 27' }).click();
   await (await layerTab(page, '流月')).click();
-  await page.getByRole('button', { name: '三月', exact: true }).click();
+  await page.getByRole('button', { name: '十月', exact: true }).click();
+  // 2026 年十月的流月兄弟宫在戌（本命官禄宫），不是本命兄弟宫。
+  await page.getByRole('button', { name: /^官禄，/ }).click();
+  const read = side(page);
+  await expect(read.getByRole('heading', { level: 2 })).toHaveText('兄弟');
+  await expect(read).toContainText('看流月兄弟宫连同它的三方四正');
+  await expect(read.getByRole('list', { name: /分五步读$/ }).getByRole('listitem').first()).toContainText('你的流月兄弟宫（本命官禄宫）在戌');
   const preview = await openPromptRaw(page, 'topic');
-  await expect(preview).toContainText('## 流月');
+  await expect(preview).toContainText('# 兄弟 · 运限 2026 (丙午) · 流月 (己亥)');
+  await expect(preview).toContainText('### 本宫 · 流月兄弟 (本命官禄 · 丙戌)');
   await expect(preview).not.toContainText('# 流月一览');
 });
 

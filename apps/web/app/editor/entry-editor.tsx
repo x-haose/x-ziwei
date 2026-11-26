@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { OptionGrid, Picker } from '../birth/picker';
 import * as controls from '../components/controls.css';
 import { CaretIcon, CloseIcon } from '../components/icons';
@@ -296,6 +296,46 @@ function LineField({ ctx, field, label }: { ctx: Ctx; field: string; label: stri
         onChange={(ev) => ctx.edit((raw) => setField(raw, ctx.entry, field, ev.target.value === '' ? undefined : ev.target.value))}
       />
       <ProblemsAt ctx={ctx} path={field} />
+    </label>
+  );
+}
+
+/**
+ * 主题的显示顺序（`order`）：只由数字组成时按整数写进本包，否则原样写入、由知识包校验报错；留空即删掉该字段。
+ * 有对照时占位显示对照里的值。
+ */
+function OrderField({ ctx }: { ctx: Ctx }) {
+  const e = ctx.t.editor;
+  const own = ctx.own?.order;
+  const base = ctx.base?.order;
+  const errors = ctx.problems.some((p) => p.level === 'error' && p.at.field === 'order');
+  const noteId = useId();
+  return (
+    <label className={css.infoField}>
+      <span className={css.infoLabel}>
+        {e.fields.order}
+        {ctx.compare && own !== undefined && (
+          <button type="button" className={css.textButton} style={{ marginLeft: 12 }} onClick={() => ctx.edit((raw) => setField(raw, ctx.entry, 'order', undefined))}>
+            {e.restore}
+          </button>
+        )}
+      </span>
+      <input
+        className={css.input}
+        inputMode="numeric"
+        value={own === undefined ? '' : String(own)}
+        placeholder={base === undefined ? '' : String(base)}
+        aria-invalid={errors ? true : undefined}
+        aria-describedby={noteId}
+        onChange={(ev) => {
+          const v = ev.target.value.trim();
+          ctx.edit((raw) => setField(raw, ctx.entry, 'order', v === '' ? undefined : /^\d+$/.test(v) ? Number(v) : v));
+        }}
+      />
+      <span id={noteId} className={css.fieldState}>
+        {e.orderNote}
+      </span>
+      <ProblemsAt ctx={ctx} path="order" />
     </label>
   );
 }
@@ -606,7 +646,7 @@ function TopicPalaces({ ctx }: { ctx: Ctx }) {
 }
 
 /** 名称与分类（星曜）：有对照时收在最后一个可展开块里，有改写时默认展开。 */
-function NameBlock({ ctx, fields }: { ctx: Ctx; fields: readonly ('name' | 'category' | 'group' | 'title')[] }) {
+function NameBlock({ ctx, fields }: { ctx: Ctx; fields: readonly ('name' | 'category' | 'group' | 'title' | 'order')[] }) {
   const e = ctx.t.editor;
   const changed = fields.some((f) => ctx.own?.[f] !== undefined);
   const [open, setOpen] = useState(changed);
@@ -621,6 +661,8 @@ function NameBlock({ ctx, fields }: { ctx: Ctx; fields: readonly ('name' | 'cate
           onChange={(v) => ctx.edit((raw) => setField(raw, ctx.entry, 'category', v))}
         />
       </div>
+    ) : f === 'order' ? (
+      <OrderField key={f} ctx={ctx} />
     ) : (
       <LineField key={f} ctx={ctx} field={f} label={e.fields[f]} />
     ),
@@ -721,7 +763,7 @@ export function EntryEditor({
     const intro = { field: 'intro' };
     const sum = { field: 'summary' };
     const top = !compare && entry.section !== 'concepts' && entry.section !== 'topics' ? <NameBlock ctx={ctx} fields={entry.section === 'stars' ? ['name', 'category', 'group'] : ['name']} /> : null;
-    const titleTop = entry.section === 'concepts' || entry.section === 'topics' ? <NameBlock ctx={ctx} fields={['title']} /> : null;
+    const titleTop = entry.section === 'concepts' ? <NameBlock ctx={ctx} fields={['title']} /> : entry.section === 'topics' ? <NameBlock ctx={ctx} fields={['title', 'order']} /> : null;
     const bottom = compare && entry.section !== 'concepts' && entry.section !== 'topics' ? <NameBlock ctx={ctx} fields={entry.section === 'stars' ? ['name', 'category', 'group'] : ['name']} /> : null;
     body = (
       <>

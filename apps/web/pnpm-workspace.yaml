@@ -1,3 +1,5 @@
 allowBuilds:
   esbuild: true
   workerd: true
+minimumReleaseAgeExclude:
+  - x-iztro@0.10.0

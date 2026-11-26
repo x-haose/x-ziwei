@@ -31,7 +31,7 @@ describe('工具', () => {
   });
 
   it('运限与服务端同目标的返回逐字一致（年、年加月、日期、日期加时辰）', () => {
-    // 金标是同一版本内核（x-iztro 0.9.0）的服务端 POST /v1/horoscope 对同一生辰的返回，生成方式见 tests/fixtures/horoscope/README.md。
+    // 金标是服务端（x-iztro 0.9.0）的 POST /v1/horoscope 对同一生辰的返回，运限文本 0.9 与 0.10 相同，生成方式见 tests/fixtures/horoscope/README.md。
     const golden = (name: string) => readFileSync(new URL(`../../../../tests/fixtures/horoscope/${name}.md`, import.meta.url), 'utf8');
     expect(run('ziwei_get_horoscope', { target: { year: 2026 } })).toBe(golden('year'));
     expect(run('ziwei_get_horoscope', { target: { year: 2026, month: 7 } })).toBe(golden('month'));

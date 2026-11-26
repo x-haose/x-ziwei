@@ -313,3 +313,21 @@ test('「写进」选择器打开期间别的标签页导入了一个包：焦�
   await page.keyboard.press('Enter');
   await expect(picker).toContainText('新包（叠在 iztro-docs 上）');
 });
+
+test('改主题的排序：数字按整数写进包，保存并用上后看盘的主题按钮按它排', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(SAMPLE);
+  await page.getByRole('group', { name: '主题' }).getByRole('button', { name: '兄弟' }).click();
+  await side(page).getByRole('link', { name: '改写这一条：兄弟' }).click();
+  await expect(page.getByRole('heading', { level: 2, name: /^兄弟/ })).toBeVisible();
+  await page.getByRole('button', { name: /^名称与分类/ }).click();
+  const order = page.getByRole('textbox', { name: '排序' });
+  await expect(order).toHaveAttribute('placeholder', '90');
+  await order.fill('25');
+  await expect(page.getByText(/^草稿已存 \d\d:\d\d，还没进包库$/)).toBeVisible();
+  await expect(page.getByRole('button', { name: '保存到包库' })).toBeEnabled();
+  await page.getByRole('link', { name: '‹ 看盘' }).click();
+  await page.getByRole('alertdialog', { name: '这个包还没进包库' }).getByRole('button', { name: '保存并用上，回到看盘' }).click();
+  await expect(page).toHaveURL(SAMPLE);
+  await expect(page.getByRole('group', { name: '主题' }).getByRole('button')).toHaveText(['总论', '性格', '兄弟', '事业', '财运', '婚恋', '健康', '父母', '子女', '交友', '田宅', '迁移', '精神']);
+});

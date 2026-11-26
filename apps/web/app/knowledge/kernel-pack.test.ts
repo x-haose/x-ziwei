@@ -102,7 +102,7 @@ describe('按生效组合合并', () => {
   it('默认包信息：六段条目数取自内核', () => {
     const d = defaultPackInfo(kernel);
     expect(d.id).toBe(DEFAULT_PACK_ID);
-    expect(d.counts).toEqual({ stars: 162, patterns: 64, palaces: 12, mutagens: 4, concepts: 50, topics: 13 });
+    expect(d.counts).toEqual({ stars: 162, patterns: 64, palaces: 12, mutagens: 4, concepts: 51, topics: 13 });
     expect(d.raw).toBeNull();
   });
 });

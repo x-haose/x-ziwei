@@ -230,8 +230,8 @@ importers:
         specifier: 1.5.0
         version: 1.5.0
       x-iztro:
-        specifier: 0.9.0
-        version: 0.9.0(typescript@7.0.2)
+        specifier: 0.10.0
+        version: 0.10.0(typescript@7.0.2)
     devDependencies:
       '@cloudflare/workers-types':
         specifier: 5.20261119.1
@@ -2739,8 +2739,8 @@ packages:
       utf-8-validate:
         optional: true
 
-  x-iztro@0.9.0:
-    resolution: {integrity: sha512-Q0jyc6VNeihczSIPizgVPnDY7LREezAuyoxZ/ed7GWMmu0JL4bPaqD6hZjlCz1PhszgNJl358WfAnAfbZUqR0Q==}
+  x-iztro@0.10.0:
+    resolution: {integrity: sha512-tUjw8DTN3Nv21I3+IAZZTBOEuKUu7q01Y7ewMJpN+dA5EZ4+9TV4TZsiDuC78OIf7smM0/OzLNHgxYvv2oXPQA==}
     engines: {node: '>=22'}
     peerDependencies:
       typescript: '>=5.0'
@@ -5434,7 +5434,7 @@ snapshots:
 
   ws@8.21.0: {}
 
-  x-iztro@0.9.0(typescript@7.0.2):
+  x-iztro@0.10.0(typescript@7.0.2):
     optionalDependencies:
       typescript: 7.0.2
 

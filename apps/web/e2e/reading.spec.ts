@@ -97,7 +97,7 @@ test('步骤高亮：「盘上看」切换焦点宫与高亮宫；右栏滚到�
   await expect(page.getByRole('button', { name: /^夫妻，/ })).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('术语：点开看生效组合里的解释，Esc 关闭后焦点回到术语；没有条目的亮度照常显示文字', async ({ page }) => {
+test('术语：点开看生效组合里的解释，Esc 关闭后焦点回到术语；亮度字链到标题为「亮度」的条目', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(SAMPLE);
   const read = side(page);
@@ -108,7 +108,9 @@ test('术语：点开看生效组合里的解释，Esc 关闭后焦点回到术�
   await page.keyboard.press('Escape');
   await expect(pop).toHaveCount(0);
   await expect(term).toBeFocused();
-  await expect(read.getByRole('button', { name: '庙', exact: true })).toHaveCount(0);
+  await read.getByRole('button', { name: '庙', exact: true }).first().click();
+  await expect(page.getByRole('dialog', { name: '亮度' })).toContainText('庙');
+  await page.keyboard.press('Escape');
 });
 
 test('问 AI：复制的材料含内核按主题取材的原文，五个网站的链接；就这一步问 AI 填好问题', async ({ page, context }) => {

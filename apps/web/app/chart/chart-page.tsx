@@ -1,4 +1,4 @@
-import { type ReactNode, type RefObject, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import type { Astrolabe } from 'x-iztro';
 import { type Birth, EMPTY_DRAFT, PERIODS, decodeBirth, draftOf, encodeBirth } from '../birth/birth';
@@ -36,7 +36,7 @@ import { PromptFull } from './prompt-full';
 import { Reading, ReadingBar, ReadingEmpty, RewriteContext, TopicNav, type WhenKey, WhenNav, smooth } from './reading';
 import * as readingCss from './reading.css';
 import { type Today, castChart, chartHour, initialSelection, monthHoroscope, todayOf, useChartView } from './session';
-import { orderedTopics, selectionText, topicOfPalace, topicPalaces, topicSteps } from './topic';
+import { selectionText, topicOfPalace, topicSteps } from './topic';
 
 /**
  * 地址 `#` 之后的生辰。预渲染的 HTML 里没有 `#`，水合那一次也按没有处理，水合后再读真实地址，
@@ -220,11 +220,25 @@ function ChartBody({
   const db = useChatDb();
   const method = METHOD_STEPS[lang];
 
-  const topics = useMemo(() => orderedTopics(pack), [pack]);
+  const topics = useMemo(() => pack.topics(), [pack]);
   // 换了一套释义后原来的主题可能不在了：回到第一个主题。生效组合里一个主题都没有时（用户包可以不带主题）没有阅读。
   const topic = topics.find((x) => x.slug === input.topic) ?? topics[0] ?? null;
   const name = topic ? (topic.title ?? topic.slug) : '';
-  const tp = useMemo(() => topic && topicPalaces(chart, topic), [chart, topic]);
+  /** 所选运限层与它的运限：大限、流年按所选年份查（所选年份总在所选大限之内，见 useChartView），流月按所选那一段；本命为 null。 */
+  const timed = useMemo(
+    () => (sel.layer === 'natal' ? null : { scope: sel.layer, h: sel.layer === 'monthly' ? monthHoroscope(chart, lunar, sel.year, sel.month) : chart.horoscopeOfYear(sel.year) }),
+    [chart, lunar, sel],
+  );
+  /** 主题在所选层的选宫：本命按本命宫名，运限层按该层宫名（内核 topicPalaces）。 */
+  const select = useCallback(
+    (slug: string) => (timed ? timed.h.topicPalaces(slug, timed.scope, { knowledge: pack }) : chart.topicPalaces(slug, { knowledge: pack })),
+    [chart, timed, pack],
+  );
+  // 主题一个宫都不选时没有逐步阅读（知识包校验对此只给提醒，用户包里会有）。
+  const tp = useMemo(() => {
+    const s = topic && select(topic.slug);
+    return s && s.groups.length ? s : null;
+  }, [select, topic]);
 
   const decadals = useMemo(() => chart.decadalList(), [chart]);
   const todayAge = nominalAge(chart, today.year);
@@ -236,12 +250,7 @@ function ChartBody({
   const monthItem = sel.layer === 'monthly' ? chart.monthlyList(sel.year).find((m) => m.month === sel.month.month && m.part === sel.month.part) : undefined;
 
   const natalPatterns = useMemo(() => chart.patterns(), [chart]);
-  const layerPatterns = useMemo(() => {
-    if (sel.layer === 'natal') return [];
-    if (sel.layer === 'decadal') return chart.horoscopeOfYear(sel.year).patterns('decadal');
-    if (sel.layer === 'yearly') return chart.horoscopeOfYear(sel.year).patterns('yearly');
-    return monthHoroscope(chart, lunar, sel.year, sel.month).patterns('monthly');
-  }, [chart, lunar, sel]);
+  const layerPatterns = useMemo(() => (timed ? timed.h.patterns(timed.scope) : []), [timed]);
 
   const steps = useMemo(
     () =>
@@ -391,22 +400,22 @@ function ChartBody({
   const source = fmt(t.chart.knowSource, { packs: knowledge.source });
   const topicPrompt = useMemo(() => {
     if (!topic || !tp) return '';
-    const extra =
-      sel.layer === 'natal'
-        ? []
-        : sel.layer === 'decadal'
-          ? // 所选大限的完整运限（写到大限为止）；sel.year 总在所选大限之内（见 useChartView）。
-            [chart.horoscopeOfYear(sel.year).toText({ ...opts, through: 'decadal' })]
-          : sel.layer === 'yearly'
-            ? [chart.horoscopeOfYear(sel.year).toText(opts)]
-            : [monthHoroscope(chart, lunar, sel.year, sel.month).toText(sel.month.part === 'normal' ? opts : { ...opts, through: 'monthly' })];
+    // 主题原文按所选层选宫；运限原文写到所选层为止（闰月的一段按该段首日查，写到流月为止）。
+    const topicText = timed ? timed.h.topicToText(topic.slug, timed.scope, opts) : chart.topicToText(topic.slug, opts);
+    const extra = !timed
+      ? []
+      : timed.scope === 'decadal'
+        ? [timed.h.toText({ ...opts, through: 'decadal' })]
+        : timed.scope === 'yearly'
+          ? [timed.h.toText(opts)]
+          : [timed.h.toText(sel.month.part === 'normal' ? opts : { ...opts, through: 'monthly' })];
     return buildPrompt({
       lang,
       method: READING_METHOD[lang],
-      sections: [note, source, chart.topicToText(topic.slug, opts), ...extra].filter((x) => x !== null),
+      sections: [note, source, topicText, ...extra].filter((x) => x !== null),
       question: input.question.trim() || fmt(t.read.defaultQuestion, { topic: name }),
     });
-  }, [chart, lunar, sel, pack, lang, note, source, topic, tp, input.question, t, name]);
+  }, [chart, timed, sel.month.part, pack, lang, note, source, topic, tp, input.question, t, name]);
   const chartPrompt = () =>
     buildPrompt({
       lang,
@@ -479,7 +488,7 @@ function ChartBody({
 
   /** 点盘上的宫：读以它为本宫的主题；没有这样的主题时只选中它。对话开着时先回到阅读。 */
   const selectPalace = (i: number) => {
-    const slug = topicOfPalace(chart, topics, i);
+    const slug = topicOfPalace(select, topics, i);
     if (slug) pickTopic(slug, true);
     else {
       setSheet(false);
@@ -534,7 +543,7 @@ function ChartBody({
             lang={lang}
             pack={pack}
             topic={topic}
-            selection={selectionText(chart, tp, t)}
+            selection={selectionText(chart, layer, tp, t)}
             whenLabel={whenLabel}
             steps={steps}
             method={method}

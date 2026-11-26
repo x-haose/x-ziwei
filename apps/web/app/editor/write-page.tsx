@@ -14,7 +14,6 @@ import { builtinPack, defaultPackInfo } from '../knowledge/kernel-pack';
 import { DEFAULT_PACK_ID, type Draft, type PackRaw, SECTIONS, type Section, draftConflict } from '../knowledge/library';
 import { importedText } from '../knowledge/parts';
 import { type LibraryState, useLibrary } from '../knowledge/use-library';
-import { orderedTopics, topicPalaces } from '../chart/topic';
 import { StaleDraftError, draftForPack, draftOnTop, editorHref, newDraft } from './actions';
 import { type ChartChoice, useChartChoices } from './charts';
 import * as css from './editor.css';
@@ -179,7 +178,8 @@ function WriteBody({ kernel, lib }: { kernel: Kernel; lib: Extract<LibraryState,
   const groups = chart ? chartEntries(kernel, chart) : [];
   const counts = tally(groups, intoRaw, compare !== null, compare);
   const majors = groups.find((g) => g.kind === 'majors')?.entries ?? [];
-  const topics = active ? orderedTopics(active.pack) : orderedTopics(builtinPack(kernel));
+  const topicPack = active?.pack ?? builtinPack(kernel);
+  const topics = topicPack.topics();
   const intoInfo = intos.find((x) => intoKey(x.into) === intoKey(into))!;
   const resumable = lib.drafts.filter((d) => draftConflict(d, lib.packs) !== null || !sameAsLibrary(d));
 
@@ -257,7 +257,7 @@ function WriteBody({ kernel, lib }: { kernel: Kernel; lib: Extract<LibraryState,
           <div className={css.topicGrid}>
             {chart &&
               topics.map((tp) => {
-                const g = topicEntries(kernel, chart, tp, topicPalaces(chart, tp)?.set ?? []);
+                const g = topicEntries(kernel, chart, tp, chart.topicPalaces(tp.slug, { knowledge: topicPack }).palaces.map((p) => p.index));
                 const c = tally(g, intoRaw, compare !== null, compare);
                 return (
                   <button key={tp.slug} type="button" className={css.topicCell} onClick={() => open({ scope: { topic: tp.slug } })}>

@@ -4,7 +4,7 @@ import type { Astrolabe, KnowledgePack } from 'x-iztro';
 import { MESSAGES } from '../i18n/messages';
 import type { Kernel } from '../kernel/kernel';
 import { huaTexts, selectedLayer } from './model';
-import { type Rich, type Step, orderedTopics, selectionText, topicOfPalace, topicPalaces, topicSteps } from './topic';
+import { type Rich, type Step, selectionText, topicOfPalace, topicSteps } from './topic';
 
 /** 术语写成 [术语]，亮度写成 <庙>，便于整句比对。 */
 const plain = (r: Rich) => r.map((p) => (typeof p === 'string' ? p : 'term' in p ? `[${p.text}]` : `<${p.brightness}>`)).join('');
@@ -20,14 +20,14 @@ beforeAll(async () => {
 });
 
 function steps(slug: string, year: number | null, decade = false): Step[] {
-  const topic = orderedTopics(pack).find((x) => x.slug === slug)!;
+  const topic = pack.topic(slug)!;
   const y = year ?? 2026;
   const layer = year === null ? null : selectedLayer(chart, { layer: decade ? 'decadal' : 'yearly', decadal: 2, year: y, month: { month: 1, part: 'normal' } });
   const d = chart.decadalList()[2]!;
   return topicSteps({
     chart,
     topic,
-    palaces: topicPalaces(chart, topic)!,
+    palaces: layer ? chart.horoscopeOfYear(y).topicPalaces(slug, layer.kind, { knowledge: pack }) : chart.topicPalaces(slug, { knowledge: pack }),
     layer: layer
       ? {
           view: layer,
@@ -44,15 +44,20 @@ function steps(slug: string, year: number | null, decade = false): Step[] {
 }
 
 describe('主题的五步（2000-8-16 寅时 女）', () => {
-  it('主题顺序按默认包的 13 个；点盘上的宫读以它为本宫的主题', () => {
-    expect(orderedTopics(pack).map((x) => x.title)).toEqual(['总论', '性格', '事业', '财运', '婚恋', '健康', '父母', '子女', '兄弟', '交友', '田宅', '迁移', '精神']);
-    expect(topicOfPalace(chart, orderedTopics(pack), chart.palace('soulPalace')!.index)).toBe('overall');
-    expect(topicOfPalace(chart, orderedTopics(pack), chart.palace('careerPalace')!.index)).toBe('career');
+  it('点盘上的宫读以它为本宫的主题：本命按本命宫名，运限层按该层宫名', () => {
+    const natal = (slug: string) => chart.topicPalaces(slug, { knowledge: pack });
+    expect(topicOfPalace(natal, pack.topics(), chart.palace('soulPalace')!.index)).toBe('overall');
+    expect(topicOfPalace(natal, pack.topics(), chart.palace('careerPalace')!.index)).toBe('career');
+    // 2026 年十月流月：流月兄弟宫不在本命兄弟宫，点它读兄弟。
+    const month = selectedLayer(chart, { layer: 'monthly', decadal: 2, year: 2026, month: { month: 10, part: 'normal' } })!;
+    const at = month.names.indexOf('兄弟');
+    expect(at).not.toBe(chart.palace('siblingsPalace')!.index);
+    const monthly = (slug: string) => chart.horoscopeOfMonth(2026, 10).topicPalaces(slug, 'monthly', { knowledge: pack });
+    expect(topicOfPalace(monthly, pack.topics(), at)).toBe('siblings');
   });
 
   it('总论、一生：五步的事实、焦点宫与高亮宫', () => {
-    const topic = orderedTopics(pack)[0]!;
-    expect(plain(selectionText(chart, topicPalaces(chart, topic)!, t))).toBe('看命宫连同它的[三方四正]，另看[身宫]、福德宫。');
+    expect(plain(selectionText(chart, null, chart.topicPalaces('overall', { knowledge: pack }), t))).toBe('看命宫连同它的[三方四正]，另看[身宫]、福德宫。');
     const s = steps('overall', null);
     expect(s.map((x) => x.facts.map(plain))).toEqual([
       ['你的命宫在午，主星是紫微（<庙>）；[同宫]的辅星有文曲（<陷>）。'],
@@ -89,28 +94,25 @@ describe('主题的五步（2000-8-16 寅时 女）', () => {
 
   it('选了流年：四化加该层，格局标出成立的各层，第 5 步以这一层的主题宫为焦点', () => {
     const s = steps('wealth', 2026);
-    expect(plain(s[2]!.facts[2]!)).toBe('流年（丙午）的四化：天同化禄在疾厄宫，天机化权在兄弟宫，文昌化科在福德宫，廉贞化忌在官禄宫。落在这几宫的是文昌化科和廉贞化忌。');
+    expect(plain(s[2]!.facts[2]!)).toBe('流年（丙午）的四化：天同化禄在流年疾厄宫（本命疾厄宫），天机化权在流年兄弟宫（本命兄弟宫），文昌化科在流年福德宫（本命福德宫），廉贞化忌在流年官禄宫（本命官禄宫）。落在这几宫的是文昌化科和廉贞化忌。');
     expect(s[3]!.facts.map(plain)).toEqual([
-      '府相朝垣：以命宫为[本宫]，由官禄宫的天府、财帛宫的天相组成，本命、流年成立。',
-      '禄马交驰：以流年福德宫（本命福德宫）为[本宫]，由福德宫的禄存、福德宫的流马组成，流年成立。',
+      '府相朝垣：以流年命宫（本命命宫）为[本宫]，由流年官禄宫的天府、流年财帛宫的天相组成，本命、流年成立。',
+      '禄马交驰：以流年福德宫（本命福德宫）为[本宫]，由流年福德宫的禄存、流年福德宫的流马组成，流年成立。',
     ]);
     expect(s[4]!.facts.map(plain)).toEqual([
       '2026 年（丙午）你虚岁 27，[流年]命宫在午，就是本命的命宫。',
-      '这一层的财帛宫在寅，就是本命的财帛宫（武曲（<得>）、天相（<庙>））。读这段时间的财运，以它为本宫再看前四步。',
+      '这一层的财帛宫在寅，就是本命的财帛宫；前四步看的就是这一层的这几宫。',
     ]);
     expect([s[4]!.focus, s[4]!.hl]).toEqual([0, [4, 0]]);
   });
 
-  it('只在运限层成格的格局：本宫按那一层的宫名写，括号注明本命位置；只收本宫在这几宫的格局（同 topicToText）', () => {
+  it('选了大限：按大限宫名选宫，宫名写大限的、括号注明本命；只收本宫在这几宫的格局（同 topicToText）', () => {
     const s = steps('romance', 2026, true);
-    expect(s[3]!.facts.map(plain)).toContain('杀破狼：以大限命宫（本命夫妻宫）为[本宫]，由夫妻宫的七杀、福德宫的破军、迁移宫的贪狼组成，大限成立。');
+    expect(s[0]!.facts.map(plain)).toEqual(['你的大限夫妻宫（本命财帛宫）在寅，主星是武曲（<得>）和天相（<庙>）；[同宫]的辅星有天马。']);
+    expect(s[3]!.facts.map(plain)).toContain('杀破狼：以大限命宫（本命夫妻宫）为[本宫]，由大限命宫的七杀、大限官禄宫的破军、大限财帛宫的贪狼组成，大限成立。');
     const text = chart.topicToText('property', { knowledge: pack, knowledgeDepth: 'summary' });
     // 田宅的这几宫不含命宫：府相朝垣（本宫命宫）不列，与交给 AI 的主题原文一致。
     expect(text).not.toContain('府相朝垣');
     expect(steps('property', null)[3]!.facts.map(plain).join('')).not.toContain('府相朝垣');
-  });
-
-  it('一个宫都不选的主题没有选宫结果（阅读写明，不报错）', () => {
-    expect(topicPalaces(chart, { slug: 'empty', title: '空主题' })).toBeNull();
   });
 });
