@@ -4,12 +4,3 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - x-iztro@0.9.0
   - fumadocs-core@16.19.7
-  - '@ai-sdk/anthropic@4.0.109'
-  - '@ai-sdk/deepseek@3.0.90'
-  - '@ai-sdk/gateway@4.0.155'
-  - '@ai-sdk/mcp@2.0.105'
-  - '@ai-sdk/openai-compatible@3.0.95'
-  - '@ai-sdk/openai@4.0.124'
-  - '@ai-sdk/provider-utils@5.0.84'
-  - '@ai-sdk/react@4.0.187'
-  - ai@7.0.182
